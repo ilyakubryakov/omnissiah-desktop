@@ -1,0 +1,8 @@
+[Unit]
+Description=Omnissiah omnissiah-launcher-cache
+PartOf=omnissiah.target
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/station-launcher --refresh-cache
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+UMask=0077

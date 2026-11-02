@@ -1,0 +1,8 @@
+[Unit]
+Description=Omnissiah caldash
+PartOf=omnissiah.target
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/caldash-helper
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+UMask=0077

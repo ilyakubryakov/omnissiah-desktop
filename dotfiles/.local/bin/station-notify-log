@@ -1,0 +1,47 @@
+#!/usr/bin/env python3
+
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import time
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
+import station_notifications as notes
+
+os.umask(0o077)
+
+def watch():
+    notes.prune()
+    monitor = notes.Monitor(notes.append)
+    pruned = time.time()
+    with subprocess.Popen(['busctl', '--user', 'monitor', '--json=short', 'org.freedesktop.Notifications'],
+                          stdout=subprocess.PIPE, text=True) as bus:
+        for line in bus.stdout:
+            try:
+                monitor.feed(json.loads(line))
+            except (ValueError, TypeError, KeyError, IndexError):
+                continue
+            if time.time() - pruned > 6 * 3600:
+                notes.prune(); pruned = time.time()
+    sys.exit('busctl monitor stopped')
+
+def report(days):
+    rows = notes.stats(days)
+    if not rows:
+        print(f'No notifications logged in the last {days} days.')
+        return
+    print(f'{"count":>5} {"open":>5} {"dism":>5}  {"tier":<9} application · title')
+    for r in rows:
+        print(f'{r["count"]:>5} {r["opened"]:>5} {r["dismissed"]:>5}  {r["tier"]:<9} {r["app"]} · {r["summary"]}')
+    for s in notes.suggestions(days):
+        print(f'suggest quiet: {s["app"]}{" · " + s["summary"] if s["summary"] else " (all)"} ({s["count"]}, never opened)')
+
+if '--watch' in sys.argv:
+    watch()
+elif '--report' in sys.argv:
+    rest = sys.argv[sys.argv.index('--report') + 1:]
+    report(int(rest[0]) if rest and rest[0].isdigit() else 7)
+else:
+    sys.exit(__doc__)

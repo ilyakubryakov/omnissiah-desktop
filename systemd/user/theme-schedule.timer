@@ -1,0 +1,6 @@
+[Unit]
+Description=Omnissiah theme-schedule refresh
+PartOf=omnissiah.target
+[Timer]
+OnActiveSec=10s
+OnUnitActiveSec=1min

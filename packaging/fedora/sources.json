@@ -1,0 +1,38 @@
+[
+  {
+    "name": "tzdata",
+    "version": "2026.2",
+    "url": "https://files.pythonhosted.org/packages/ba/19/1b9b0e29f30c6d35cb345486df41110984ea67ae69dddbc0e8a100999493/tzdata-2026.2.tar.gz",
+    "sha256": "9173fde7d80d9018e02a662e168e5a2d04f87c41ea174b139fbef642eda62d10"
+  },
+  {
+    "name": "icalendar",
+    "version": "6.3.1",
+    "url": "https://files.pythonhosted.org/packages/08/13/e5899c916dcf1343ea65823eb7278d3e1a1d679f383f6409380594b5f322/icalendar-6.3.1.tar.gz",
+    "sha256": "a697ce7b678072941e519f2745704fc29d78ef92a2dc53d9108ba6a04aeba466"
+  },
+  {
+    "name": "x-wr-timezone",
+    "version": "2.0.1",
+    "url": "https://files.pythonhosted.org/packages/79/2b/8ae5f59ab852c8fe32dd37c1aa058eb98aca118fec2d3af5c3cd56fffb7b/x_wr_timezone-2.0.1.tar.gz",
+    "sha256": "9166c40e6ffd4c0edebabc354e1a1e2cffc1bb473f88007694793757685cc8c3"
+  },
+  {
+    "name": "recurring-ical-events",
+    "version": "3.8.0",
+    "url": "https://files.pythonhosted.org/packages/83/90/05dfcc02ecf58bd170305c88db9e3e3933aa73a1f8abac2b326c7fdc1a98/recurring_ical_events-3.8.0.tar.gz",
+    "sha256": "3e8c7c35d9bd8956a7ab91afad51477c60d972e1236d3fd1b55087a66bce7d04"
+  },
+  {
+    "name": "hypridle",
+    "version": "0.1.8",
+    "url": "https://github.com/hyprwm/hypridle/archive/refs/tags/v0.1.8.tar.gz",
+    "sha256": "08703613cc33cc796c2179bcaa6076e8618113f67b938daaf7535f90c7d39595"
+  },
+  {
+    "name": "symbols-nerd-font",
+    "version": "3.4.0",
+    "url": "https://github.com/ryanoasis/nerd-fonts/releases/download/v3.4.0/NerdFontsSymbolsOnly.tar.xz",
+    "sha256": "7f8c090da3b0eaa7108646bf34cbbb6ed13d5358a72460522108b06c7ecd716a"
+  }
+]

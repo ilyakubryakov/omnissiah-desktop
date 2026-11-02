@@ -1,0 +1,6 @@
+[Unit]
+Description=Omnissiah caldash refresh
+PartOf=omnissiah.target
+[Timer]
+OnActiveSec=10s
+OnUnitActiveSec=10min

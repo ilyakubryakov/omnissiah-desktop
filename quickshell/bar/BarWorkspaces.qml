@@ -1,0 +1,82 @@
+import QtQuick
+import QtQuick.Effects
+import QtQuick.Layouts
+import Quickshell
+import Quickshell.Wayland
+import Quickshell.Hyprland
+import Quickshell.Io
+import "../shared" as Shared
+import Quickshell.Services.Pipewire
+import Quickshell.Services.SystemTray
+
+BarGroup {
+    required property var bar
+    property real budget: 600
+
+        id: workspaceGroup
+        group: "workspaces"
+        Flickable {
+            implicitWidth: Math.min(workspaceRow.implicitWidth, Math.max(40, budget - 24))
+            Layout.fillHeight: true
+            clip: true
+            contentWidth: workspaceRow.implicitWidth
+            contentHeight: height
+            boundsBehavior: Flickable.StopAtBounds
+            RowLayout {
+                id: workspaceRow
+        height: parent.height
+        spacing: 0
+
+        Repeater {
+            model: Hyprland.workspaces.values.filter(w => w.id > 0
+                && (!w.monitor || w.monitor.name === bar.modelData.name))
+
+            Item {
+                id: ws
+                required property var modelData
+                readonly property bool focused: Hyprland.focusedWorkspace
+                    && Hyprland.focusedWorkspace.id === modelData.id
+
+                implicitWidth: Math.max(32, wsRow.implicitWidth + 20)
+                implicitHeight: bar.implicitHeight
+
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.margins: 3
+                    radius: 5
+                    color: Qt.rgba(ShellLayout.buttonColor("workspaces").r, ShellLayout.buttonColor("workspaces").g, ShellLayout.buttonColor("workspaces").b, ws.focused ? 0.15 : wsMouse.containsMouse ? 0.07 : 0)
+                    border.width: 1
+                    border.color: Qt.rgba(ShellLayout.buttonColor("workspaces").r, ShellLayout.buttonColor("workspaces").g, ShellLayout.buttonColor("workspaces").b, ws.focused ? 0.38 : wsMouse.containsMouse ? 0.2 : 0)
+                    Behavior on color { ColorAnimation { duration: Shared.DesktopStyle.fast } }
+                    Behavior on border.color { ColorAnimation { duration: Shared.DesktopStyle.fast } }
+                }
+                RowLayout {
+                    id: wsRow
+                    anchors.centerIn: parent
+                    spacing: 6
+                    UiLabel { text: ws.modelData.id + ":"; font.pixelSize: 12; color: ws.focused ? ShellLayout.buttonColor("workspaces") : Colors.muted }
+                    Repeater {
+                        model: Hypr.classesOn(ws.modelData.id).length ? Hypr.classesOn(ws.modelData.id) : [""]
+                        Text {
+                            required property string modelData
+                            text: modelData ? Hypr.icon(modelData) : "\u{F0130}"
+                            color: Colors.foreground
+                            opacity: ws.focused ? 1 : 0.75
+                            font.family: Colors.iconFont
+                            font.pixelSize: 17
+                        }
+                    }
+                }
+
+                MouseArea {
+                    id: wsMouse
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    anchors.fill: parent
+                    onClicked: Hyprland.dispatch("hl.dsp.focus({ workspace = \"" + ws.modelData.id + "\" })")
+                }
+            }
+        }
+    }
+        }
+    }

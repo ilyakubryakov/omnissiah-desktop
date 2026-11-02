@@ -1,0 +1,14 @@
+const fs = require('node:fs'), vm = require('node:vm'), assert = require('node:assert/strict');
+const context = vm.createContext({});
+vm.runInContext(fs.readFileSync(__dirname + '/../ShortcutLogic.js', 'utf8').replace('.pragma library', ''), context);
+const live = {name:'Windows', label:'Windows', rows:[{keys:'Meta+F', desc:'Maximize window', keywords:'развернуть окно'}]};
+const home = {name:'Home', rows:live.rows};
+for (const query of ['окно','Win+F','Super+F','maximize']) assert.equal(context.blocks([home,live],'Home',query).length,1,query);
+assert.equal(context.blocks([home,live],'Home','missing').length,0);
+assert.deepEqual(Array.from(context.keycaps('Meta+Ctrl++')), ['Win','Ctrl','+']);
+assert.deepEqual(Array.from(context.keycaps('Meta+1…0')), ['Win','1…0']);
+const blocks = context.blocks([{name:'Utilities',rows:Array.from({length:25},(_,i)=>({keys:'cmd'+i,desc:'Command'}))}],'Utilities','');
+assert.equal(blocks.length,4);
+const lanes = context.columns(blocks,2);
+assert.equal(lanes.flat().flatMap(b=>b.rows).length,25);
+console.log('Shortcuts: bilingual search, modifier aliases, no duplicate Home results and responsive columns passed');

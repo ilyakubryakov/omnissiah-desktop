@@ -1,0 +1,5 @@
+[Unit]
+Description=Omnissiah idle inhibitor
+PartOf=omnissiah.target graphical-session.target
+[Service]
+ExecStart=/usr/bin/systemd-inhibit --what=idle --mode=block --who=Omnissiah --why=Keep-awake /usr/bin/sleep infinity

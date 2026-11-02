@@ -1,0 +1,20 @@
+pkgname=python-msal
+pkgver=1.37.0
+pkgrel=1
+pkgdesc='Microsoft Authentication Library for Omnissiah calendar sign-in'
+arch=('any')
+url='https://github.com/AzureAD/microsoft-authentication-library-for-python'
+license=('MIT')
+depends=('python' 'python-requests' 'python-cryptography' 'python-pyjwt')
+makedepends=('python-build' 'python-installer' 'python-setuptools' 'python-wheel')
+source=('https://files.pythonhosted.org/packages/9a/99/d840198ecf6e8057bbc937f129ae940404485d736cda73253bbff9537f01/msal-1.37.0.tar.gz')
+sha256sums=('1b1672a33ee467c1d70b341bb16cafd51bb3c817147a95b93263794b03971bec')
+build() {
+  cd "$srcdir/msal-$pkgver"
+  python -m build --wheel --no-isolation
+}
+package() {
+  cd "$srcdir/msal-$pkgver"
+  python -m installer --destdir="$pkgdir" dist/*.whl
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

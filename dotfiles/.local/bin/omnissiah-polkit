@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -eu
+for agent in /usr/lib/polkit-kde-authentication-agent-1 /usr/libexec/polkit-kde-authentication-agent-1 /usr/lib/x86_64-linux-gnu/libexec/polkit-kde-authentication-agent-1; do
+    [ ! -x "$agent" ] || exec "$agent"
+done
+echo 'No native Polkit KDE agent found.' >&2
+exit 1

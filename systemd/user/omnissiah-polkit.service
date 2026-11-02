@@ -1,0 +1,8 @@
+[Unit]
+Description=Omnissiah permission dialogs
+PartOf=omnissiah.target graphical-session.target
+After=graphical-session.target
+[Service]
+ExecStart=%h/.local/bin/omnissiah-polkit
+Restart=on-failure
+RestartSec=5
