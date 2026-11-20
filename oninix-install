@@ -5,7 +5,7 @@ log() { printf 'OniNix: %s\n' "$*"; }
 die() { log "$*" >&2; exit 1; }
 
 file_url() {
-    local LC_ALL=C path=$1 encoded= char i
+    local LC_ALL=C path=$1 encoded='' char i
     for ((i=0; i<${#path}; i++)); do
         char=${path:i:1}
         case "$char" in
@@ -46,7 +46,7 @@ layer="$state_home/oninix/layer"
 profile="$layer/profile"
 unit_dir="$config_home/systemd/user"
 session_units="$profile/share/oninix-layer/systemd/user"
-mkdir -p "$layer"
+(umask 077; mkdir -p -- "$layer")
 exec 9>"$layer/lock"
 flock 9
 
@@ -61,7 +61,8 @@ desktop=/usr/share/wayland-sessions/oninix.desktop
 if [[ $action == uninstall && ! -d $registry ]]; then
     exit 0
 fi
-install -d -m 0755 "$registry"
+umask 077
+install -d -m 0700 "$registry"
 exec 9>"$registry/lock"
 flock 9
 if [[ $action == uninstall ]]; then
@@ -150,7 +151,8 @@ if ! command -v nix >/dev/null 2>&1 && [[ ! -x /nix/var/nix/profiles/default/bin
     log 'Installing upstream Nix in multi-user mode'
     installer=$(mktemp)
     trap 'rm -f "$installer"' EXIT
-    curl --fail --silent --show-error --location https://channels.nixos.org/nix-latest/nix-installer -o "$installer"
+    curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
+        https://channels.nixos.org/nix-latest/nix-installer -o "$installer"
     sh "$installer" install linux --enable-flakes --no-confirm
 fi
 if ! command -v nix >/dev/null 2>&1; then
@@ -178,7 +180,10 @@ if [[ ! -e $flake/flake.nix ]]; then
     escaped=${escaped//\"/\\\"}
     interpolation='${'
     escaped=${escaped//"$interpolation"/\\$interpolation}
-    cat > "$flake/flake.nix" <<FLAKE
+    (
+        temp_flake=$(mktemp "$flake/.flake.XXXXXX")
+        trap 'rm -f -- "$temp_flake"' EXIT
+        cat > "$temp_flake" <<FLAKE
 {
   description = "My OniNix desktop layer";
 
@@ -196,6 +201,8 @@ if [[ ! -e $flake/flake.nix ]]; then
     };
 }
 FLAKE
+        mv -T -- "$temp_flake" "$flake/flake.nix"
+    )
 fi
 
 if [[ -n $source_ref ]] && [[ -f $flake/flake.lock ]]; then

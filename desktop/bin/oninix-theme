@@ -73,7 +73,7 @@ load_palette() {
 }
 
 color() {
-    _rest=${PAL#*:$1=}
+    _rest=${PAL#*:"$1"=}
     if [ "$_rest" = "$PAL" ]; then
         case "$1" in
             status_warning) color yellow; return ;;
@@ -149,6 +149,16 @@ reload_wallpaper() {
     fi
 }
 
+install_policy() (
+    local temp
+    temp=$(mktemp "$2.XXXXXX")
+    trap 'rm -f -- "$temp"' EXIT
+    tail -n +2 "$1" >"$temp"
+    if ! cmp -s "$temp" "$2"; then
+        mv -f -- "$temp" "$2"
+    fi
+)
+
 install_state() {
     name=$1
     mkdir -p "$STATE"
@@ -172,19 +182,13 @@ install_state() {
         ln -sfn "$CURRENT_LINK/MangoHud.conf" "$hud"
         mkdir -p "$HOME/.config/REAPER"
         ln -sfn "$CURRENT_LINK/libSwell-user.colortheme" "$HOME/.config/REAPER/libSwell-user.colortheme"
-        tail -n +2 "$CURRENT_LINK/chrome-policy.json" >"$STATE/chrome-policy.json.tmp"
-        cmp -s "$STATE/chrome-policy.json.tmp" "$STATE/chrome-policy.json" 2>/dev/null \
-            && rm -f "$STATE/chrome-policy.json.tmp" \
-            || mv "$STATE/chrome-policy.json.tmp" "$STATE/chrome-policy.json"
+        install_policy "$CURRENT_LINK/chrome-policy.json" "$STATE/chrome-policy.json"
     fi
 
     if [ "$OS" = macos ] && [ -d /Applications/iTerm.app ]; then
         profiles="$HOME/Library/Application Support/iTerm2/DynamicProfiles"
         mkdir -p "$profiles"
-        tail -n +2 "$CURRENT_LINK/iterm2.json" >"$profiles/oninix.json.tmp"
-        cmp -s "$profiles/oninix.json.tmp" "$profiles/oninix.json" 2>/dev/null \
-            && rm -f "$profiles/oninix.json.tmp" \
-            || mv "$profiles/oninix.json.tmp" "$profiles/oninix.json"
+        install_policy "$CURRENT_LINK/iterm2.json" "$profiles/oninix.json"
     fi
 }
 
@@ -551,12 +555,12 @@ set)
     want=${2:?usage: theme set <name>}
     case "$want" in *[!a-z0-9-]*) echo "Invalid palette name: $want" >&2; exit 1 ;; esac
     [ -f "$(palette_file "$want")" ] || { echo "No palette: $want (see: oninix-theme list)" >&2; exit 1; }
-    mode=set
+    mode='set'
     ;;
 sync)
     [ "$OS" = macos ] || { echo "theme sync needs a system that has an opinion; use: theme set" >&2; exit 1; }
     want=$(macos_variant)
-    mode=set
+    mode='set'
     ;;
 render | render-only | check | diff) ;;
 *)
@@ -662,11 +666,15 @@ linux)
     mako_dir="${XDG_CONFIG_HOME:-$HOME/.config}/mako"
     rules="${XDG_STATE_HOME:-$HOME/.local/state}/oninix/notification-rules.conf"
     oninix-desktop notification-render >/dev/null 2>&1 || true
-    {
-        printf 'include=%s/mako.conf\n' "$CURRENT_LINK"
-        [ ! -f "$rules" ] || printf 'include=%s\n' "$rules"
-    } >"$STATE/mako.conf.tmp"
-    mv "$STATE/mako.conf.tmp" "$STATE/mako.conf"
+    (
+        temp_mako=$(mktemp "$STATE/.mako.conf.XXXXXX")
+        trap 'rm -f -- "$temp_mako"' EXIT
+        {
+            printf 'include=%s/mako.conf\n' "$CURRENT_LINK"
+            [ ! -f "$rules" ] || printf 'include=%s\n' "$rules"
+        } >"$temp_mako"
+        mv -f -- "$temp_mako" "$STATE/mako.conf"
+    )
     if [ "$LAYER" != 1 ] && [ ! -e "$mako_dir/config" ] && [ ! -L "$mako_dir/config" ]; then
         mkdir -p "$mako_dir"
         ln -s "$STATE/mako.conf" "$mako_dir/config"
