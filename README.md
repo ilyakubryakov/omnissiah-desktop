@@ -91,9 +91,9 @@ I also run this desktop as a Nix layer on x86-64. From a clone of the `oninix` b
 
 I tested Ubuntu 26.10 and current Arch. On Fedora 45, run `./oninix-install --fedora-copr` to enable the community `sdegler/hyprland` COPR for the Hyprland stack. Arch runs a normal full pacman upgrade. Pick **OniNix** at the login screen.
 
-I use the distro's Hyprland, lock screen, login, audio and graphics drivers. The same OniNix panels and tools come from Nix. The panels render in software and Whisper uses the CPU. The distro keeps its own updates and drivers.
+I use the distro's Hyprland, lock screen, login, audio and graphics drivers. The same OniNix panels and tools come from Nix. The panels render in software and Whisper uses the CPU. Apps I add that need OpenGL or Vulkan may need a driver wrapper.
 
-**Super+A** still opens the machine spirit. It can change the packages in `~/.config/oninix/layer/flake.nix`. Sign in to Claude Code or Codex first. Review the build and apply it, or run `oninix-spirit undo` to roll back the profile. Sign out and back in to reload it. Full system rollback requires OniNix on NixOS.
+**Super+A** still opens the machine spirit. It can change the packages in `~/.config/oninix/layer/flake.nix`. Sign in to Claude Code or Codex first. Review the build and apply it, or run `oninix-spirit undo` to roll back the profile. Sign out and back in to reload it. Full system rollback requires OniNix on NixOS. For a local clone, pull the branch before checking for a layer update.
 
 To remove the layer, sign out and run `./oninix-install uninstall` from the clone. Your settings, Nix and distro packages stay.
 
