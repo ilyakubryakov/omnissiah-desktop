@@ -11,7 +11,7 @@ in
   };
 
   config = lib.mkIf (cfg.enable && cfg.voice.enable) {
-    environment.systemPackages = with pkgs; [ whisper-cpp wtype pciutils ];
+    environment.systemPackages = with pkgs; [ whisper-cpp llama-cpp ffmpeg-headless wtype pciutils ];
 
     systemd.user.services.oninix-voice-profile = {
       description = "Pick the Whisper model this machine can run live";

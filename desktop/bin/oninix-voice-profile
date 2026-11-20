@@ -58,13 +58,16 @@ def memory_mb():
 
 
 def backend():
-    out = subprocess.run([speech.binary('whisper-cli'), '--help'], capture_output=True, text=True)
-    text = (out.stdout + out.stderr).lower()
-    probe = subprocess.run(['ldd', os.path.realpath(speech.binary('whisper-cli'))], capture_output=True, text=True).stdout
-    if 'libcuda' in probe or 'libcublas' in probe or 'cuda' in text:
-        return 'cuda'
-    if 'vulkan' in probe:
-        return 'vulkan'
+    cli = shutil.which('llama-cli')
+    if cli:
+        try:
+            devices = subprocess.run([cli, '--list-devices'], capture_output=True, text=True,
+                                     check=True, timeout=10).stdout
+        except (OSError, subprocess.SubprocessError):
+            return 'cpu'
+        for name in ('cuda', 'vulkan'):
+            if re.search(r'^\s*' + name + r'\d+:', devices, re.IGNORECASE | re.MULTILINE):
+                return name
     return 'cpu'
 
 
