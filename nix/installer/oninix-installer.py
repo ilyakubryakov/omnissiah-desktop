@@ -90,6 +90,35 @@ def detect_virt():
     result = subprocess.run(['systemd-detect-virt'], capture_output=True, text=True)
     return result.stdout.strip() if result.returncode == 0 else ''
 
+def static_wired_profiles():
+    active = subprocess.check_output([
+        'nmcli', '--terse', '--escape', 'no', '--fields', 'UUID,TYPE,DEVICE,FILENAME',
+        'connection', 'show', '--active',
+    ], text=True)
+    profiles = []
+    for line in active.splitlines():
+        uuid, kind, device, filename = line.split(':', 3)
+        path = Path(filename)
+        if kind != '802-3-ethernet' or path.suffix != '.nmconnection' or not path.is_file():
+            continue
+        methods = subprocess.check_output([
+            'nmcli', '--get-values', 'ipv4.method,ipv6.method', 'connection', 'show', 'uuid', uuid,
+        ], text=True).splitlines()
+        if 'manual' in methods:
+            profiles.append((uuid, device, path.read_bytes()))
+    return profiles
+
+def save_wired_profiles(profiles):
+    if not profiles:
+        return
+    directory = TARGET / 'etc/NetworkManager/system-connections'
+    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    for uuid, _, contents in profiles:
+        target = directory / f'{uuid}.nmconnection'
+        fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, 'wb') as handle:
+            handle.write(contents)
+
 def disks():
     data = json.loads(subprocess.check_output(
         ['lsblk', '-J', '-b', '-o', 'NAME,PATH,SIZE,MODEL,TYPE,RO,MOUNTPOINTS'], text=True))
@@ -192,6 +221,9 @@ def collect():
                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0:
         say('Could not reach the NixOS binary cache. Connect with the panel or nmtui, then press Enter.', BRASS)
         input()
+    wired_profiles = static_wired_profiles()
+    if wired_profiles and not confirm('Keep the active static Ethernet settings on the installed system?'):
+        wired_profiles = []
     targets = disks()
     if not targets:
         raise SystemExit('No unused disk of 32 GB or more was found.')
@@ -221,7 +253,7 @@ def collect():
     features = [key for key, text in FEATURES if text in picked]
     return {'device': device, 'encrypt': encrypt, 'luks': luks, 'fullname': fullname, 'user': user,
             'password': password, 'hostname': hostname, 'timezone': timezone, 'layout': layout,
-            'gpu': gpu, 'laptop': laptop, 'virt': virt, 'features': features}
+            'gpu': gpu, 'laptop': laptop, 'virt': virt, 'features': features, 'wired_profiles': wired_profiles}
 
 def install(answers):
     if answers['device'] not in dict(disks()):
@@ -246,6 +278,7 @@ def install(answers):
         shutil.copy(TEMPLATE / 'flake.nix', etc / 'flake.nix')
         (etc / 'disko.nix').write_text(disko_config(answers['device'], answers['encrypt']))
     (etc / 'settings.nix').write_text(settings(answers))
+    save_wired_profiles(answers['wired_profiles'])
     for name in ('flake.nix', 'disko.nix', 'settings.nix'):
         os.chmod(etc / name, 0o644)
     lock = ['nix', '--extra-experimental-features', 'nix-command flakes', 'flake', 'lock', str(etc)]
@@ -266,6 +299,8 @@ def main():
     print(f"  Computer    {answers['hostname']} · {answers['timezone']} · {answers['layout']}")
     print(f"  Graphics    {answers['gpu']}{' · laptop' if answers['laptop'] else ''}")
     print(f"  Sets        {', '.join(answers['features']) or 'base desktop only'}")
+    if answers['wired_profiles']:
+        print('  Network     Keep static Ethernet on ' + ', '.join(device for _, device, _ in answers['wired_profiles']))
     if not confirm('Erase the disk and install OniNix?', default=False):
         raise SystemExit('Nothing was changed.')
     install(answers)
