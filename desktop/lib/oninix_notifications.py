@@ -1,8 +1,12 @@
+from contextlib import contextmanager
+import fcntl
 import json
 import os
 from pathlib import Path
 import re
 import time
+
+from oninix_shell import atomic
 
 TIERS = ('important', 'quiet', 'hidden')
 KEEP_DAYS = 21
@@ -73,25 +77,25 @@ def load_rules():
     rows = data.get('rules', []) if isinstance(data, dict) else []
     return [{'app': r['app'], 'summary': r.get('summary', ''), 'tier': r['tier']} for r in rows if valid(r)]
 
-def atomic(path, text):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name('.' + path.name + '.tmp')
-    tmp.write_text(text)
-    tmp.replace(path)
-
-def save_rules(rules):
-    atomic(rules_path(), json.dumps({'rules': rules}, indent=1, ensure_ascii=False) + '\n')
-    render(rules)
+@contextmanager
+def rules_lock():
+    folder = state()
+    folder.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with (folder / 'notification-rules.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        yield
 
 def set_rule(app, summary, tier):
     app, summary = clean(app), clean(summary)
     if not app or tier not in TIERS + ('normal',):
         raise ValueError('Unknown notification rule')
-    rules = [r for r in load_rules() if (r['app'], r['summary']) != (app, summary)]
-    if tier != 'normal':
-        rules.append({'app': app, 'summary': summary, 'tier': tier})
-    save_rules(rules)
-    return rules
+    with rules_lock():
+        rules = [r for r in load_rules() if (r['app'], r['summary']) != (app, summary)]
+        if tier != 'normal':
+            rules.append({'app': app, 'summary': summary, 'tier': tier})
+        atomic(rules_path(), json.dumps({'rules': rules}, indent=1, ensure_ascii=False) + '\n')
+        atomic(mako_path(), mako(rules))
+        return rules
 
 def tier(app, summary, rules):
     for r in rules:
@@ -114,8 +118,9 @@ def mako(rules):
         out += ['[' + head + ']'] + STYLE[r['tier']] + ['']
     return '\n'.join(out) + GUARD
 
-def render(rules=None):
-    atomic(mako_path(), mako(load_rules() if rules is None else rules))
+def render():
+    with rules_lock():
+        atomic(mako_path(), mako(load_rules()))
 
 def append(record, now=None, directory=None):
     now = time.time() if now is None else now

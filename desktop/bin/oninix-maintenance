@@ -8,6 +8,9 @@ import sys
 import time
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
+from oninix_shell import atomic
+
 FLAKE = Path(os.environ.get('ONINIX_FLAKE', '/etc/nixos'))
 LAYER_PROFILE = os.environ.get('ONINIX_LAYER_PROFILE')
 UPSTREAM = os.environ.get('ONINIX_UPSTREAM', 'github:ilyakubryakov/omnissiah-desktop/oninix')
@@ -28,10 +31,7 @@ def read_json(path, default):
         return default
 
 def write_json(path, value):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix('.tmp')
-    tmp.write_text(json.dumps(value))
-    tmp.replace(path)
+    atomic(path, json.dumps(value))
 
 def oninix_input():
     lock = json.loads((FLAKE / 'flake.lock').read_text())
@@ -113,26 +113,29 @@ def status():
     return {'sessionOpen': session_open(), 'checkRunning': False}
 
 def launch():
-    if session_open():
-        return {'error': 'An update session is already open'}
-    terminal = shutil.which('kitty')
-    if not terminal:
-        return {'error': 'kitty is not installed'}
-    script = (
-        'echo "Updating OniNix in $1"; '
-        'if sudo nix flake update oninix --flake "$1" && '
-        'sudo nixos-rebuild switch --flake "$1#oninix"; then '
-        'echo "Done. The previous generation stays in the boot menu."; '
-        'oninix-maintenance check >/dev/null; fi; '
-        'read -r -p "Press Enter to close" _'
-    )
-    if LAYER_PROFILE:
-        script = ('oninix-maintenance apply-layer && oninix-maintenance check >/dev/null; '
-                  'read -r -p "Press Enter to close" _')
-    process = subprocess.Popen([terminal, '--class', 'oninix-update', '--title', 'OniNix update',
-                                'bash', '-c', script, '_', str(FLAKE)], start_new_session=True)
-    write_json(SESSION, {'pid': process.pid, 'startedAt': time.time()})
-    return {}
+    STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with (STATE / 'update-session.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if session_open():
+            return {'error': 'An update session is already open'}
+        terminal = shutil.which('kitty')
+        if not terminal:
+            return {'error': 'kitty is not installed'}
+        script = (
+            'echo "Updating OniNix in $1"; '
+            'if sudo nix flake update oninix --flake "$1" && '
+            'sudo nixos-rebuild switch --flake "$1#oninix"; then '
+            'echo "Done. The previous generation stays in the boot menu."; '
+            'oninix-maintenance check >/dev/null; fi; '
+            'read -r -p "Press Enter to close" _'
+        )
+        if LAYER_PROFILE:
+            script = ('oninix-maintenance apply-layer && oninix-maintenance check >/dev/null; '
+                      'read -r -p "Press Enter to close" _')
+        process = subprocess.Popen([terminal, '--class', 'oninix-update', '--title', 'OniNix update',
+                                    'bash', '-c', script, '_', str(FLAKE)], start_new_session=True)
+        write_json(SESSION, {'pid': process.pid, 'startedAt': time.time()})
+        return {}
 
 def apply_layer():
     with Path(LAYER_PROFILE).with_name('lock').open('a') as lock:
@@ -142,10 +145,8 @@ def apply_layer():
         try:
             subprocess.run(['nix', 'flake', 'update', 'oninix', '--flake', f'path:{FLAKE}'], check=True)
             subprocess.run(['nix', 'profile', 'upgrade', '--profile', LAYER_PROFILE, 'layer'], check=True)
-        except subprocess.CalledProcessError:
-            tmp = file.with_suffix('.tmp')
-            tmp.write_bytes(old)
-            tmp.replace(file)
+        except (OSError, subprocess.SubprocessError):
+            atomic(file, old)
             raise
         print('OniNix profile updated. Log out and in to reload the desktop.')
 

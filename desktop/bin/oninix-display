@@ -8,6 +8,9 @@ import subprocess
 import sys
 import time
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
+from oninix_shell import atomic as write_atomic
+
 STATE = Path(os.environ.get('XDG_STATE_HOME', str(Path.home() / '.local/state')))
 OVERLAY = STATE / 'oninix/monitors.conf'
 REVERT = STATE / 'oninix/monitors.revert.json'
@@ -50,12 +53,6 @@ def hypr_eval(expr):
 def apply(rule):
     fields = ', '.join(f'{key} = {str(value).lower() if isinstance(value, bool) else value if isinstance(value, (int, float)) else lua_string(value)}' for key, value in rule.items())
     hypr_eval('hl.monitor({ ' + fields + ' })')
-
-def write_atomic(path, text):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_suffix(path.suffix + '.tmp')
-    temp.write_text(text)
-    temp.replace(path)
 
 def monitor_key(monitor, live):
     desc = (monitor.get('description') or '').strip()

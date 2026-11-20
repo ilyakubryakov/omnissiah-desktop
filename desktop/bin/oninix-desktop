@@ -44,9 +44,7 @@ def read_json(path, default):
         return default
 
 def save(path, value):
-    tmp = path.with_suffix('.tmp')
-    tmp.write_text(json.dumps(value))
-    tmp.replace(path)
+    shell.atomic(path, json.dumps(value))
 
 def modes():
     return run(['makoctl', 'mode']).decode().splitlines()
@@ -433,11 +431,8 @@ def read_conf(name):
     return dict(line.split('=', 1) for line in lines if '=' in line)
 
 def write_conf(name, values):
-    ONINIX_STATE.mkdir(parents=True, exist_ok=True)
     path = ONINIX_STATE / f'{name}.conf'
-    tmp = path.with_suffix('.tmp')
-    tmp.write_text(''.join(f'{k}={v}\n' for k, v in values.items()))
-    tmp.replace(path)
+    shell.atomic(path, ''.join(f'{k}={v}\n' for k, v in values.items()))
 
 def desktop_entry(path):
     data, section = {}, None
@@ -1076,9 +1071,7 @@ def set_desktop_preference(key, value):
         old = path.read_bytes() if path.exists() else None
         prefs = desktop_preferences()
         prefs[key] = value
-        temp = path.with_suffix('.tmp')
-        temp.write_text(''.join(f'{k}={v}\n' for k, v in prefs.items()))
-        temp.replace(path)
+        shell.atomic(path, ''.join(f'{k}={v}\n' for k, v in prefs.items()))
         if key == 'agent':
             return
         expression = 'dofile(' + json.dumps(str(SHARE / 'hypr/appearance.lua')) + ')'
@@ -1092,8 +1085,7 @@ def set_desktop_preference(key, value):
             if old is None:
                 path.unlink(missing_ok=True)
             else:
-                temp.write_bytes(old)
-                temp.replace(path)
+                shell.atomic(path, old)
             try:
                 if key in {'windows', 'density'} or key.startswith('ui_'):
                     run(['oninix-theme', 'metrics-apply'], timeout=120)
