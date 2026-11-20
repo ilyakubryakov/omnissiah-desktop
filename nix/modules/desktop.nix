@@ -1,12 +1,21 @@
 { config, lib, pkgs, ... }:
 let
   cfg = config.oninix;
+  share = pkgs.callPackage ../pkgs/share.nix { };
 in
 lib.mkIf cfg.enable {
   programs.hyprland = {
     enable = true;
     withUWSM = true;
   };
+  programs.uwsm.waylandCompositors.oninix = {
+    prettyName = "OniNix";
+    comment = "Hyprland with the OniNix desktop";
+    binPath = "/run/current-system/sw/bin/Hyprland";
+    extraArgs = [ "--config" "${share}/share/oninix/hypr/hyprland.lua" ];
+  };
+  environment.pathsToLink = [ "/share/oninix" ];
+  environment.sessionVariables.ONINIX_SHARE = "/run/current-system/sw/share/oninix";
   programs.hyprlock.enable = true;
   services.hypridle.enable = true;
   xdg.portal.extraPortals = [ pkgs.xdg-desktop-portal-gtk ];
@@ -14,7 +23,7 @@ lib.mkIf cfg.enable {
   services.greetd = {
     enable = true;
     settings.default_session.command =
-      "${pkgs.tuigreet}/bin/tuigreet --time --remember --cmd 'uwsm start hyprland-uwsm.desktop'";
+      "${pkgs.tuigreet}/bin/tuigreet --time --remember --cmd 'uwsm start oninix-uwsm.desktop'";
   };
 
   security.rtkit.enable = true;
@@ -37,6 +46,7 @@ lib.mkIf cfg.enable {
   ];
 
   environment.systemPackages = with pkgs; [
+    share
     quickshell
     hyprpaper
     hyprsunset

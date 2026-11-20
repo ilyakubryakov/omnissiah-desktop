@@ -1,0 +1,66 @@
+#!/usr/bin/env python3
+"""One lock-screen line: today's next meeting (time only) or the playing track.
+
+Meeting titles stay off the lock screen; anyone near the screen can read it.
+"""
+from datetime import datetime
+import html
+import json
+from pathlib import Path
+import subprocess
+import sys
+import time
+
+
+def meeting():
+    try:
+        data = json.loads((Path.home() / '.cache/caldash.json').read_text())
+    except (OSError, ValueError):
+        return ''
+    # Same staleness rule as the panel: an hour without a sync means unknown.
+    if not isinstance(data, dict) or time.time() - data.get('ts', 0) > 3600:
+        return ''
+    now = datetime.now().astimezone()
+    candidates = []
+    for event in data.get('events', []):
+        if event.get('a'):
+            continue
+        try:
+            start, end = datetime.fromisoformat(event['s']), datetime.fromisoformat(event['e'])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if start.tzinfo and end.tzinfo and end > now and start.astimezone().date() == now.date():
+            candidates.append((start > now, start, end))
+    if not candidates:
+        return ''
+    # An ongoing meeting wins over the next one, as in the panel.
+    _, start, end = min(candidates)
+    if start <= now:
+        return 'Meeting now · until ' + end.astimezone().strftime('%H:%M')
+    minutes = -(-(start - now).seconds // 60)
+    soon = f' · in {minutes} min' if minutes <= 90 else ''
+    return 'Next meeting ' + start.astimezone().strftime('%H:%M') + soon
+
+
+def track():
+    try:
+        out = subprocess.run(['playerctl', '-a', 'metadata', '--format', '{{status}}\t{{artist}}\t{{title}}'],
+                             capture_output=True, text=True, timeout=2).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ''
+    # Like the panel: a playing track wins, otherwise a paused one is shown.
+    found = {}
+    for line in out.splitlines():
+        status, artist, title = (line.split('\t') + ['', ''])[:3]
+        if status in ('Playing', 'Paused') and title and status not in found:
+            text = ' - '.join(s for s in (artist, title) if s)
+            found[status] = text if len(text) <= 70 else text[:69] + '…'
+    if 'Playing' in found:
+        return 'Now playing · ' + found['Playing']
+    return 'Paused · ' + found['Paused'] if 'Paused' in found else ''
+
+
+if __name__ == '__main__':
+    line = {'meeting': meeting, 'track': track}.get(sys.argv[1] if len(sys.argv) > 1 else '', lambda: '')()
+    # hyprlock labels are Pango markup.
+    print(html.escape(line, quote=False))
