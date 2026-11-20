@@ -26,8 +26,8 @@ ColumnLayout {
         : level === "available" ? (count === 1 ? "1 update waiting" : count > 1 ? count + " updates waiting" : "Updates waiting")
         : "Everything is up to date"
     readonly property string subline: updates.sessionOpen ? "An update session is open."
-        : level === "error" ? updates.error
-        : level === "checking" ? (layerMode ? "Checking the OniNix layer." : "Evaluating the newer NixOS configuration and upstream releases.")
+        : level === "error" ? updates.summary
+        : level === "checking" ? (layerMode ? "Checking the OniNix layer." : "Checking the upstream OniNix input.")
         : level === "stale" ? "The daily check runs in the background."
         : level === "due" ? (updates.reasons || []).map(r => r.charAt(0).toUpperCase() + r.slice(1)).join(" · ")
         : level === "available" ? "No rush. You will be told when it is time to update."
@@ -77,22 +77,12 @@ ColumnLayout {
         }
     }
 
-    Note {
-        text: root.updates.blocker && root.level !== "stale" ? "The NixOS update needs a configuration change; the update agent handles it." : ""
-        color: Colors.muted
-    }
-    Note {
-        readonly property var names: root.updates.unreachable || []
-        text: names.length && root.level !== "stale" ? "Not reachable for 3+ days: " + names.join(", ") : ""
-        color: Colors.statusWarning
-    }
-
     UiButton {
         Layout.fillWidth: true
         visible: root.level === "due" || root.level === "available"
         selected: root.level === "due"
         glyph: "\u{F06B0}"
-        text: root.updates.sessionOpen ? "Update session open" : root.layerMode ? "Update OniNix layer" : "Update with " + root.updates.agentLabel
+        text: root.updates.sessionOpen ? "Update session open" : root.layerMode ? "Update OniNix layer" : "Update OniNix"
         enabled: !root.busy
         onClicked: root.updates.launch()
     }

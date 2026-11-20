@@ -63,7 +63,7 @@ def revision(node):
 
 def assess(item, now):
     if item['status'] == 'unknown':
-        return {'level': 'current', 'count': 0, 'reasons': [], 'summary': 'Could not reach OniNix: ' + item['detail'],
+        return {'level': 'error', 'count': 0, 'reasons': [], 'summary': item['detail'],
                 'blocker': '', 'unreachable': [item['name']], 'nixpkgsAgeDays': 0}
     age = int((now - item.get('lockedAt', now)) / DAY)
     if item['status'] != 'available':
@@ -91,8 +91,9 @@ def check():
                     'current': current[:12], 'latest': candidate[:12],
                     'lockedAt': locked.get('lastModified', now),
                     'detail': current[:12] + (' → ' + candidate[:12] if newer else ' · No newer release')}
-        except (OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
-            item = {'name': 'OniNix', 'kind': 'error', 'status': 'unknown', 'detail': type(error).__name__}
+        except (OSError, ValueError, KeyError, subprocess.SubprocessError):
+            item = {'name': 'OniNix', 'kind': 'error', 'status': 'unknown',
+                    'detail': 'Could not check the OniNix input. Check the machine flake, network and repository access.'}
         value = {'checkedAt': now, 'items': [item], 'assessment': assess(item, now)}
         write_json(CHECK, value)
         return value
@@ -109,7 +110,7 @@ def session_open():
         return False
 
 def status():
-    return {'sessionOpen': session_open(), 'checkRunning': False, 'agent': 'claude'}
+    return {'sessionOpen': session_open(), 'checkRunning': False}
 
 def launch():
     if session_open():

@@ -12,8 +12,6 @@ Singleton {
     readonly property string stateHome: Quickshell.env("XDG_STATE_HOME") || Quickshell.env("HOME") + "/.local/state"
     readonly property bool checking: checkProcess.running || maintenance.checkRunning === true
     readonly property bool sessionOpen: maintenance.sessionOpen === true
-    readonly property string agent: maintenance.agent || "claude"
-    readonly property string agentLabel: agent === "codex" ? "Codex" : "Claude"
     property double clock: Date.now() / 1000
     readonly property var assessment: result.assessment || ({})
     readonly property var items: result.items || []
@@ -22,12 +20,11 @@ Singleton {
     readonly property int count: assessment.count || 0
     readonly property var reasons: assessment.reasons || []
     readonly property var unreachable: assessment.unreachable || []
-    readonly property string blocker: assessment.blocker || ""
     readonly property var nix: items.find(i => i.kind === "nix") || ({})
     readonly property var available: items.filter(i => i.status === "available" && i.kind !== "nix" && i.kind !== "input")
     readonly property var packages: nix.changes || []
     readonly property string summary: level === "checking" ? "Checking for updates…"
-        : level === "error" ? error : level === "stale" ? "Not checked yet" : assessment.summary || ""
+        : level === "error" ? (error || assessment.summary || "Update check failed") : level === "stale" ? "Not checked yet" : assessment.summary || ""
     readonly property string stamp: result.checkedAt
         ? Qt.formatDateTime(new Date(result.checkedAt * 1000), "dd MMM HH:mm") : "Never"
     property double checkStarted: 0
