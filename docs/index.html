@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OniNix</title>
+<meta name="description" content="OmnissiaNix: NixOS with a Hyprland desktop, local voice and a machine spirit that changes the system when you ask, with a diff and an undo.">
+<link rel="icon" href="assets/mechanicus.png">
+<style>
+:root {
+  --bg: #121010; --panel: #1b1715; --deep: #0a0909; --line: #3a2418;
+  --fg: #d9c4a3; --muted: #a68a6f; --dim: #6e6052; --bright: #f3cba2;
+  --brass: #c1893e; --glow: #e0a95a; --crimson: #b8473a; --steel: #7d93a1;
+  --radius: 14px;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 17px/1.6 Inter, "Segoe UI", system-ui, sans-serif;
+  background-image: radial-gradient(ellipse at top, #2a1a12 0%, var(--bg) 55%);
+  background-attachment: fixed;
+}
+a { color: var(--glow); }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+header { text-align: center; padding: 72px 0 40px; }
+header img { width: 132px; height: 132px; filter: drop-shadow(0 0 32px rgba(224,169,90,.35)); }
+h1 { font-size: clamp(44px, 9vw, 84px); letter-spacing: .08em; margin: 12px 0 0; color: var(--bright); font-weight: 800; }
+.kicker { letter-spacing: .35em; text-transform: uppercase; color: var(--brass); font-size: 13px; margin-top: 6px; }
+.lead { font-size: clamp(18px, 2.4vw, 22px); max-width: 760px; margin: 22px auto 0; color: var(--fg); }
+.cta { display: inline-flex; gap: 12px; flex-wrap: wrap; justify-content: center; margin-top: 28px; }
+.btn { display: inline-block; padding: 12px 22px; border-radius: 999px; text-decoration: none; font-weight: 600; border: 1px solid var(--brass); }
+.btn.primary { background: var(--brass); color: var(--deep); }
+.btn.ghost { color: var(--glow); }
+.shot { border-radius: var(--radius); border: 1px solid var(--line); width: 100%; display: block; box-shadow: 0 24px 80px rgba(0,0,0,.6); }
+.hero-shot { margin: 40px 0 0; }
+section { padding: 64px 0 8px; }
+h2 { font-size: clamp(26px, 4vw, 38px); color: var(--bright); margin: 0 0 8px; }
+.sub { color: var(--muted); margin: 0 0 28px; max-width: 760px; }
+.steps { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); counter-reset: step; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; }
+.steps .card::before { counter-increment: step; content: counter(step); display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--line); color: var(--glow); font-weight: 700; margin-bottom: 10px; }
+.card h3 { margin: 0 0 6px; color: var(--bright); font-size: 18px; }
+.card p { margin: 0; color: var(--fg); }
+.quote { border-left: 3px solid var(--crimson); padding: 6px 0 6px 18px; margin: 28px 0 0; color: var(--bright); font-size: clamp(18px, 2.2vw, 21px); }
+table { width: 100%; border-collapse: collapse; background: var(--panel); border-radius: var(--radius); overflow: hidden; }
+th, td { text-align: left; padding: 14px 16px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--brass); font-weight: 600; font-size: 14px; letter-spacing: .04em; }
+td:first-child { color: var(--muted); white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+.scroll { overflow-x: auto; border-radius: var(--radius); }
+.gallery { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.gallery figure { margin: 0; }
+.gallery figcaption { color: var(--muted); font-size: 14px; margin-top: 8px; }
+.features { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+pre { background: var(--deep); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; overflow-x: auto; color: var(--bright); font: 14px/1.5 "JetBrains Mono", ui-monospace, monospace; }
+kbd { background: var(--deep); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 6px; padding: 1px 7px; font: 13px "JetBrains Mono", ui-monospace, monospace; color: var(--bright); }
+footer { padding: 64px 0 48px; color: var(--dim); font-size: 14px; text-align: center; }
+@media (max-width: 600px) { td:first-child { white-space: normal; } header { padding-top: 48px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <img src="assets/mechanicus.png" alt="OniNix mark">
+    <h1>ONINIX</h1>
+    <div class="kicker">OmnissiaNix</div>
+    <p class="lead">NixOS with a Hyprland desktop people actually want to use, local voice, and a machine spirit that changes the system when you ask. You see the diff. You can always undo.</p>
+    <div class="cta">
+      <a class="btn primary" href="#install">Install</a>
+      <a class="btn ghost" href="https://github.com/ilyakubryakov/omnissiah-desktop">Source</a>
+    </div>
+    <img class="shot hero-shot" src="screenshots/control-station.png" alt="Control Station on the OniNix desktop">
+  </header>
+
+  <section id="spirit">
+    <h2>Tell the machine spirit what you want</h2>
+    <p class="sub">Press <kbd>Super</kbd> <kbd>A</kbd>, or hold <kbd>Right Ctrl</kbd> and say it. "Install Blender." "Turn on the gaming set." "Add the German layout."</p>
+    <div class="steps">
+      <div class="card"><h3>It edits a copy</h3><p>Claude Code or Codex, whichever you signed in to, changes a copy of your machine config. The real one stays as it is.</p></div>
+      <div class="card"><h3>It builds first</h3><p>OniNix builds the new system from that copy. If it does not build, nothing changes.</p></div>
+      <div class="card"><h3>You see the diff</h3><p>The config change and the package list, before anything happens.</p></div>
+      <div class="card"><h3>Apply or undo</h3><p>Apply switches to the new system. One command, or one button in Control Station, brings back the old one.</p></div>
+    </div>
+    <p class="quote">NixOS makes letting an AI touch your system safe. The AI makes NixOS usable for people who never want to learn Nix.</p>
+  </section>
+
+  <section id="voice">
+    <h2>Talk to it</h2>
+    <p class="sub">Hold <kbd>Right Alt</kbd> in any text field, speak, let go. Whisper runs on your machine, nothing leaves it. On the first login OniNix benchmarks your GPU or CPU and picks the biggest model that still answers in about three seconds, from tiny to large-v3-turbo. On a machine that can't keep up, voice stays off and Control Station tells you why.</p>
+  </section>
+
+  <section id="compare">
+    <h2>Why not just Omarchy</h2>
+    <p class="sub">Omarchy is great and we borrowed ideas from it. But it is Arch plus scripts, and when a script goes sideways you fix it by hand.</p>
+    <div class="scroll">
+      <table>
+        <tr><th></th><th>Omarchy</th><th>OniNix</th></tr>
+        <tr><td>Base</td><td>Arch and install scripts</td><td>NixOS, the whole system is one config</td></tr>
+        <tr><td>Bad update</td><td>Fix it yourself</td><td>Pick the previous system in the boot menu</td></tr>
+        <tr><td>Changing the system</td><td>Edit configs or run scripts</td><td>Ask the machine spirit, read the diff, apply or undo</td></tr>
+        <tr><td>Settings</td><td>Config files</td><td>Control Station, with search</td></tr>
+        <tr><td>Voice</td><td>No</td><td>Local Whisper sized to your hardware</td></tr>
+        <tr><td>Look</td><td>Many themes</td><td>Live palettes and Mechanicus from GRUB to the lock screen</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <section id="look">
+    <h2>What it looks like</h2>
+    <p class="sub">A demo user with demo data. Your desktop will be messier. That's fine.</p>
+    <div class="gallery">
+      <figure><img class="shot" src="screenshots/panels.png" alt="Panels"><figcaption>Two panels and islands that join when windows fill the screen</figcaption></figure>
+      <figure><img class="shot" src="screenshots/notebook.png" alt="Notebook"><figcaption>Notebook: notes, calculator, timers, dictation, meetings</figcaption></figure>
+      <figure><img class="shot" src="screenshots/palette-light.png" alt="Light palette"><figcaption>Palettes switch live, day and night on a schedule</figcaption></figure>
+      <figure><img class="shot" src="screenshots/launchpad.png" alt="Launchpad"><figcaption>Launchpad and a launcher that finds apps, projects and files</figcaption></figure>
+      <figure><img class="shot" src="screenshots/grub.png" alt="GRUB"><figcaption>Boot menu, where every previous system waits</figcaption></figure>
+      <figure><img class="shot" src="screenshots/greeter.png" alt="Login"><figcaption>Login screen</figcaption></figure>
+    </div>
+  </section>
+
+  <section id="inside">
+    <h2>What you get</h2>
+    <div class="features">
+      <div class="card"><h3>Control Station</h3><p>Connections, sound, displays, devices, power, themes, panels, apps, work modes, calendars, voice and the spirit. Searchable.</p></div>
+      <div class="card"><h3>Gaming</h3><p>Steam with GE-Proton, Game mode that closes the heavy apps and puts them back after, a gaming CPU scheduler profile.</p></div>
+      <div class="card"><h3>Coding</h3><p>VS Code, toolchains, Docker, and binaries from the internet that just run.</p></div>
+      <div class="card"><h3>Music</h3><p>Low-latency PipeWire and a DAW, ready to plug in.</p></div>
+      <div class="card"><h3>AI</h3><p>Claude Code, Codex and local models through Ollama. Pick them as checkboxes in the installer.</p></div>
+      <div class="card"><h3>Updates</h3><p>One check a day, one button, and every update is a new boot entry you can go back to.</p></div>
+    </div>
+  </section>
+
+  <section id="install">
+    <h2>Install</h2>
+    <p class="sub">Build the ISO, write it to a USB stick, boot it in UEFI mode. You land in a live OniNix desktop. Look around, then press Install OniNix.</p>
+<pre>nix build github:ilyakubryakov/omnissiah-desktop/oninix#iso
+sudo dd if=result/iso/oninix-*.iso of=/dev/sdX bs=4M status=progress</pre>
+    <p class="sub">The installer asks for the disk, encryption, your name, password, time zone and keyboard. It detects the graphics and whether this is a laptop. Then you tick Gaming, Coding, Music and AI. It erases the disk you pick, and it asks twice.</p>
+  </section>
+</div>
+<footer>
+  <div class="wrap">
+    OniNix is an unofficial fan project. Warhammer 40,000 and Adeptus Mechanicus are trademarks of Games Workshop Limited; this project is not made, endorsed or supported by Games Workshop. Code under MIT.
+  </div>
+</footer>
+</body>
+</html>

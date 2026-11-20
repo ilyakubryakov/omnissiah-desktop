@@ -124,6 +124,7 @@ The panel checks for an OniNix update once a day and tells you when it is time. 
 | `desktop/quickshell/` | Panels, Control Station, Notebook |
 | `desktop/bin/`, `desktop/lib/` | The `oninix-*` commands |
 | `desktop/themes/` | Palettes and templates, rendered at build time |
+| `docs/` | Screenshots and the one-page site |
 
 `nix flake check` builds the demo system. `nix build .#nixosConfigurations.demo.config.system.build.vm` gives you a VM to poke at.
 
