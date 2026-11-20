@@ -4,7 +4,6 @@ import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Services.Mpris
 import "../shared" as Shared
-import "../EdgeLogic.js" as Logic
 
 RowLayout {
     id: bar

@@ -36,6 +36,7 @@ Singleton {
     // covers a theme applied over SSH without the session's Wayland environment.
     FileView {
         path: Quickshell.env("HOME") + "/.local/state/theme/name"
+        printErrors: false
         watchChanges: true
         onFileChanged: { reload(); file.reload() }
     }
@@ -50,6 +51,7 @@ Singleton {
     FileView {
         id: file
         path: Quickshell.env("HOME") + "/.local/state/theme/current/quickshell-colors.json"
+        printErrors: false
         watchChanges: true
         onFileChanged: reload()
         onLoaded: {

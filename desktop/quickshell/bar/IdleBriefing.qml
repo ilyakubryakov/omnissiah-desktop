@@ -4,8 +4,7 @@ import QtQuick.Layouts
 import QtQuick.Controls
 import "../shared" as Shared
 
-// Idle bottom-left: one compact segment each for AI quotas and the station/laptop
-// and homelab backups (Doctor and updates live in BarSystem; Kubernetes in BarMetrics). Hover cards expose coverage and freshness.
+// AI quotas for configured providers, with details in the hover card.
 RowLayout {
     id: root
     required property var barWindow
@@ -30,7 +29,7 @@ RowLayout {
     readonly property real usageMax: usageLevels.reduce((m, u) => Math.max(m, u.used), -1)
     readonly property string usageLevel: usageLevels.reduce((w, u) => rank(u.level) > rank(w) ? u.level : w, 'ok')
 
-    onVisibleChanged: if (!visible) { aiPopup.dismiss(); backupPopup.dismiss() }
+    onVisibleChanged: if (!visible) aiPopup.dismiss()
 
     component Divider: Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Colors.selection }
 
@@ -144,76 +143,4 @@ RowLayout {
         }
     }
 
-    StatusChip {
-        id: backupSeg
-        visible: PanelBriefing.backupKnown
-        readonly property string level: PanelBriefing.backupLevel
-        glyph: level === 'ok' ? '\u{F0160}' : '\u{F09E0}'
-        value: PanelBriefing.backupFailed ? 'failed' : PanelBriefing.backupPartial ? 'skipped' : PanelBriefing.backupUnknown ? '?' : PanelBriefing.ago(PanelBriefing.backupAge)
-        valueColor: level === 'bad' ? Colors.red : level === 'late' ? Colors.yellow : Colors.foreground
-        badge: level === 'bad' ? Colors.red : level === 'late' ? Colors.yellow : 'transparent'
-        Accessible.name: 'Backup ' + value
-        onClicked: backupPopup.togglePinned()
-        BarPopup {
-            id: backupPopup
-            anchorItem: backupSeg; barWindow: root.barWindow; above: true; cardWidth: Shared.DesktopStyle.px(470)
-            triggerHovered: root.visible && backupSeg.hovered
-            CardHeader { glyph: backupSeg.glyph; title: 'Backups'; note: 'Local · Homelab' }
-            Flickable {
-                Layout.fillWidth: true
-                Layout.preferredHeight: Math.min(backupContents.implicitHeight, (root.barWindow.screen ? root.barWindow.screen.height : 1080) * 0.65)
-                contentHeight: backupContents.implicitHeight; contentWidth: width
-                clip: true; boundsBehavior: Flickable.StopAtBounds
-                ScrollBar.vertical: ScrollBar { }
-                ColumnLayout {
-                    id: backupContents
-                    width: parent.width; spacing: 12
-            Repeater {
-                model: PanelBriefing.backupRows
-                ColumnLayout {
-                    required property var modelData
-                    readonly property string rowLevel: PanelBriefing.backupRowLevel(modelData)
-                    Layout.fillWidth: true; spacing: 5
-                    RowLayout {
-                        Layout.fillWidth: true
-                        UiLabel { text: modelData.source + ' / ' + modelData.label; font.pixelSize: Shared.DesktopStyle.px(13); font.weight: Font.DemiBold; Layout.fillWidth: true }
-                        UiLabel { text: modelData.stale ? 'stale' : rowLevel === 'unknown' ? 'unknown' : modelData.result === 'partial' ? 'skipped' : rowLevel === 'bad' && modelData.result === 'ok' ? 'overdue' : modelData.result
-                            color: rowLevel === 'bad' ? Colors.red : rowLevel === 'ok' ? Colors.green : Colors.yellow; font.pixelSize: Shared.DesktopStyle.px(12) }
-                    }
-                    UiLabel { text: 'Last complete backup  ' + (modelData.lastSuccess ? PanelBriefing.when(modelData.lastSuccess) : 'unknown')
-                        + (modelData.lastSuccess ? ' · ' + PanelBriefing.ago(Math.max(0, PanelBriefing.clock - modelData.lastSuccess)) + ' ago' : '')
-                        color: Colors.muted; font.pixelSize: Shared.DesktopStyle.px(11); Layout.fillWidth: true; wrapMode: Text.Wrap }
-                    UiLabel { visible: modelData.running === true; text: 'Backup in progress'; color: Colors.yellow; font.pixelSize: Shared.DesktopStyle.px(11) }
-                    UiLabel { visible: modelData.id === 'laptop'; text: 'Repository check  ' + (modelData.lastCheck ? PanelBriefing.when(modelData.lastCheck) : 'unknown'); color: Colors.dim; font.pixelSize: Shared.DesktopStyle.px(11) }
-                    UiLabel { visible: !!modelData.snapshot; text: 'Snapshot ' + (modelData.snapshot || '')
-                        + (modelData.changed !== undefined ? ' · ' + modelData.changed + ' changed files' : '')
-                        + (modelData.added !== undefined ? ' · ' + (modelData.added / 1048576).toFixed(1) + ' MiB added' : '')
-                        color: Colors.dim; font.pixelSize: Shared.DesktopStyle.px(11); Layout.fillWidth: true; wrapMode: Text.Wrap }
-                    UiLabel {
-                        visible: !!modelData.sites
-                        text: Object.entries(modelData.sites || {}).map(([site, timestamp]) => site + ' ' + (timestamp ? PanelBriefing.ago(Math.max(0, PanelBriefing.clock - timestamp)) + ' ago' : 'unknown')).join(' · ')
-                        color: Colors.dim; font.pixelSize: Shared.DesktopStyle.px(11); Layout.fillWidth: true; wrapMode: Text.Wrap
-                    }
-                    Repeater {
-                        model: Object.entries(modelData.guests || {})
-                        UiLabel {
-                            required property var modelData
-                            Layout.fillWidth: true; wrapMode: Text.Wrap; font.pixelSize: Shared.DesktopStyle.px(12)
-                            text: modelData[1].status + ': ' + modelData[0] + ' · last backup ' + (modelData[1].lastSuccess
-                                ? PanelBriefing.ago(Math.max(0, PanelBriefing.clock - modelData[1].lastSuccess)) + ' ago' : 'unknown')
-                            color: modelData[1].status === 'skipped' ? Colors.yellow : Colors.muted
-                        }
-                    }
-                    UiLabel { visible: modelData.id === 'homelab'; text: (modelData.count !== undefined && modelData.count !== null ? modelData.count + ' snapshots' : 'Snapshot count unknown')
-                        + ' · ' + (modelData.sizeBytes !== undefined && modelData.sizeBytes !== null ? (modelData.sizeBytes / 1e9).toFixed(1) + ' GB' : 'size unknown'); color: Colors.dim; font.pixelSize: Shared.DesktopStyle.px(11) }
-                    UiLabel { visible: !!modelData.note || !!modelData.error; text: modelData.error || modelData.note || ''; color: Colors.dim; font.pixelSize: Shared.DesktopStyle.px(10); Layout.fillWidth: true; wrapMode: Text.Wrap }
-                    UiLabel { visible: !!modelData.metricsAt; text: 'Metrics collected  ' + PanelBriefing.when(modelData.metricsAt); color: Colors.dim; font.pixelSize: Shared.DesktopStyle.px(10) }
-                    Item { implicitHeight: 8 }
-                }
-            }
-                }
-            }
-            UiLabel { visible: PanelBriefing.backupRows.some(row => row.id === 'vms'); Layout.fillWidth: true; text: 'VMs: daily at 00:30, stopped guests only. Running guests are never stopped automatically.'; color: Colors.dim; font.pixelSize: Shared.DesktopStyle.px(10); wrapMode: Text.Wrap }
-        }
-    }
 }

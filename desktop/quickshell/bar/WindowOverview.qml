@@ -43,7 +43,7 @@ ColumnLayout {
         onAccepted: if (root.clients.length || root.minimized.length) root.focusWindow(root.clients[0] || root.minimized[0])
         Component.onCompleted: Qt.callLater(() => search.forceActiveFocus())
     }
-    UiLabel { Layout.fillWidth: true; text: "Click to focus, drag onto another workspace, right-click to select for Move, middle-click to close. Xeneon is widgets only."; wrapMode: Text.Wrap; color: Colors.muted; font.pixelSize: Shared.DesktopStyle.px(13) }
+    UiLabel { Layout.fillWidth: true; text: "Click to focus, drag onto another workspace, right-click to select for Move, middle-click to close."; wrapMode: Text.Wrap; color: Colors.muted; font.pixelSize: Shared.DesktopStyle.px(13) }
     GridLayout {
         Layout.fillWidth: true
         columns: 2; columnSpacing: 14; rowSpacing: 14

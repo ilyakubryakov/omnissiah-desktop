@@ -5,8 +5,7 @@ import QtQuick.Layouts
 import Quickshell
 import "../shared" as Shared
 
-// System: display set, time zone and night light (General); NixOS, AI / GPU and
-// the system-management agent (Software).
+// Time zone and night light (General), NixOS and AI / GPU (Software).
 ColumnLayout {
     id: root
     spacing: Shared.DesktopStyle.px(20)
@@ -20,7 +19,7 @@ ColumnLayout {
         return (bytes / 1073741824).toFixed(0);
     }
     // Search targets on the second tab: switch first (see AppearancePanel.reveal).
-    readonly property var targetTabs: ({ "NixOS": "software", "AI / GPU": "software", "System management": "software" })
+    readonly property var targetTabs: ({ "NixOS": "software", "AI / GPU": "software" })
     function reveal(target) {
         const next = targetTabs[target]
         if (!next || root.tab === next) return false
@@ -42,21 +41,6 @@ ColumnLayout {
     }
 
     // ---- General ---------------------------------------------------------------
-    SettingsGroup {
-        visible: root.tab === "general" && !root.laptop
-        title: "Displays"
-        footer: "Xeneon is reserved for widgets. TV uses workspace 11; turning it off returns its windows to workspace 1. Audio stays on your selected device."
-        SettingsRow {
-            title: "Screens"
-            Segmented {
-                model: [{id: "desk", title: "LG + Xeneon"}, {id: "extended", title: "LG + Xeneon + TV"}]
-                current: Shared.Screens.tv === null ? "desk" : "extended"
-                enabled: !DesktopData.busy
-                onChosen: id => DesktopData.act("display", [id])
-            }
-        }
-    }
-
     SettingsGroup {
         id: tzGroup
         readonly property var tz: (DesktopData.settings || {}).timezone || null
@@ -204,21 +188,6 @@ ColumnLayout {
                     text: "AI actions…"
                     onClicked: root.launch(["oninix-launcher", "--show-actions"])
                 }
-            }
-        }
-    }
-
-    SettingsGroup {
-        visible: root.tab === "software"
-        title: "System management"
-        SettingsRow {
-            title: "Agent"
-            subtitle: "The System management button opens a terminal in the personal configuration repository with the selected agent."
-            Segmented {
-                model: [{id: "claude", title: "Claude"}, {id: "codex", title: "Codex"}, {id: "opencode", title: "OpenCode"}, {id: "agy", title: "Antigravity"}]
-                current: ((DesktopData.appearance || {}).desktop || {}).agent || ""
-                enabled: !DesktopData.busy
-                onChosen: id => DesktopData.act("appearance", ["desktop", "agent", id])
             }
         }
     }

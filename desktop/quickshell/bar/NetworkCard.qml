@@ -56,9 +56,7 @@ ColumnLayout {
             ["Sending", root.bytes(root.sending) + (root.sending >= 0 ? "/s" : "")],
             ["Downloaded", root.bytes(root.primary.received)],
             ["Uploaded", root.bytes(root.primary.sent)],
-            ["DNS", (root.primary.dns || []).join(", ") || "Unavailable"],
-            ["VPN", DesktopData.vpnStatus],
-            ["Tailscale", DesktopData.tailscaleStatus]
+            ["DNS", (root.primary.dns || []).join(", ") || "Unavailable"]
         ]
         RowLayout {
             required property var modelData

@@ -244,9 +244,8 @@ ColumnLayout {
             enabled: false, hdr: false, hdrCapable: false, saved: false, mirror: "", role: "" })
         readonly property var mode: d.modes.find(m => m.width === d.width && m.height === d.height) || ({ rates: [] })
         title: page.title(settings.d)
-        footer: settings.d.role === "edge" ? "The Xeneon only shows widgets; it cannot become primary." : ""
         SettingsRow {
-            title: settings.d.name + (settings.d.role === "edge" ? " · Xeneon widgets" : settings.d.role === "tv" ? " · TV profile" : "")
+            title: settings.d.name
             subtitle: settings.d.saved ? "Saved for this machine" : ""
             UiButton {
                 text: settings.d.key === page.primary ? "Primary" : "Make primary"

@@ -24,8 +24,13 @@ OVERLAY_KEYS = {'output', 'mode', 'position', 'scale', 'transform', 'vrr', 'hdr'
 
 def roles(path=None):
     config = configparser.ConfigParser(interpolation=None)
-    with open(path or (Path('/etc/oninix/monitors.conf') if Path('/etc/oninix/monitors.conf').exists() else Path.home() / '.config/hypr/monitors.conf')) as source:
-        config.read_file(source)
+    if path is not None:
+        with open(path) as source:
+            config.read_file(source)
+    else:
+        for source in (Path('/etc/oninix/monitors.conf'), Path.home() / '.config/oninix/monitors.conf'):
+            if config.read(source):
+                break
     return config
 
 
@@ -288,7 +293,7 @@ def schedule_revert():
     subprocess.run(['systemctl', '--user', 'stop', REVERT_UNIT + '.timer'], stderr=subprocess.DEVNULL)
     env = [f'--setenv={k}={os.environ[k]}' for k in ('HYPRLAND_INSTANCE_SIGNATURE', 'XDG_RUNTIME_DIR', 'WAYLAND_DISPLAY') if k in os.environ]
     subprocess.run(['systemd-run', '--user', '--quiet', '--collect', '--unit=' + REVERT_UNIT, f'--on-active={REVERT_SECONDS}',
-                    *env, str(Path.home() / '.local/bin/oninix-display'), 'revert'], check=True)
+                    *env, str(Path(__file__).resolve()), 'revert'], check=True)
 
 
 def commit(text, before, tv_on=None, primary=None):

@@ -43,6 +43,7 @@ Item {
     FileView {
         id: file
         path: Quickshell.env("HOME") + "/.cache/caldash.json"
+        printErrors: false
         watchChanges: true
         onFileChanged: reload()
         onLoaded: root.parse()

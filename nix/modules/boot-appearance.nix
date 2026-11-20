@@ -6,7 +6,7 @@ let
     mkdir -p "$out/grub" "$out/share/plymouth/themes/oninix"
     cp ${../boot/mechanicus-dark.png} "$out/grub/background.png"
     cp ${../boot/mechanicus.png} "$out/share/plymouth/themes/oninix/mechanicus.png"
-    python3 ${../boot/render.py} ${../../themes/omnissiah/colors.toml} ${../boot} "$out"
+    python3 ${../boot/render.py} ${../../desktop/themes/omnissiah/colors.toml} ${../boot} "$out"
     grub-mkfont --name="OniNix Sans" --size=24 --output="$out/grub/oninix.pf2" \
       ${pkgs.dejavu_fonts.minimal}/share/fonts/truetype/DejaVuSans.ttf
   '';

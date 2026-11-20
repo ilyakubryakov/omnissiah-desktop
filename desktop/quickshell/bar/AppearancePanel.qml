@@ -108,7 +108,7 @@ ColumnLayout {
             subtitle: "Night light follows the same schedule"
             Segmented {
                 model: [{id: "manual", title: "Manual"}, {id: "sun", title: "Sunrise / sunset"}, {id: "fixed", title: "Schedule"}]
-                current: root.appearance.schedule.mode
+                current: root.appearance.schedule.mode || "manual"
                 enabled: !DesktopData.busy
                 onChosen: id => root.act(["schedule", id])
             }

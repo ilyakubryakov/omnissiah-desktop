@@ -20,7 +20,7 @@ let
     [ session greeter.iconTheme.package greeter.cursorTheme.package ]
     ++ lib.optional (greeter.theme.package != null) greeter.theme.package
   );
-  palette = builtins.fromTOML (builtins.readFile ../../themes/omnissiah/colors.toml);
+  palette = builtins.fromTOML (builtins.readFile ../../desktop/themes/omnissiah/colors.toml);
   paletteNames = builtins.attrNames palette;
   greeterCss = lib.replaceStrings
     (map (name: "@${name}@") paletteNames)
@@ -37,7 +37,10 @@ lib.mkIf cfg.enable {
   };
   services.displayManager.sessionPackages = [ session ];
   environment.pathsToLink = [ "/share/oninix" ];
-  environment.sessionVariables.ONINIX_SHARE = "/run/current-system/sw/share/oninix";
+  environment.sessionVariables = {
+    ONINIX_SHARE = "/run/current-system/sw/share/oninix";
+    ONINIX_LAPTOP = if cfg.hardware.laptop then "1" else "0";
+  };
   programs.hyprlock.enable = true;
   systemd.user.services.hypridle = {
     environment.ONINIX_LAPTOP = if cfg.hardware.laptop then "1" else "0";
@@ -76,11 +79,58 @@ lib.mkIf cfg.enable {
     description = "OniNix panels, Control Station and desktop overlays";
     partOf = [ "graphical-session.target" ];
     after = [ "graphical-session.target" ];
+    wants = [ "oninix-theme.service" ];
     path = [ "/run/wrappers" "/run/current-system/sw" ];
     serviceConfig = {
       ExecStart = "${share}/bin/oninix-shell -n";
       Restart = "on-failure";
       RestartSec = 2;
+    };
+  };
+  systemd.user.services.oninix-theme = {
+    description = "Apply the OniNix desktop palette";
+    partOf = [ "graphical-session.target" ];
+    after = [ "graphical-session.target" ];
+    path = [ "/run/wrappers" "/run/current-system/sw" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+    script = ''
+      oninix-theme
+      oninix-theme-schedule
+    '';
+  };
+  systemd.user.services.oninix-wallpaper = {
+    description = "OniNix wallpaper service";
+    partOf = [ "graphical-session.target" ];
+    after = [ "graphical-session.target" ];
+    script = ''
+      image=$(${share}/bin/oninix-theme wallpaper-path)
+      exec ${lib.getExe pkgs.swaybg} -i "$image" -m fill
+    '';
+  };
+  systemd.user.services.oninix-keep-awake = {
+    description = "Suspend automatic idle actions while the desktop is in use";
+    partOf = [ "graphical-session.target" ];
+    after = [ "graphical-session.target" ];
+    serviceConfig.ExecStart = "${lib.getExe' pkgs.systemd "systemd-inhibit"} --what=idle --who=OniNix --why=Keep-awake ${lib.getExe' pkgs.coreutils "sleep"} infinity";
+  };
+  systemd.user.services.oninix-theme-schedule = {
+    description = "Apply scheduled OniNix palette and night light";
+    after = [ "oninix-theme.service" ];
+    path = [ "/run/wrappers" "/run/current-system/sw" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${share}/bin/oninix-theme-schedule";
+    };
+  };
+  systemd.user.timers.oninix-theme-schedule = {
+    partOf = [ "graphical-session.target" ];
+    timerConfig = {
+      OnActiveSec = "1min";
+      OnUnitActiveSec = "1min";
+      AccuracySec = "1s";
     };
   };
 
@@ -107,7 +157,6 @@ lib.mkIf cfg.enable {
     session
     share
     quickshell
-    hyprpaper
     hyprsunset
     kitty
     fuzzel

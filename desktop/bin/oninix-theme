@@ -192,12 +192,18 @@ template_comment() {
 }
 
 # ---- wallpaper -----------------------------------------------------------
-wallpaper_path() {
-    python3 "$REPO/themes/wallpapers.py" path "${1:-$(current_name)}"
+wallpaper_settings() {
+    python3 "$REPO/lib/oninix_wallpaper.py" "$1" "$(current_name)" "${@:2}"
 }
 
-apply_wallpaper() {
-    python3 "$REPO/themes/wallpapers.py" apply "$(current_name)" "$1" >/dev/null
+wallpaper_path() {
+    python3 "$REPO/lib/oninix_wallpaper.py" path "${1:-$(current_name)}"
+}
+
+reload_wallpaper() {
+    if [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
+        systemctl --user restart --no-block oninix-wallpaper.service
+    fi
 }
 
 # ---- where the machine reads the generated files from --------------------
@@ -435,7 +441,7 @@ PY
     conf="$REPO/themes/$1/desktop.conf"
     [ -r "$conf" ] || return 0
 
-    colorscheme=""; icontheme=""; folders=""; plasmatheme=""; gtktheme=""; wallpaper=""; keepawake_icon=""
+    colorscheme=""; icontheme=""; folders=""; plasmatheme=""; gtktheme=""; keepawake_icon=""
     while IFS='=' read -r k v; do
         case "$k" in
         \#* | "") continue ;;
@@ -443,11 +449,9 @@ PY
         folders) folders=$v ;;
         plasmatheme) plasmatheme=$v ;;
         gtktheme) gtktheme=$v ;;
-        wallpaper) wallpaper=${v/#\~/$HOME} ;;
         keepawake_icon) keepawake_icon=$v ;;
         esac
     done <"$conf"
-    wallpaper=$(wallpaper_path "$1")
 
     # The plasma-apply-* tools abort without a display (ssh, the timer after a
     # logout); offscreen is enough, they only write config and signal over D-Bus.
@@ -456,7 +460,7 @@ PY
     colorscheme="Station-$1"
     scheme_changed=0
     cmp -s "$CURRENT_LINK/Station.colors" "$HOME/.local/share/color-schemes/$colorscheme.colors" || scheme_changed=1
-    cp "$CURRENT_LINK/Station.colors" "$HOME/.local/share/color-schemes/$colorscheme.colors"
+    install -m 0644 "$CURRENT_LINK/Station.colors" "$HOME/.local/share/color-schemes/$colorscheme.colors"
     # Explicit UI fonts avoid Qt/KDE falling back to a serif font outside Plasma.
     if command -v kwriteconfig6 >/dev/null 2>&1; then
         for font_key in font menuFont toolBarFont; do
@@ -609,16 +613,13 @@ PY
         printf 'gtk theme %s\n' "$gtktheme"
     fi
 
-    if [ -n "$wallpaper" ] && [ "${2:-}" != metrics-only ]; then
-        apply_wallpaper "$wallpaper" || printf 'Could not apply wallpaper: %s\n' "$wallpaper" >&2
-    fi
 
     # The .desktop names one icon, "keepawake", so the variant is installed
     # under that name rather than the entry being rewritten per theme.
     if [ -n "$keepawake_icon" ] && [ -f "$REPO/themes/icons/$keepawake_icon" ]; then
         dest="$HOME/.local/share/icons/hicolor/scalable/apps/keepawake.svg"
         mkdir -p "$(dirname "$dest")"
-        cp -f "$REPO/themes/icons/$keepawake_icon" "$dest"
+        install -m 0644 "$REPO/themes/icons/$keepawake_icon" "$dest"
         printf 'keepawake icon %s\n' "$keepawake_icon"
         # Without this the old pixmap stays in the cache and nothing appears
         # to have changed.
@@ -660,15 +661,17 @@ wallpaper-path)
     exit 0
     ;;
 wallpaper-config)
-    python3 "$REPO/themes/wallpapers.py" config "$(current_name)"
+    wallpaper_settings config
     exit 0
     ;;
 wallpaper-directory | wallpaper-mode)
-    python3 "$REPO/themes/wallpapers.py" "${mode#wallpaper-}" "$(current_name)" "${2:?Choose a wallpaper setting}"
+    wallpaper_settings "${mode#wallpaper-}" "${2:?Choose a wallpaper setting}"
+    [ "$mode" = wallpaper-directory ] || reload_wallpaper
     exit 0
     ;;
 wallpaper)
-    python3 "$REPO/themes/wallpapers.py" set "$(current_name)" "${2:?usage: theme wallpaper <shared|light|dark|palette> PATH}" "${3:?Choose an image}"
+    wallpaper_settings set "${2:?usage: theme wallpaper <shared|light|dark|palette> PATH}" "${3:?Choose an image}"
+    reload_wallpaper
     exit 0
     ;;
 list)
@@ -681,13 +684,13 @@ list)
     ;;
 set)
     want=${2:?usage: theme set <name>}
-    [ -f "$(palette_file "$want")" ] || { echo "No palette: $want (see: theme list)" >&2; exit 1; }
-    save_name "$want"
+    case "$want" in *[!a-z0-9-]*) echo "Invalid palette name: $want" >&2; exit 1 ;; esac
+    [ -f "$(palette_file "$want")" ] || { echo "No palette: $want (see: oninix-theme list)" >&2; exit 1; }
+    mode=set
     ;;
 sync)
     [ "$OS" = macos ] || { echo "theme sync needs a system that has an opinion; use: theme set" >&2; exit 1; }
     want=$(macos_variant)
-    save_name "$want"
     mode=set
     ;;
 render | render-only | check | diff) ;;
@@ -768,7 +771,7 @@ fi
 [ "$mode" = diff ] && exit 0
 [ "$mode" = render-only ] && exit 0
 
-name=$(current_name)
+name=${want:-$(current_name)}
 install_state "$name"
 reload_terminals
 reload_tmux
@@ -786,6 +789,8 @@ linux)
         done < <(systemctl --user show-environment 2>/dev/null || true)
     fi
     apply_desktop "$name"
+    save_name "$name"
+    reload_wallpaper
     restart_slack
     reload_chrome
     pkill -USR2 -x btop 2>/dev/null && echo "reloaded btop" || true
@@ -794,9 +799,19 @@ linux)
         scheme=$(sed -n 's/^mode *= *"\(.*\)"/\1/p' "$(palette_file "$name")")
         gsettings set org.gnome.desktop.interface color-scheme "prefer-${scheme:-dark}" 2>/dev/null || true
     fi
-    # Nix wrappers can name the process .mako-wrapped instead of mako.
-    # mako refuses a config whose include is missing: write the tier rules first.
+    # Keep user-owned Mako configs and bootstrap the default on the first login.
+    mako_dir="${XDG_CONFIG_HOME:-$HOME/.config}/mako"
+    mkdir -p "$mako_dir"
+    rules="${XDG_STATE_HOME:-$HOME/.local/state}/oninix/notification-rules.conf"
     oninix-desktop notification-render >/dev/null 2>&1 || true
+    {
+        printf 'include=%s/mako.conf\n' "$CURRENT_LINK"
+        [ ! -f "$rules" ] || printf 'include=%s\n' "$rules"
+    } >"$STATE/mako.conf.tmp"
+    mv "$STATE/mako.conf.tmp" "$STATE/mako.conf"
+    if [ ! -e "$mako_dir/config" ] && [ ! -L "$mako_dir/config" ]; then
+        ln -s "$STATE/mako.conf" "$mako_dir/config"
+    fi
     if command -v makoctl >/dev/null 2>&1; then
         makoctl reload >/dev/null 2>&1 || true
     fi
@@ -813,6 +828,7 @@ linux)
     fi
     ;;
 macos)
+    save_name "$name"
     ;;
 esac
 echo "theme: $name"

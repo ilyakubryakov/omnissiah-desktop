@@ -27,6 +27,11 @@ stdenvNoCC.mkDerivation {
     ONINIX_THEME_ROOT=$share HOME=$TMPDIR XDG_STATE_HOME=$TMPDIR/state \
       ${bash}/bin/bash $share/bin/oninix-theme render-only >/dev/null
     for tool in $share/bin/*; do
+      if [ "$(basename "$tool")" = oninix-theme ]; then
+        makeWrapper "$tool" "$out/bin/oninix-theme" \
+          --prefix PATH : "${lib.makeBinPath [ python bash ]}"
+        continue
+      fi
       ln -s $tool $out/bin/$(basename $tool)
     done
     makeWrapper ${quickshell}/bin/quickshell $out/bin/oninix-shell \

@@ -171,7 +171,7 @@ def apply_snapshot(value):
         prefs['items'] = items
     save_preferences(prefs)
     if files != before['files']:
-        subprocess.run([str(Path.home() / '.local/bin/theme')] + (['set', palette] if palette else []), check=True,
+        subprocess.run(['oninix-theme'] + (['set', palette] if palette else []), check=True,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120)
     if files.get('desktop.conf') != before['files'].get('desktop.conf'):
         subprocess.run(['hyprctl', 'reload'], check=True, stdout=subprocess.DEVNULL,

@@ -6,7 +6,7 @@ import Quickshell
 import Quickshell.Bluetooth
 import "../shared" as Shared
 
-// Connections page of the Control Station: Wi-Fi & wired, VPN and Bluetooth,
+// Connections page of the Control Station: Wi-Fi, wired networking and Bluetooth,
 // as System Settings style tabs of grouped rows.
 ColumnLayout {
     id: root
@@ -53,7 +53,7 @@ ColumnLayout {
     // Search targets on a tab other than the current one: switch first.
     readonly property var targetTabs: ({
         "Wi-Fi": "network", "Wired": "network", "Advanced network settings": "network",
-        "VPN": "vpn", "Tailscale": "vpn", "Bluetooth": "bluetooth"
+        "Bluetooth": "bluetooth"
     })
     function reveal(target) {
         const tab = targetTabs[target]
@@ -110,7 +110,7 @@ ColumnLayout {
 
     Segmented {
         Layout.alignment: Qt.AlignHCenter
-        model: [{id: "network", title: "Wi-Fi & wired"}, {id: "vpn", title: "VPN"}, {id: "bluetooth", title: "Bluetooth"}]
+        model: [{id: "network", title: "Wi-Fi & wired"}, {id: "bluetooth", title: "Bluetooth"}]
         current: root.tab
         onChosen: id => root.tab = id
     }
@@ -215,50 +215,6 @@ ColumnLayout {
             title: "Advanced network settings"
             subtitle: "Profiles, addresses and DNS in the connection editor"
             UiButton { glyph: "\u{F0493}"; text: "Open"; onClicked: root.launch(["nm-connection-editor"]) }
-        }
-    }
-
-    // ---- VPN -----------------------------------------------------------------
-    SettingsGroup {
-        visible: root.tab === "vpn"
-        title: "VPN"
-        footer: "Auto-connect brings a VPN up at login. A connected VPN reconnects by itself after sleep or a network change; a disconnected one stays off."
-        SettingsRow {
-            visible: DesktopData.controls.vpns === null
-            title: "VPN profiles unavailable"
-        }
-        Repeater {
-            model: DesktopData.vpnProfiles
-            SettingsRow {
-                id: vpn
-                required property var modelData
-                readonly property bool up: modelData.active === "yes"
-                title: modelData.name
-                subtitle: ({connected: "Connected", connecting: "Connecting"})[modelData.state] || "Disconnected"
-                Glyph { text: "\u{F0582}"; font.pixelSize: Shared.DesktopStyle.px(18); color: vpn.up ? Colors.accent : Colors.muted }
-                UiButton {
-                    glyph: vpn.modelData.autostart ? "\u{F0132}" : "\u{F0131}"
-                    text: "Auto-connect"
-                    selected: !!vpn.modelData.autostart
-                    enabled: !DesktopData.busy
-                    onClicked: DesktopData.act("vpn-autostart", [vpn.modelData.id, vpn.modelData.autostart ? "off" : "on"])
-                }
-                UiButton {
-                    text: vpn.modelData.state === "disconnected" ? "Connect" : "Disconnect"
-                    enabled: !DesktopData.busy
-                    onClicked: DesktopData.act("vpn", [vpn.modelData.id])
-                }
-            }
-        }
-    }
-
-    SettingsGroup {
-        visible: root.tab === "vpn"
-        title: "Tailscale"
-        SettingsRow {
-            title: "Tailscale"
-            subtitle: DesktopData.tailscaleStatus
-            Glyph { text: "\u{F0318}"; font.pixelSize: Shared.DesktopStyle.px(18); color: DesktopData.tailscale.online ? Colors.accent : Colors.muted }
         }
     }
 

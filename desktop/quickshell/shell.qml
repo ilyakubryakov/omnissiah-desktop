@@ -1,9 +1,6 @@
 //@ pragma UseQApplication
 // Tray context menus are platform menus, which need QApplication.
-// The station's two bars (Hyprland session). Started from hypr/autostart.lua:
-//   quickshell -p ~/.config/quickshell/station.qml
-// Also hosts the cheatsheet (Meta+Shift+H) on the main monitor, on every host.
-// The Xeneon dashboard is a separate config (ha.qml) and is not touched here.
+// Started by oninix-panel.service using the packaged shell configuration.
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
@@ -22,8 +19,7 @@ ShellRoot {
         else { calendar.opened = false; desktop.show(page) }
     }
 
-    // Not on the Xeneon Edge: that screen belongs to the dashboard.
-    readonly property var workScreens: Quickshell.screens.filter(s => s.name !== Shared.Screens.output("edge"))
+    readonly property var workScreens: Quickshell.screens
 
     Binding { target: Shared.DesktopStyle; property: "fullscreen"; value: (Hypr.active.fullscreen || 0) >= 2 }
 

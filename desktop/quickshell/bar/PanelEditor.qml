@@ -35,7 +35,7 @@ SettingsCard {
         }
         UiButton { text: ShellPrefs.editingPanels ? "Finish editing" : "Highlight groups"; selected: ShellPrefs.editingPanels; onClicked: ShellPrefs.editingPanels = !ShellPrefs.editingPanels }
     }
-    UiLabel { Layout.fillWidth: true; text: "Drag groups between the rows or onto another group to change their order. The tray and Control Station always remain available. Xeneon keeps its own dashboard."; color: Colors.muted; font.pixelSize: Shared.DesktopStyle.px(12); wrapMode: Text.WordWrap }
+    UiLabel { Layout.fillWidth: true; text: "Drag groups between the rows or onto another group to change their order. The tray and Control Station always remain available."; color: Colors.muted; font.pixelSize: Shared.DesktopStyle.px(12); wrapMode: Text.WordWrap }
     Repeater {
         id: lanes
         model: ["top", "bottom", "hidden"]

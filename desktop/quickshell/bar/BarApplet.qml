@@ -37,8 +37,8 @@ Item {
         id: notebook
         Seg {
             glyph: "\u{F044}"
-            toolTip: MeetingsData.active ? "Meeting recording · " + MeetingsData.clock(MeetingsData.active.elapsed) : "Notebook"
-            tint: MeetingsData.active ? Colors.red : Colors.accent
+            toolTip: "Notebook"
+            tint: Colors.accent
             onClicked: root.bar.openPanel("notebook")
         }
     }
@@ -165,7 +165,7 @@ Item {
         }
     }
 
-    // One segment for the link, VPN and Tailscale: the popup shows each of them.
+    // Network details are available in the popover.
     Component {
         id: network
         Seg {
@@ -175,7 +175,7 @@ Item {
             readonly property bool wireless: links.some(c => c.type === "802-11-wireless")
             glyph: wired ? "\u{F0200}" : wireless ? "\u{F05A9}" : "\u{F05AA}"
             label: wired || wireless ? "" : Quickshell.env("ONINIX_LAPTOP") === "1" ? "No Wi-Fi" : "Offline"
-            tint: DesktopData.activeVpns.length ? Colors.accent : Colors.foreground
+            tint: Colors.foreground
             onClicked: networkPopup.togglePinned()
             BarPopup {
                 id: networkPopup
@@ -217,10 +217,8 @@ Item {
     Component {
         id: awake
         Seg {
-            readonly property var vdi: DesktopData.controls.vdi
             glyph: "\u{F0176}"
-            toolTip: "Keep awake" + (vdi ? " · " + vdi.sessions + " VDI session" + (vdi.sessions === 1 ? "" : "s")
-                + " pinged " + Qt.formatTime(new Date(vdi.at * 1000), "HH:mm") : "")
+            toolTip: "Keep awake"
             tint: Colors.accent
             onClicked: Hypr.exec(StatusState.scripts + "keep-awake.sh")
         }

@@ -49,6 +49,8 @@ def list_projects() -> None:
 
 
 def list_files() -> None:
+    if not PROJECTS.is_dir():
+        return
     command = ["fd", "--type", "f", "--hidden", "--print0", "--base-directory", str(PROJECTS)]
     for directory in sorted(EXCLUDED):
         command.extend(["--exclude", directory])
@@ -81,17 +83,11 @@ def open_selection(action: int) -> None:
 def workstation_actions() -> dict:
     import shutil
 
-    home = Path.home()
-    scripts = home / ".config/hypr/scripts"
-    local = home / ".local/bin"
     actions = {
-        "tools": ("Tools: browse my commands", "utilities-terminal", ["kitty", "--hold", "-e", str(local / "tools")]),
-        "shortcuts": ("Keyboard shortcuts & desktop guide", "input-keyboard", ["quickshell", "-p", str(home / ".config/quickshell/station.qml"), "ipc", "call", "cheat", "toggle"]),
+        "shortcuts": ("Keyboard shortcuts & desktop guide", "input-keyboard", ["oninix-shell", "ipc", "call", "cheat", "toggle"]),
         "mixer": ("Audio: devices and application volumes", "audio-volume-high", ["pavucontrol"]),
-        "wallpaper": ("Appearance: themes and wallpapers", "preferences-desktop-wallpaper", ["quickshell", "-p", str(Path.home() / ".config/quickshell/station.qml"), "ipc", "call", "desktop", "toggle", "appearance"]),
-        "nightlight": ("Night light: toggle", "weather-clear-night", [str(local / "theme-schedule"), "--nightlight", "toggle"]),
-        "awake": ("Keep awake: toggle", "video-display", [str(scripts / "keep-awake.sh")]),
-        "tv": ("TV: toggle", "video-display", [str(scripts / "tv-toggle.sh")]),
+        "wallpaper": ("Appearance: themes and wallpapers", "preferences-desktop-wallpaper", ["oninix-shell", "ipc", "call", "desktop", "toggle", "appearance"]),
+        "nightlight": ("Night light: toggle", "weather-clear-night", ["oninix-theme-schedule", "--nightlight", "toggle"]),
         "network": ("Network connections", "network-wired", ["kitty", "-e", "nmtui"]),
     }
     if shutil.which("makoctl"):
@@ -201,7 +197,13 @@ def main() -> None:
         run_mode(sys.argv[1])
         return
     script = str(Path(__file__).absolute())
-    icon_state = Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local/state"))) / "theme/icon-theme"
+    share = Path(__file__).resolve().parents[1]
+    state = Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local/state"))) / "theme"
+    icon_state = state / "icon-theme"
+    try:
+        colors = (state / "current/rofi-colors.rasi").read_text()
+    except FileNotFoundError:
+        colors = (share / "themes/omnissiah/out/rofi-colors.rasi").read_text()
     try:
         icon_theme = icon_state.read_text().strip() or "Papirus-Dark"
     except OSError:
@@ -212,7 +214,7 @@ def main() -> None:
                          "Actions:" + shlex.join([script, "actions"])]),
                "-display-drun", "Apps", "-show-icons", "-icon-theme", icon_theme,
                "-application-fallback-icon", "application-x-executable", "-matching", "fuzzy",
-               "-theme", str(Path.home() / ".config/rofi/station.rasi"),
+               "-theme", str(share / "hypr/launcher.rasi"), "-theme-str", colors,
                "-kb-accept-alt", "", "-kb-custom-1", "Alt+1,Shift+Return", "-kb-custom-2", "Alt+2",
                "-kb-row-tab", "", "-kb-element-next", "", "-kb-element-prev", "",
                "-kb-mode-next", "Tab,Control+Tab",

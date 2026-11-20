@@ -40,7 +40,7 @@ FloatingWindow {
         if (key === "guide") { openGuide(); return }
         if (opened) remember()
         section = Catalog.page(key).id
-        if (["themes", "panels", "apps", "login"].includes(section)) {
+        if (["themes", "panels", "apps"].includes(section)) {
             page = "appearance"; appearanceSection = section
         } else if (["calendars", "modes"].includes(section)) page = section
         else { page = "controls"; DesktopData.controlTab = section }

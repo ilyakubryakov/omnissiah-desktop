@@ -28,6 +28,7 @@ Singleton {
     FileView {
         id: file
         path: Quickshell.env("ONINIX_LAPTOP") === "1" ? "/etc/oninix/monitors.conf" : Quickshell.env("HOME") + "/.config/oninix/monitors.conf"
+        printErrors: false
         watchChanges: true
         onFileChanged: reload()
         onLoaded: {

@@ -26,7 +26,7 @@ PanelWindow {
     visible: presented && screenTarget !== null
     anchors { top: true; bottom: true; left: true; right: true }
     WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.namespace: "vika-cheatsheet"
+    WlrLayershell.namespace: "oninix-cheatsheet"
     WlrLayershell.keyboardFocus: shown ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore
     color: "transparent"

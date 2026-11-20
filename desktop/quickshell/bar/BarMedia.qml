@@ -4,7 +4,7 @@ import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Services.Mpris
 import "../shared" as Shared
-import "../EdgeLogic.js" as Logic
+import "CalendarLogic.js" as Logic
 
 RowLayout {
     id: bar
@@ -26,8 +26,8 @@ RowLayout {
     // Only today's timed events: tomorrow's standup is not worth bar space tonight.
     readonly property var meeting: {
         if (!cal || !cal.ready || cal.stale) return null
-        const e = Logic.nextEvent(cal.events, now)
-        return e && new Date(Date.parse(e.s)).toDateString() === new Date(now).toDateString() ? e : null
+        const today = Logic.onDay(cal.events, new Date(now)).filter(event => !event.a)
+        return Logic.upcoming(today, now, 1)[0] || null
     }
     readonly property int meetingIn: meeting ? Math.ceil((Date.parse(meeting.s) - now) / 60000) : 0
 
@@ -59,7 +59,7 @@ RowLayout {
                 }
             }
             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: PanelBriefing.toggleView() }
-            BarToolTip { target: parent; shown: pagerHover.hovered; text: bar.showMedia ? "Show AI and backup · right-click" : "Show the player · right-click" }
+            BarToolTip { target: parent; shown: pagerHover.hovered; text: bar.showMedia ? "Show briefing · right-click" : "Show the player · right-click" }
             HoverHandler { id: pagerHover }
         }
 

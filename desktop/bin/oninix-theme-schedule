@@ -48,7 +48,7 @@ NIGHT_KELVIN = 4000
 NIGHT_SETTINGS = STATE_DIR / "nightlight.json"
 
 # Defaults for existing profiles. Palette names are validated against the repo.
-THEMES = Path(__file__).resolve().parents[3] / "themes"
+THEMES = Path(__file__).resolve().parents[1] / "themes"
 LIGHT = "kanagawa-lotus"
 DARK = "omnissiah"
 
@@ -210,8 +210,8 @@ def set_override(cfg, now):
 def apply(variant):
     if variant == current_variant():
         return False
-    subprocess.run([str(HOME / ".local/bin/theme"), "set", variant], check=True,
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["oninix-theme", "set", variant], check=True,
+                   stdout=subprocess.DEVNULL)
     return True
 
 

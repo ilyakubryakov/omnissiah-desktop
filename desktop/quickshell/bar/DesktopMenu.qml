@@ -96,8 +96,7 @@ Scope {
                     DropdownRow { glyph: "\u{F024B}"; label: "Files"; detail: "Win+E"; onClicked: root.run(() => root.exec(["dolphin"])) }
 
                     DropdownRow { header: true; label: "Station" }
-                    DropdownRow { glyph: "\u{F1DE}"; label: "Control Station"; detail: "Win+Ctrl+C"; onClicked: root.run(() => root.openPanel("controls")) }
-                    DropdownRow { glyph: "\u{F05F6}"; label: "Station Doctor"; onClicked: root.run(() => root.exec(["kitty", "--hold", "oninix-doctor", "--cache"])) }
+                    DropdownRow { glyph: "\u{F1DE}"; label: "Control Station"; detail: "Win+,"; onClicked: root.run(() => root.openPanel("settings")) }
                     // A short pause lets the menu vanish before the capture starts.
                     DropdownRow { glyph: "\u{F0100}"; label: "Capture"; onClicked: root.run(() => root.exec(["sh", "-c", "sleep 0.3; exec \"$0\"", root.scripts + "shot.sh"])) }
                     DropdownRow { glyph: "\u{F033E}"; label: "Lock"; detail: "Win+L"; onClicked: root.run(() => root.exec(["loginctl", "lock-session"])) }

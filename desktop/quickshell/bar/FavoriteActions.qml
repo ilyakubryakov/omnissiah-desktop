@@ -46,7 +46,7 @@ ColumnLayout {
         return !!DesktopData.controls[id]
     }
     function subtitle(id) {
-        if (id === "network") return DesktopData.activeVpns.length ? DesktopData.vpnStatus : "LAN · Wi-Fi · VPN"
+        if (id === "network") return "LAN · Wi-Fi"
         if (id === "output") return Shared.AudioState.sink?.description || "No output device"
         if (id.startsWith("vpn:") && !vpn(id)) return "Not configured on this machine"
         if (id === "bluetooth" && !Bluetooth.defaultAdapter) return "No adapter"
