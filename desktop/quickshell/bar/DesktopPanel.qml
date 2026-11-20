@@ -134,7 +134,7 @@ FloatingWindow {
                     Layout.preferredWidth: Shared.DesktopStyle.px(198); Layout.preferredHeight: Shared.DesktopStyle.px(44)
                     Image {
                         width: Shared.DesktopStyle.px(44); height: Shared.DesktopStyle.px(44)
-                        source: "file://" + Quickshell.env("HOME") + "/.config/fastfetch/mechanicus.png"
+                        source: "file://" + Quickshell.env("ONINIX_SHARE") + "/quickshell/assets/mechanicus.png"
                         readonly property int rasterSize: Math.ceil(44 * (root.screen ? root.screen.devicePixelRatio : 1))
                         sourceSize: Qt.size(rasterSize, rasterSize); fillMode: Image.PreserveAspectFit; smooth: true; mipmap: true
                         Accessible.ignored: true

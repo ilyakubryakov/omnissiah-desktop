@@ -2,23 +2,36 @@
 let
   cfg = config.oninix;
   share = pkgs.callPackage ../pkgs/share.nix { };
+  session = pkgs.writeTextFile {
+    name = "oninix-uwsm";
+    destination = "/share/wayland-sessions/oninix-uwsm.desktop";
+    text = ''
+      [Desktop Entry]
+      Name=OniNix (UWSM)
+      Comment=Hyprland with the OniNix desktop
+      Exec=${lib.getExe config.programs.uwsm.package} start -F -e -D Hyprland -- /run/current-system/sw/bin/start-hyprland -- --config ${share}/share/oninix/hypr/hyprland.lua
+      Type=Application
+      DesktopNames=Hyprland
+    '';
+    derivationArgs.passthru.providedSessions = [ "oninix-uwsm" ];
+  };
 in
 lib.mkIf cfg.enable {
   programs.hyprland = {
     enable = true;
     withUWSM = true;
   };
-  programs.uwsm.waylandCompositors.oninix = {
-    prettyName = "OniNix";
-    comment = "Hyprland with the OniNix desktop";
-    binPath = "/run/current-system/sw/bin/Hyprland";
-    extraArgs = [ "--config" "${share}/share/oninix/hypr/hyprland.lua" ];
-  };
+  services.displayManager.sessionPackages = [ session ];
   environment.pathsToLink = [ "/share/oninix" ];
   environment.sessionVariables.ONINIX_SHARE = "/run/current-system/sw/share/oninix";
   programs.hyprlock.enable = true;
-  services.hypridle.enable = true;
+  systemd.user.services.hypridle = {
+    environment.ONINIX_LAPTOP = if cfg.hardware.laptop then "1" else "0";
+    path = [ config.services.hypridle.package pkgs.python3 pkgs.util-linux "/run/current-system/sw" ];
+    serviceConfig.ExecStart = [ "" "${share}/share/oninix/hypr/scripts/idle.sh" ];
+  };
   xdg.portal.extraPortals = [ pkgs.xdg-desktop-portal-gtk ];
+  xdg.mime.defaultApplications."inode/directory" = "org.kde.dolphin.desktop";
 
   services.greetd = {
     enable = true;
@@ -46,6 +59,7 @@ lib.mkIf cfg.enable {
   ];
 
   environment.systemPackages = with pkgs; [
+    session
     share
     quickshell
     hyprpaper
@@ -61,6 +75,8 @@ lib.mkIf cfg.enable {
     playerctl
     pavucontrol
     networkmanagerapplet
+    kdePackages.dolphin
+    kdePackages.kio-extras
     kdePackages.breeze
     kdePackages.breeze-icons
     papirus-icon-theme

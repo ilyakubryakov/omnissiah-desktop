@@ -47,7 +47,7 @@ ColumnLayout {
         Layout.fillWidth: true; spacing: 12
         Image {
             Layout.preferredWidth: 40; Layout.preferredHeight: 40
-            source: "file://" + Quickshell.env("HOME") + "/.config/fastfetch/mechanicus.png"
+            source: "file://" + Quickshell.env("ONINIX_SHARE") + "/quickshell/assets/mechanicus.png"
             sourceSize: Qt.size(96, 96)
             fillMode: Image.PreserveAspectFit
             smooth: true; mipmap: true
