@@ -7,6 +7,8 @@
       system = "x86_64-linux";
       modules = [
         oninix.nixosModules.default
+        oninix.inputs.disko.nixosModules.disko
+        ./disko.nix
         ./hardware-configuration.nix
         ./settings.nix
       ];
