@@ -1,14 +1,14 @@
 Licenses and credits
 
-My desktop code in this repository uses the MIT license. See LICENSE (LICENSE).
+My desktop code in this repository uses the MIT license. See LICENSE.
 
 Several palettes and theme templates started from Omarchy (https://github.com/basecamp/omarchy) by David Heinemeier Hansson, under MIT. Its notice is in desktop/themes/OMARCHY-LICENSE.
 
-The Kanagawa Dragon and Lotus palettes are based on kanagawa.nvim (https://github.com/rebelot/kanagawa.nvim) by Tommaso Laurenzi, under MIT. Its full notice is in licenses/kanagawa.txt (licenses/kanagawa.txt).
+The Kanagawa Dragon and Lotus palettes are based on kanagawa.nvim (https://github.com/rebelot/kanagawa.nvim) by Tommaso Laurenzi, under MIT. Its full notice is in licenses/kanagawa.txt.
 
 The Tesla Day and Night palettes are inspired by the car UI. They contain my color choices, not Tesla code or artwork. This project has no connection with Tesla.
 
-OniNix is an unofficial fan project. Warhammer 40,000, Adeptus Mechanicus, Dark Angels, Black Legion and the Omnissiah are trademarks of Games Workshop Limited. This project is not made, endorsed or supported by Games Workshop. The Mechanicus mark and the wallpapers in desktop/themes/wallpapers are fan artwork used as the look of this desktop.
+OniNix is an unofficial fan project. Warhammer 40,000, Adeptus Mechanicus, Dark Angels, Black Legion and the Omnissiah are trademarks of Games Workshop Limited. This project is not made, endorsed or supported by Games Workshop. The Mechanicus mark and the wallpapers in desktop/themes/wallpapers depict this setting. The artwork is outside the code license. Its attribution and redistribution rights are pending verification before publication.
 
 I also took ideas from Sweeteh (https://github.com/Aarav2709/Sweeteh) and the Linux desktop community.
 

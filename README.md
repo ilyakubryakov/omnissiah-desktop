@@ -5,37 +5,37 @@
 
 ![Control Station](docs/screenshots/control-station.png)
 
-This is the desktop I work in every day, packed as a distribution. Two panels, Control Station, notes, a voice you can dictate with, and a machine spirit that changes the system when you ask it. Under it sits NixOS, so nothing you or the spirit do can leave the machine broken. The previous system is always one click away.
+This is the desktop I work in every day, packed as a distribution. Two panels, Control Station, notes, a voice you can dictate with, and a machine spirit that changes the system when you ask it. NixOS keeps previous system generations. If a change breaks the desktop, I can boot a retained generation from GRUB.
 
 ## Why not just Omarchy
 
-Omarchy is great. I stole ideas from it and I'm not ashamed. But it is Arch plus scripts, and that has a price: when an update or a clever script goes sideways, you fix it by hand.
+Omarchy inspired this setup. I wanted the desktop I use every day with NixOS generations, a searchable Control Station and a way to preview system changes.
 
 | | Omarchy | OniNix |
 |---|---|---|
-| Base | Arch + install scripts | NixOS, the whole system is one config |
-| Bad update | Fix it yourself | Pick the previous system in the boot menu |
-| Change the system | Edit configs or run scripts | Ask the machine spirit, see the diff, apply or undo |
-| Settings | Config files | Control Station, search included |
-| Voice | No | Hold Right Alt to dictate anywhere, Whisper picked for your hardware |
-| Looks | Many themes | Many palettes, live switching, Mechanicus everywhere |
+| Base | Arch Linux | NixOS |
+| Rollback | Btrfs snapshots in Limine | Retained NixOS generations in GRUB |
+| Settings | Omarchy menu and dotfiles | Control Station and a Nix flake |
+| Dictation | Superwhisper, with a local model option | Local Whisper with automatic model sizing |
+| System change workflow | Omarchy tools and package manager | Build an agent proposal, review the diff, then choose whether to apply |
+
+[Omarchy snapshots](https://omarchy.org/manual/system-snapshots/) · [Omarchy dictation](https://omarchy.org/news/2026/11/omarchy-4-5/)
 
 ## The machine spirit
 
 Press **Super+A**, or hold **Right Ctrl** and say it. Something like "install Blender", "turn on the gaming set" or "add the German layout".
 
-1. Claude Code or Codex (whichever you signed in to) edits a copy of your machine config. Not the real one.
-2. OniNix builds the new system from that copy. Nothing changes yet.
-3. You see what changes: the config diff and the package list.
-4. **Apply** switches to it. Don't like it? `oninix-spirit undo` and you are back.
+1. Claude Code or Codex edits a scratch copy of `settings.nix`. Sign in to an agent first. The request and configuration can be sent to its provider.
+2. OniNix builds the proposal and shows the configuration and package diffs.
+3. **Apply** asks for sudo and activates the reviewed build. `oninix-spirit undo` restores the preceding settings and system generation.
 
-NixOS makes letting an AI touch your system safe. The AI makes NixOS usable for people who don't want to learn Nix. That's the whole idea.
+I read the diff before applying. A NixOS configuration can change anything the system administrator can configure. Generation rollback restores system software and configuration. Home files and other mutable data keep their current contents.
 
 ## Voice
 
-Hold **Right Alt** in any text field, speak, let go. The text lands where your cursor is. It runs locally with Whisper, nothing leaves the machine.
+Hold **Right Alt** in a focused text field, speak, then let go to insert the transcription. Whisper processes the audio locally. The model downloads on first use or during profiling.
 
-On the first login `oninix-voice-profile` checks your hardware and benchmarks Whisper: NVIDIA, AMD and Intel GPUs through Vulkan, or the CPU. It takes the biggest model that still answers in about three seconds, from tiny to large-v3-turbo. In a virtual machine without GPU, or on a potato, voice stays off. Control Station (System, Software) tells you why and has a button to turn it on anyway. Small models are worse with languages other than English. Just so you know.
+On first login `oninix-voice-profile` checks the available compute backend, starts with a model sized for the hardware and benchmarks toward a latency target of about three seconds. In a VM without GPU acceleration or when the benchmark is too slow, dictation stays off. Open **Control Station → System → Software → Voice and machine spirit** for the reason and a manual override.
 
 ## What is inside
 
@@ -46,7 +46,7 @@ On the first login `oninix-voice-profile` checks your hardware and benchmarks Wh
 - Notifications with history, do not disturb and rules for noisy apps.
 - Calendars: Google, Microsoft 365, iCalendar feeds.
 - Palettes with day and night switching, wallpapers, lock screen, all in the same colors.
-- Game mode: closes the heavy apps, gives the game the machine, puts everything back after.
+- Game mode with the Gaming set: pause selected apps and services and restore them when you leave Game mode.
 - GRUB, boot splash and login screen in Mechanicus style. Of course.
 
 | Panels | Notebook |
@@ -58,17 +58,23 @@ On the first login `oninix-voice-profile` checks your hardware and benchmarks Wh
 |---|---|
 | ![GRUB](docs/screenshots/grub.png) | ![Login](docs/screenshots/greeter.png) |
 
-The screenshots use a demo user and demo data.
+| Installer disk selection | Optional sets | Encrypted install summary |
+|---|---|---|
+| ![Disk selection](docs/screenshots/installer-disk.png) | ![Optional sets](docs/screenshots/installer-sets.png) | ![Install summary](docs/screenshots/installer-summary.png) |
+
+The screenshots use a demo account. [Desktop layer on Arch](docs/screenshots/arch-layer.png) · [Encrypted boot](docs/screenshots/luks-unlock.png) · [Boot splash](docs/screenshots/plymouth.png) · [Machine spirit setup](docs/screenshots/spirit-no-agent.png) · [Voice status in a VM](docs/screenshots/voice-disabled.png).
 
 ## Install
 
-Build the ISO:
+Build from a checkout on x86-64 Linux with Nix. Access to this repository is required.
 
 ```sh
-nix build github:ilyakubryakov/omnissiah-desktop/oninix#iso
+git clone --branch oninix git@github.com:ilyakubryakov/omnissiah-desktop.git
+cd omnissiah-desktop
+nix --extra-experimental-features 'nix-command flakes' build .#iso
 ```
 
-Write `result/iso/*.iso` to a USB stick (`dd`, Ventoy, whatever you like) and boot it in UEFI mode. You land in a live OniNix desktop. Look around, then press **Install OniNix**.
+Write the ISO in `result/iso/` as a disk image to a USB stick. Boot in UEFI mode with Secure Boot disabled. The live desktop has an **Install OniNix** button. Have an internet connection and an available target disk of at least 32 GB.
 
 The installer asks for the disk, encryption, your name, login, password, computer name, time zone and keyboard layouts. Graphics and laptop are detected. Then you tick what you want:
 
@@ -77,7 +83,7 @@ The installer asks for the disk, encryption, your name, login, password, compute
 - **Music:** low-latency audio and a DAW
 - **AI:** Claude Code and Codex (the machine spirit needs one of them) and local models through Ollama
 
-It erases the disk you picked. It asks twice. Read the summary.
+Read the summary and confirm the erase. Installation replaces the contents of the selected disk.
 
 Your machine config lives in `/etc/nixos`: `settings.nix` is yours (and the spirit's), the rest is generated.
 
@@ -91,17 +97,17 @@ I made this desktop available as a Nix layer on x86-64. From a clone of the `oni
 
 I tested Ubuntu 26.10, Fedora 45 and current Arch. On Fedora, run `./oninix-install --fedora-copr` to enable the community `sdegler/hyprland` COPR for the Hyprland stack. Arch runs a normal full pacman upgrade. Pick **OniNix** at the login screen.
 
-You can pipe a downloaded installer into `bash -s -- --source FLAKE`. With no `--source`, the script uses this GitHub branch over SSH.
+On first install you can pipe a downloaded installer into `bash -s -- --source FLAKE`. With no `--source`, the script uses this GitHub branch over SSH. Reinstalling keeps the source in your saved layer flake.
 
-I use the distro's Hyprland, lock screen, login, audio and graphics drivers. The same OniNix panels and tools come from Nix. The panels render in software and Whisper uses the CPU. Apps I add that need OpenGL or Vulkan may need a driver wrapper.
+I use the distro's Hyprland, lock screen, login, audio and graphics drivers. The same OniNix panels and tools come from Nix. The panels use Qt software rendering and the layer currently profiles Whisper on the CPU. Apps I add that need OpenGL or Vulkan may need a driver wrapper.
 
-**Super+A** still opens the machine spirit. It can change the packages in `~/.config/oninix/layer/flake.nix`. Sign in to Claude Code or Codex first. Review the build and apply it, or run `oninix-spirit undo` to roll back the profile. Sign out and back in to reload it. Full system rollback requires OniNix on NixOS. For a local clone, pull the branch before checking for a layer update.
+**Super+A** still opens the machine spirit. It can change the list of nixpkgs package names in `~/.config/oninix/layer/flake.nix`. Sign in to Claude Code or Codex first. Review the build and apply it, or run `oninix-spirit undo` to roll back the profile. Sign out and back in to reload it. Full system rollback requires OniNix on NixOS. For a local clone, pull the branch before checking for a layer update.
 
 To remove the layer, sign out and run `./oninix-install uninstall` from the clone. Your settings, Nix and distro packages stay.
 
 ## Updates and going back
 
-The panel checks for an OniNix update once a day and tells you when it is time. **Update** opens a terminal, pulls the new OniNix and rebuilds. Every update and every spirit change is a new system generation. If something is off, reboot and pick the previous one in GRUB.
+The panel checks the OniNix input about once a day. **Update** opens a terminal to update that input and rebuild. While the upstream is private, Nix needs authenticated access to it, including for the sudo update command. If a rebuild changes the system, the previous generation remains in GRUB until you remove it.
 
 ## Keys worth knowing
 
@@ -136,7 +142,8 @@ The panel checks for an OniNix update once a day and tells you when it is time. 
 |---|---|
 | `flake.nix` | The NixOS module, the ISO and the demo VM |
 | `nix/modules/` | System side: desktop, boot, voice, updates, the spirit |
-| `nix/installer/` | The installer |
+| `nix/installer/` | The disk installer |
+| `nix/layer/`, `oninix-install` | The desktop layer and its distro installer |
 | `nix/template/` | The machine flake the installer writes |
 | `desktop/hypr/` | Hyprland, in Lua |
 | `desktop/quickshell/` | Panels, Control Station, Notebook |
@@ -144,7 +151,7 @@ The panel checks for an OniNix update once a day and tells you when it is time. 
 | `desktop/themes/` | Palettes and templates, rendered at build time |
 | `docs/` | Screenshots and the one-page site |
 
-`nix flake check` builds the demo system. `nix build .#nixosConfigurations.demo.config.system.build.vm` gives you a VM to poke at.
+`nix flake check` builds the demo system and runs the repository checks. `nix build .#nixosConfigurations.demo.config.system.build.vm` gives you a VM to poke at.
 
 ## Licenses
 
