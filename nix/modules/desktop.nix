@@ -2,6 +2,8 @@
 let
   cfg = config.oninix;
   share = pkgs.callPackage ../pkgs/share.nix { };
+  autoLogin = config.services.displayManager.autoLogin;
+  sessionCommand = "${lib.getExe config.programs.uwsm.package} start -F -e -D Hyprland -- /run/current-system/sw/bin/start-hyprland -- --config ${share}/share/oninix/hypr/hyprland.lua";
   session = pkgs.writeTextFile {
     name = "oninix-uwsm";
     destination = "/share/wayland-sessions/oninix-uwsm.desktop";
@@ -9,7 +11,7 @@ let
       [Desktop Entry]
       Name=OniNix (UWSM)
       Comment=Hyprland with the OniNix desktop
-      Exec=${lib.getExe config.programs.uwsm.package} start -F -e -D Hyprland -- /run/current-system/sw/bin/start-hyprland -- --config ${share}/share/oninix/hypr/hyprland.lua
+      Exec=${sessionCommand}
       Type=Application
       DesktopNames=Hyprland
     '';
@@ -64,6 +66,10 @@ lib.mkIf cfg.enable {
       widget.clock = { format = "%H:%M · %A, %e %B"; resolution = "1s"; };
     };
   };
+  services.greetd.settings.initial_session = lib.mkIf autoLogin.enable {
+    command = sessionCommand;
+    user = autoLogin.user;
+  };
   services.greetd.settings.default_session.command = lib.concatStringsSep " " [
     "${lib.getExe' pkgs.coreutils "env"} XDG_DATA_DIRS=${greeterDataDirs}"
     "GSK_RENDERER=cairo LIBSEAT_BACKEND=logind XKB_DEFAULT_OPTIONS=grp:caps_toggle"
@@ -71,7 +77,7 @@ lib.mkIf cfg.enable {
     "${lib.escapeShellArgs greeter.cageArgs} -- ${lib.getExe greeter.package}"
   ];
   systemd.services.greetd.serviceConfig = {
-    Restart = lib.mkForce "always";
+    Restart = lib.mkForce (if autoLogin.enable then "no" else "always");
     RestartSec = "1s";
   };
 

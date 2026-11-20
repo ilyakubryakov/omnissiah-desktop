@@ -19,6 +19,7 @@ Scope {
     function run(action) { close(); action() }
     function exec(command) { Quickshell.execDetached(command) }
     readonly property string scripts: Quickshell.env("ONINIX_SHARE") + "/hypr/scripts/"
+    readonly property var installer: AppIcons.apps["oninix-installer"]
 
     Variants {
         model: root.screens
@@ -36,6 +37,14 @@ Scope {
                 anchors.fill: parent
                 acceptedButtons: Qt.RightButton
                 onPressed: m => { root.at = Qt.point(m.x, m.y); root.menuScreen = surface.modelData }
+            }
+            UiButton {
+                visible: !!root.installer
+                x: Shared.DesktopStyle.px(24)
+                y: Shared.DesktopStyle.px(60)
+                glyph: "\u{F0193}"
+                text: root.installer ? root.installer.name : ""
+                onClicked: PinnedApps.start(root.installer.id)
             }
         }
     }

@@ -32,6 +32,19 @@
         ];
       };
 
+      nixosConfigurations.iso = lib.nixosSystem {
+        inherit system;
+        specialArgs = {
+          inherit disko;
+          oninixSource = self.outPath;
+        };
+        modules = [
+          self.nixosModules.default
+          ./nix/hosts/iso.nix
+        ];
+      };
+
+      packages.${system}.iso = self.nixosConfigurations.iso.config.system.build.isoImage;
       checks.${system}.demo = self.nixosConfigurations.demo.config.system.build.toplevel;
     };
 }
