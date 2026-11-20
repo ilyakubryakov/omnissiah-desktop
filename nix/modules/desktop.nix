@@ -3,6 +3,7 @@ let
   cfg = config.oninix;
   share = pkgs.callPackage ../pkgs/share.nix { };
   autoLogin = config.services.displayManager.autoLogin;
+  keyboardLayout = config.services.xserver.xkb.layout;
   sessionCommand = "${lib.getExe config.programs.uwsm.package} start -F -e -D Hyprland -- /run/current-system/sw/bin/start-hyprland -- --config ${share}/share/oninix/hypr/hyprland.lua";
   session = pkgs.writeTextFile {
     name = "oninix-uwsm";
@@ -38,9 +39,11 @@ lib.mkIf cfg.enable {
     withUWSM = true;
   };
   services.displayManager.sessionPackages = [ session ];
+  services.xserver.xkb.layout = lib.mkDefault "us,ru";
   environment.pathsToLink = [ "/share/oninix" ];
   environment.sessionVariables = {
     ONINIX_SHARE = "/run/current-system/sw/share/oninix";
+    ONINIX_XKB_LAYOUT = keyboardLayout;
     ONINIX_LAPTOP = if cfg.hardware.laptop then "1" else "0";
   };
   programs.hyprlock.enable = true;
@@ -73,6 +76,7 @@ lib.mkIf cfg.enable {
   services.greetd.settings.default_session.command = lib.concatStringsSep " " [
     "${lib.getExe' pkgs.coreutils "env"} XDG_DATA_DIRS=${greeterDataDirs}"
     "GSK_RENDERER=cairo LIBSEAT_BACKEND=logind XKB_DEFAULT_OPTIONS=grp:caps_toggle"
+    "XKB_DEFAULT_LAYOUT=${lib.escapeShellArg keyboardLayout}"
     "${lib.getExe' pkgs.dbus "dbus-run-session"} ${lib.getExe cage}"
     "${lib.escapeShellArgs greeter.cageArgs} -- ${lib.getExe greeter.package}"
   ];

@@ -80,13 +80,14 @@ hl.config({
 
 -- Control Center's Devices tab writes these; the defaults are the tuned laptop values.
 local prefs = require("prefs")
-local input = { layouts = "us,ru", repeat_rate = "25", repeat_delay = "600", mouse_speed = "0",
+local default_layouts = os.getenv("ONINIX_XKB_LAYOUT") or "us,ru"
+local input = { layouts = default_layouts, repeat_rate = "25", repeat_delay = "600", mouse_speed = "0",
     mouse_natural = "no", scroll = "0.7", natural = "yes", tap = "yes" }
 for _, kv in ipairs(prefs.lines("input")) do
     if input[kv[1]] then input[kv[1]] = kv[2] end
 end
 hl.config({ input = {
-    kb_layout = input.layouts:match("^[a-z]+[a-z,]*$") and input.layouts or "us,ru",
+    kb_layout = input.layouts:match("^[a-z]+[a-z,]*$") and input.layouts or default_layouts,
     repeat_rate = prefs.number(input.repeat_rate, 10, 80, 25),
     repeat_delay = prefs.number(input.repeat_delay, 150, 1000, 600),
     sensitivity = prefs.number(input.mouse_speed, -1, 1, 0),
