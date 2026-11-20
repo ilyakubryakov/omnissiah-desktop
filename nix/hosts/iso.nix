@@ -29,7 +29,7 @@ in
   services.displayManager.autoLogin.user = "nixos";
   services.udisks2.enable = true;
 
-  environment.systemPackages = [ installerEntry pkgs.firefox ]
+  environment.systemPackages = [ installerEntry ]
     ++ lib.optional (builtins.pathExists ../installer/default.nix) installer;
 
   image.baseName = lib.mkForce "oninix-${config.system.nixos.label}-${pkgs.stdenv.hostPlatform.system}";
@@ -44,8 +44,13 @@ in
 
   # The installer uses flakes, so the legacy channel and HTML manuals are redundant.
   system.installer.channel.enable = false;
-  documentation.doc.enable = false;
+  documentation.enable = lib.mkForce false;
   documentation.nixos.enable = lib.mkForce false;
+  nixpkgs.overlays = [ (_final: prev: {
+    speechd = prev.speechd.override {
+      espeak = prev.espeak.override { mbrolaSupport = false; };
+    };
+  }) ];
   nix.settings.auto-optimise-store = lib.mkForce false;
   services.fwupd.enable = lib.mkForce false;
   services.fstrim.enable = lib.mkForce false;
