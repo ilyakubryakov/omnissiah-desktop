@@ -4,6 +4,18 @@ set -euo pipefail
 log() { printf 'OniNix: %s\n' "$*"; }
 die() { log "$*" >&2; exit 1; }
 
+file_url() {
+    local LC_ALL=C path=$1 encoded= char i
+    for ((i=0; i<${#path}; i++)); do
+        char=${path:i:1}
+        case "$char" in
+            [a-zA-Z0-9._~/-]) encoded+=$char ;;
+            *) printf -v char '%%%02X' "'$char"; encoded+=$char ;;
+        esac
+    done
+    printf 'git+file://%s' "$encoded"
+}
+
 action=install
 source_ref=
 allow_copr=0
@@ -150,7 +162,11 @@ if [[ ! -e $flake/flake.nix ]]; then
     if [[ -z $source_ref ]]; then
         repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
         if [[ -f $repo/nix/layer/package.nix ]]; then
-            source_ref="path:$repo"
+            if [[ -e $repo/.git ]]; then
+                source_ref=$(file_url "$repo")
+            else
+                source_ref="path:$repo"
+            fi
         else
             source_ref='git+ssh://git@github.com/ilyakubryakov/omnissiah-desktop.git?ref=oninix'
         fi

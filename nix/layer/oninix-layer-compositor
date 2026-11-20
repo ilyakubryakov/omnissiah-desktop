@@ -1,13 +1,15 @@
 #!/bin/sh
 set -eu
 . "${XDG_STATE_HOME:-$HOME/.local/state}/oninix/layer/profile/share/oninix-layer/environment"
+export ONINIX_LAYER_DIRECT="${ONINIX_LAYER_DIRECT:-0}"
 export XDG_CURRENT_DESKTOP=Hyprland XDG_SESSION_DESKTOP=Hyprland XDG_SESSION_TYPE=wayland
 export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}"
 cleanup() {
     systemctl --user stop oninix-layer.target || :
+    systemctl --user unset-environment ONINIX_LAYER_DIRECT || :
     if [ "${ONINIX_LAYER_DIRECT:-0}" = 1 ]; then
         systemctl --user stop xdg-desktop-portal.service xdg-desktop-portal-hyprland.service || :
-        systemctl --user unset-environment WAYLAND_DISPLAY DISPLAY HYPRLAND_INSTANCE_SIGNATURE XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP XDG_SESSION_TYPE ONINIX_LAYER_DIRECT || :
+        systemctl --user unset-environment WAYLAND_DISPLAY DISPLAY HYPRLAND_INSTANCE_SIGNATURE XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP XDG_SESSION_TYPE || :
     fi
 }
 trap cleanup EXIT
