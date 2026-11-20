@@ -5,37 +5,41 @@
 
 ![Control Station](docs/screenshots/control-station.png)
 
-This is the desktop I work in every day, packed as a distribution. Two panels, Control Station, notes, a voice you can dictate with, and a machine spirit that changes the system when you ask it. NixOS keeps previous system generations. If a change breaks the desktop, I can boot a retained generation from GRUB.
+This is the desktop I work in every day, packed as a distribution. Two panels, Control Station, notes, a voice you can dictate with, and a machine spirit that changes the system when you ask it. Under it sits NixOS: every change is a new generation, and if something goes sideways I boot the previous one from GRUB. No heroics.
 
 ## Why not just Omarchy
 
-Omarchy inspired this setup. I wanted the desktop I use every day with NixOS generations, a searchable Control Station and a way to preview system changes.
+Omarchy is great. It inspired a lot of this and I'm not ashamed. It even has Btrfs snapshots and dictation now. So here is what I wanted that it doesn't do:
 
 | | Omarchy | OniNix |
 |---|---|---|
-| Base | Arch Linux | NixOS |
-| Rollback | Btrfs snapshots in Limine | Retained NixOS generations in GRUB |
-| Settings | Omarchy menu and dotfiles | Control Station and a Nix flake |
-| Dictation | Superwhisper, with a local model option | Local Whisper with automatic model sizing |
-| System change workflow | Omarchy tools and package manager | Build an agent proposal, review the diff, then choose whether to apply |
+| Base | Arch Linux | NixOS: the whole system is one config you can read |
+| Going back | Btrfs snapshots in Limine | Every system generation in GRUB, packages and config together |
+| Changing the system | Menus, scripts, the package manager | Ask the machine spirit, read the diff, apply or don't |
+| Settings | Omarchy menu and dotfiles | Control Station, with search |
+| Dictation | Superwhisper, local model optional | Local Whisper, sized to your hardware by a benchmark |
+| Look | Lots of themes | Live palettes and Mechanicus from GRUB to the lock screen |
 
 [Omarchy snapshots](https://omarchy.org/manual/system-snapshots/) · [Omarchy dictation](https://omarchy.org/news/2026/11/omarchy-4-5/)
 
 ## The machine spirit
 
-Press **Super+A**, or hold **Right Ctrl** and say it. Something like "install Blender", "turn on the gaming set" or "add the German layout".
+Press **Super+A**, or hold **Right Ctrl** and say it. "Install Blender." "Turn on the gaming set." "Add the German layout."
 
-1. Claude Code or Codex edits a scratch copy of `settings.nix`. Sign in to an agent first. The request and configuration can be sent to its provider.
-2. OniNix builds the proposal and shows the configuration and package diffs.
-3. **Apply** asks for sudo and activates the reviewed build. `oninix-spirit undo` restores the preceding settings and system generation.
+1. Claude Code or Codex (sign in to one first) edits a scratch copy of `settings.nix` in a sandbox. It can't touch anything else. Your request and that file go to the agent's provider, so don't ask it to configure your secrets.
+2. OniNix builds the proposal. If it doesn't build, nothing happens.
+3. You get the config diff and the package diff.
+4. **Apply** asks for sudo and switches to exactly the build you looked at. `oninix-spirit undo` brings back the previous settings and system generation.
 
-I read the diff before applying. A NixOS configuration can change anything the system administrator can configure. Generation rollback restores system software and configuration. Home files and other mutable data keep their current contents.
+I read the diff before I apply. You should too: a NixOS config can change anything an admin can. Rollback covers system software and config, not the files in your home.
+
+NixOS makes letting an AI touch your system safe enough. The AI makes NixOS usable for people who never want to learn Nix. That's the whole idea.
 
 ## Voice
 
-Hold **Right Alt** in a focused text field, speak, then let go to insert the transcription. Whisper processes the audio locally. The model downloads on first use or during profiling.
+Hold **Right Alt** in a text field, speak, let go. The text lands where your cursor is. Whisper runs on your machine, the audio doesn't go anywhere.
 
-On first login `oninix-voice-profile` checks the available compute backend, starts with a model sized for the hardware and benchmarks toward a latency target of about three seconds. In a VM without GPU acceleration or when the benchmark is too slow, dictation stays off. Open **Control Station → System → Software → Voice and machine spirit** for the reason and a manual override.
+On first login `oninix-voice-profile` looks at what you have (NVIDIA, AMD or Intel through Vulkan, or just the CPU), downloads a model sized for it and benchmarks it. It keeps the biggest model that answers in about three seconds, from tiny to large-v3-turbo. In a VM without GPU, or on a potato, dictation stays off and **Control Station → System → Software → Voice and machine spirit** tells you why and lets you turn it on anyway. Small models are worse with languages other than English. Just so you know.
 
 ## What is inside
 
@@ -47,7 +51,7 @@ On first login `oninix-voice-profile` checks the available compute backend, star
 - Calendars: Google, Microsoft 365, iCalendar feeds.
 - Palettes with day and night switching, wallpapers, lock screen, all in the same colors.
 - Game mode with the Gaming set: pause selected apps and services and restore them when you leave Game mode.
-- GRUB, boot splash and login screen in Mechanicus style. Of course.
+- GRUB, boot splash, login screen and fastfetch in Mechanicus style. Of course.
 
 | Panels | Notebook |
 |---|---|
@@ -83,7 +87,7 @@ The installer asks for the disk, encryption, your name, login, password, compute
 - **Music:** low-latency audio and a DAW
 - **AI:** Claude Code and Codex (the machine spirit needs one of them) and local models through Ollama
 
-Read the summary and confirm the erase. Installation replaces the contents of the selected disk.
+It erases the disk you picked, and it asks before it does. Read the summary.
 
 Your machine config lives in `/etc/nixos`: `settings.nix` is yours (and the spirit's), the rest is generated.
 
