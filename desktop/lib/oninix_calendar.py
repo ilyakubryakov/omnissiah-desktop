@@ -144,8 +144,18 @@ def safe_error(exc):
         return {"code": "network", "message": "Cannot reach the calendar service. Saved events are still available."}
     return {"code": "failed", "message": "Calendar operation failed (" + name + "). Existing settings were kept."}
 
+BUILTIN = Path(__file__).resolve().with_name("oauth-clients.json")
+
+def builtin(provider):
+    return read_json(BUILTIN, {}).get(provider, {})
+
 def google_client(path=None):
-    value = read_json(Path(path).expanduser() if path else CONFIG / "client.json", {})
+    if path:
+        value = read_json(Path(path).expanduser(), {})
+    elif (CONFIG / "client.json").is_file():
+        value = read_json(CONFIG / "client.json", {})
+    else:
+        value = {"installed": builtin("google")}
     app = value.get("installed", {})
     if not app.get("client_id", "").endswith(".apps.googleusercontent.com") or not app.get("client_secret"):
         raise CalendarError("setup", "Choose a Google OAuth Desktop app JSON file in App setup.")
@@ -155,7 +165,12 @@ def google_client(path=None):
                           "redirect_uris": ["http://localhost"]}}
 
 def microsoft_client(value=None):
-    app = value if value is not None else read_json(CONFIG / "microsoft.json", {})
+    if value is not None:
+        app = value
+    elif (CONFIG / "microsoft.json").is_file():
+        app = read_json(CONFIG / "microsoft.json", {})
+    else:
+        app = builtin("microsoft")
     client = app.get("client_id", "").strip()
     tenant = app.get("tenant", "organizations").strip() or "organizations"
     if not re.fullmatch(r"[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}", client):
