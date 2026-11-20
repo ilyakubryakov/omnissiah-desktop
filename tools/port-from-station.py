@@ -28,6 +28,13 @@ RULES = [
     (re.compile(r'"?\$HOME/\.local/bin/station-([a-z-]+)"?'), r'oninix-\1'),
     (re.compile(r'"?\$HOME/\.local/bin/theme"?'), 'oninix-theme'),
     (re.compile(r'\$HOME/\.config/hypr/'), '${ONINIX_SHARE:-/run/current-system/sw/share/oninix}/hypr/'),
+    # QML: Quickshell.env("HOME") + "/.local/bin/X" -> command on PATH, and shared files.
+    (re.compile(r'Quickshell\.env\((["\'])HOME\1\) \+ (["\'])/\.local/bin/(?:station-|oninix-)'), r'\2oninix-'),
+    (re.compile(r'Quickshell\.env\((["\'])HOME\1\) \+ (["\'])/\.local/bin/theme'), r'\2oninix-theme'),
+    (re.compile(r'Quickshell\.env\((["\'])HOME\1\) \+ (["\'])/\.local/bin/cheatsheet-helper'), r'\2oninix-cheatsheet-helper'),
+    (re.compile(r'Quickshell\.env\((["\'])HOME\1\) \+ (["\'])/\.config/hypr/monitors\.conf'), r'Quickshell.env(\1HOME\1) + \2/.config/oninix/monitors.conf'),
+    (re.compile(r'Quickshell\.env\((["\'])HOME\1\) \+ (["\'])/\.config/(hypr|quickshell)/'), r'Quickshell.env(\1ONINIX_SHARE\1) + \2/\3/'),
+    (re.compile(r'/Nextcloud/Img/Screenshots'), '/Pictures/Screenshots'),
     # Bare command names and identifiers.
     (re.compile(r'\bstation-(desktop|display|launcher|maintenance|doctor|audio|theme|profile|phone-clip|status|panel)\b'), r'oninix-\1'),
     (re.compile(r'\bSTATION_LAPTOP\b'), 'ONINIX_LAPTOP'),
