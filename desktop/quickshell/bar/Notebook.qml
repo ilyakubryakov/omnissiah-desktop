@@ -166,6 +166,12 @@ PanelWindow {
                                 checked: modelData.done
                                 enabled: !NotebookData.conflict && !NotebookData.loading
                                 text: modelData.text
+                                palette.base: Colors.lightBackground
+                                palette.light: Colors.selection
+                                palette.mid: Colors.selection
+                                palette.text: Colors.accent
+                                palette.highlight: Colors.accent
+                                palette.windowText: checked ? Colors.muted : Colors.foreground
                                 font.family: Colors.textFont; font.pixelSize: Shared.DesktopStyle.px(13)
                                 font.strikeout: modelData.done
                                 onClicked: NotebookData.toggleTask(modelData.line)
