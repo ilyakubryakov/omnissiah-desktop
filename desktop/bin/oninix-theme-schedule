@@ -15,7 +15,7 @@ CONFIG = Path(os.environ.get("XDG_CONFIG_HOME", HOME / ".config")) / "theme-sche
 STATE_DIR = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local/state")) / "theme"
 CURRENT = STATE_DIR / "name"
 OVERRIDE = STATE_DIR / "override"
-NIGHTLIGHT = STATE_DIR / "nightlight"     # exists = on
+NIGHTLIGHT = STATE_DIR / "nightlight"
 NIGHT_KELVIN = 4000
 NIGHT_SETTINGS = STATE_DIR / "nightlight.json"
 
@@ -83,7 +83,7 @@ def sun_times(day, lat, lon):
         math.cos(phi) * math.cos(decl)
     )
     if cos_w > 1 or cos_w < -1:
-        return None, None  # polar night or midnight sun
+        return None, None
     w = math.degrees(math.acos(cos_w))
 
     j_set = j_transit + w / 360.0
@@ -235,7 +235,7 @@ def main():
             sys.exit("usage: theme-schedule --set manual|fixed|sun")
         cfg["mode"] = args[1]
         save(cfg)
-        OVERRIDE.unlink(missing_ok=True)   # a mode change ends any hold
+        OVERRIDE.unlink(missing_ok=True)
         want = scheduled_variant(cfg, now)
         if want:
             apply(want)

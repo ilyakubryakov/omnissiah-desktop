@@ -85,17 +85,17 @@ color() {
     printf '%s' "${_rest%%:*}"
 }
 
-hex_to_rgb() {  # Konsole wants "r,g,b"
+hex_to_rgb() {
     _h=${1#\#}
     printf '%d,%d,%d' "0x${_h:0:2}" "0x${_h:2:2}" "0x${_h:4:2}"
 }
 
-hex_to_sgr() {  # SGR truecolor wants "r;g;b" - LS_COLORS and friends
+hex_to_sgr() {
     _h=${1#\#}
     printf '%d;%d;%d' "0x${_h:0:2}" "0x${_h:2:2}" "0x${_h:4:2}"
 }
 
-hex_to_iterm() {  # iTerm2 colour dict, components as 0..1 fractions
+hex_to_iterm() {
     _h=${1#\#}
     awk -v r=$((0x${_h:0:2})) -v g=$((0x${_h:2:2})) -v b=$((0x${_h:4:2})) 'BEGIN {
         printf "{ \"Red Component\": %.6f, \"Green Component\": %.6f, \"Blue Component\": %.6f, \"Color Space\": \"sRGB\" }", r/255, g/255, b/255 }'

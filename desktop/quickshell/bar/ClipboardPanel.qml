@@ -19,7 +19,7 @@ ColumnLayout {
     function isJson(text) {
         const s = text.trim()
         if (!/^[\[{]/.test(s)) return false
-        if (text.length >= 8192) return true  // the preview is cut; the helper reads the full entry
+        if (text.length >= 8192) return true
         try { JSON.parse(s); return true } catch (_) { return false }
     }
     function isBase64(text) {

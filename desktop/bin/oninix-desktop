@@ -832,7 +832,7 @@ def notification_hide(identifier, snapshot=None):
         try:
             run(['makoctl', 'dismiss', '-n', str(identifier), '--no-history'])
         except subprocess.CalledProcessError:
-            pass  # It may have expired between the snapshot and dismissal.
+            pass
     with (runtime() / 'notifications.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         state = notification_state(data['owner'])
@@ -846,7 +846,7 @@ def notification_open(identifier):
         try:
             run(['makoctl', 'invoke', '-n', str(identifier), '--', 'default'])
         except subprocess.CalledProcessError:
-            pass  # Expired actions fall back to dismissal.
+            pass
     notification_hide(identifier)
 
 def clipboard_rows():

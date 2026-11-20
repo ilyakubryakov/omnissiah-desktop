@@ -17,7 +17,7 @@ QUIT_WAIT = 20
 NAMES = {'chrome': 'Chrome', 'telegram': 'Telegram', 'thunderbird': 'Thunderbird', 'slack': 'Slack'}
 CHROME_STATE = Path.home() / '.config/google-chrome/Local State'
 APPLICATIONS = Path.home() / '.local/share/applications'
-GAP = 6  # Hyprland gaps_in + borders between neighbouring tiles, with slack.
+GAP = 6
 
 def hypr(expression):
     reply = subprocess.run(['hyprctl', 'eval', expression], check=True, capture_output=True, timeout=10).stdout

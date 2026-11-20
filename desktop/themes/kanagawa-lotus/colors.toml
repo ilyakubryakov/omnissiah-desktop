@@ -5,16 +5,16 @@ window_background = "#f6f5f1"
 dark_background   = "#e9e8e4"
 light_background  = "#fbfbf9"
 faint_background  = "#edece8"
-selection         = "#c9cbd1"   # lotusViolet3
+selection         = "#c9cbd1"
 
-foreground        = "#545464"   # lotusInk1, the ink
-dim_foreground    = "#8a8980"   # lotusGray3
-muted             = "#716e61"   # lotusGray2
-faint_foreground  = "#a09cac"   # lotusViolet1
-bright_foreground = "#43436c"   # lotusInk2, the darkest text
+foreground        = "#545464"
+dim_foreground    = "#8a8980"
+muted             = "#716e61"
+faint_foreground  = "#a09cac"
+bright_foreground = "#43436c"
 
 cursor            = "#43436c"
-accent            = "#4d699b"   # lotusBlue4
+accent            = "#4d699b"
 
 red        = "#c84053"
 green      = "#6f894e"
