@@ -21,7 +21,7 @@ lib.mkIf cfg.enable {
   users.users.${cfg.user.name} = {
     isNormalUser = true;
     description = cfg.user.description;
-    extraGroups = [ "wheel" "networkmanager" "audio" "video" "input" ];
+    extraGroups = [ "wheel" "networkmanager" "audio" "video" ];
   };
 
   services.fstrim.enable = true;

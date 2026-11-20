@@ -130,7 +130,7 @@ buildEnv {
   paths = [ share terminal integration ] ++ (with pkgs; [
     quickshell fuzzel rofi mako swaybg wl-clipboard cliphist grim slurp
     brightnessctl playerctl pavucontrol kdePackages.dolphin papirus-icon-theme
-    libnotify glib jq gum nvd wtype pciutils whisper-cpp ffmpeg-headless btop
+    libnotify glib jq bubblewrap gum nvd wtype pciutils whisper-cpp ffmpeg-headless btop
   ]) ++ extraPackages;
   pathsToLink = [ "/bin" "/share" ];
 }

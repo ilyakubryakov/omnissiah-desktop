@@ -206,7 +206,7 @@ ColumnLayout {
             UiButton {
                 glyph: "\u{F0A8D}"
                 text: "Ask…"
-                onClicked: root.launch(["kitty", "--class", "oninix-spirit", "--title", "Machine spirit", "oninix-spirit"])
+                onClicked: root.launch(["kitty", "--hold", "--class", "oninix-spirit", "--title", "Machine spirit", "oninix-spirit"])
             }
             UiButton {
                 text: "Undo last change"

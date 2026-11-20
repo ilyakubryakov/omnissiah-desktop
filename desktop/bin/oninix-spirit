@@ -3,9 +3,11 @@ import difflib
 import fcntl
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -30,7 +32,10 @@ WORK = STATE / 'work'
 HISTORY = STATE / 'history.jsonl'
 LAYER_PROFILE = os.environ.get('ONINIX_LAYER_PROFILE')
 NIX = ['nix', '--extra-experimental-features', 'nix-command flakes']
-PREVIOUS = STATE / 'previous-settings.nix'
+SYSTEM_PROFILE = Path('/nix/var/nix/profiles/system')
+SYSTEM_UNDO = STATE / 'system-undo.json'
+LAYER_PACKAGES = re.compile(r'(?m)^(\s*extraPackages\s*=\s*with pkgs;\s*\[)([^\]]*)(\]\s*;)')
+PACKAGE_NAME = re.compile(r"[a-zA-Z_][a-zA-Z0-9_'-]*(?:\.[a-zA-Z_][a-zA-Z0-9_'-]*)*")
 EDITABLE = 'flake.nix' if LAYER_PROFILE else 'settings.nix'
 PROMPT = """You are the machine spirit of an OniNix computer (NixOS with the OniNix Hyprland desktop).
 The owner asks: {request}
@@ -57,39 +62,86 @@ def say(text, color=GLOW):
 
 def agent():
     wanted = json.loads(CONFIG.read_text()).get('agent') if CONFIG.exists() else None
-    for name in ([wanted] if wanted else []) + ['claude', 'codex']:
-        if name and shutil.which(name):
+    for name in (wanted, 'claude', 'codex'):
+        if name in ('claude', 'codex') and shutil.which(name):
             return name
     return None
 
-def run_agent(name, request):
+def run_agent(name, request, before):
     prompt = (LAYER_PROMPT if LAYER_PROFILE else PROMPT).format(request=request)
-    if name == 'claude':
-        command = ['claude', '-p', prompt, '--permission-mode', 'acceptEdits', '--allowedTools', 'Read,Edit,Write']
-    else:
-        command = ['codex', 'exec', '-s', 'workspace-write', '--skip-git-repo-check', '-C', str(WORK), prompt]
-    result = subprocess.run(command, cwd=WORK, capture_output=True, text=True, timeout=900)
-    if result.returncode != 0:
-        raise RuntimeError((result.stderr or result.stdout).strip()[-600:] or name + ' failed')
-    lines = [line for line in result.stdout.strip().splitlines() if line.strip()]
-    return lines[-1] if lines else 'Done.'
+    executable = str(Path(shutil.which(name)).resolve())
+    home = Path.home()
+    with tempfile.TemporaryDirectory(prefix='agent-', dir=STATE) as temp:
+        root = Path(temp)
+        agent_home = root / 'home'
+        job = root / 'job'
+        job.mkdir()
+        agent_home.mkdir()
+        (job / EDITABLE).write_text(before)
+        auth = (Path(os.environ.get('CLAUDE_CONFIG_DIR', home / '.claude')) / '.credentials.json'
+                if name == 'claude' else Path(os.environ.get('CODEX_HOME', home / '.codex')) / 'auth.json')
+        auth_copy = agent_home / f'.{name}' / auth.name
+        if auth.is_file():
+            auth_copy.parent.mkdir()
+            shutil.copyfile(auth, auth_copy)
+            auth_copy.chmod(0o600)
+        if name == 'claude':
+            command = ['-p', prompt, '--permission-mode', 'acceptEdits', '--tools', 'Read,Edit,Write',
+                       '--strict-mcp-config', '--setting-sources', '']
+        else:
+            command = ['exec', '-s', 'workspace-write', '--skip-git-repo-check', '-C', '/tmp/proposal', prompt]
+        sandbox = [
+            'bwrap', '--new-session', '--die-with-parent', '--unshare-pid', '--unshare-ipc', '--clearenv',
+            '--ro-bind', '/', '/', '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp',
+            '--bind', str(agent_home), '/tmp/agent-home', '--bind', str(job), '/tmp/proposal', '--chdir', '/tmp/proposal',
+            '--setenv', 'HOME', '/tmp/agent-home', '--setenv', 'CODEX_HOME', '/tmp/agent-home/.codex',
+            '--setenv', 'CLAUDE_CONFIG_DIR', '/tmp/agent-home/.claude',
+            '--setenv', 'XDG_CONFIG_HOME', '/tmp/agent-home/.config', '--setenv', 'XDG_CACHE_HOME', '/tmp/agent-home/.cache',
+            '--setenv', 'XDG_DATA_HOME', '/tmp/agent-home/.local/share', '--setenv', 'XDG_STATE_HOME', '/tmp/agent-home/.local/state',
+            '--setenv', 'PATH', os.environ.get('PATH', os.defpath),
+        ]
+        for key in ('LANG', 'LC_ALL', 'SSL_CERT_FILE', 'SSL_CERT_DIR', 'NIX_SSL_CERT_FILE',
+                    'HTTPS_PROXY', 'HTTP_PROXY', 'NO_PROXY', 'https_proxy', 'http_proxy', 'no_proxy',
+                    'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'OPENAI_API_KEY'):
+            if key in os.environ:
+                sandbox += ['--setenv', key, os.environ[key]]
+        for directory in ('/run/user', '/run/dbus', '/run/wrappers', '/nix/var/nix/daemon-socket'):
+            if Path(directory).is_dir():
+                sandbox += ['--tmpfs', directory]
+        if home.is_relative_to('/home'):
+            sandbox += ['--tmpfs', str(home)]
+            if Path(executable).is_relative_to(home):
+                sandbox += ['--ro-bind', executable, '/tmp/agent-bin']
+                executable = '/tmp/agent-bin'
+        result = subprocess.run([*sandbox, '--', executable, *command], cwd=job,
+                                capture_output=True, text=True, timeout=900)
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout).strip()
+            raise RuntimeError(detail[-600:] or f'{name} failed')
+        proposal = job / EDITABLE
+        if proposal.is_symlink() or not proposal.is_file():
+            raise RuntimeError(f'The agent must return a regular {EDITABLE} file.')
+        lines = [line for line in result.stdout.strip().splitlines() if line.strip()]
+        return proposal.read_text(), lines[-1] if lines else 'Done.'
 
 def prepare():
     if WORK.exists():
         shutil.rmtree(WORK)
-    WORK.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(FLAKE, WORK, ignore=shutil.ignore_patterns('.git', 'result'))
-    for path in WORK.rglob('*'):
-        path.chmod(0o644 if path.is_file() else 0o755)
+
+def layer_shape(text):
+    match = LAYER_PACKAGES.search(text)
+    if not match or any(not PACKAGE_NAME.fullmatch(name) for name in match[2].split()):
+        raise RuntimeError('Use package names from nixpkgs in the extraPackages list.')
+    return text[:match.start(2)], text[match.end(2):]
 
 def build():
     out = STATE / 'result'
     out.unlink(missing_ok=True)
     target = 'layer' if LAYER_PROFILE else 'nixosConfigurations.oninix.config.system.build.toplevel'
     say('Building the proposed configuration…', MUTED)
-    lock_flags = ['--no-update-lock-file'] if LAYER_PROFILE else []
-    subprocess.run([*NIX, 'build', *lock_flags, '--out-link', str(out), f'path:{WORK}#{target}'], check=True)
-    return out
+    subprocess.run([*NIX, 'build', '--no-update-lock-file', '--out-link', str(out), f'path:{WORK}#{target}'], check=True)
+    return out.resolve(strict=True)
 
 def record(entry):
     HISTORY.parent.mkdir(parents=True, exist_ok=True)
@@ -116,11 +168,14 @@ def ask(args):
     before = (WORK / EDITABLE).read_text()
     say(f'Asking {name.capitalize()}…', MUTED)
     try:
-        summary = run_agent(name, request)
-    except (RuntimeError, subprocess.SubprocessError) as error:
+        after, summary = run_agent(name, request, before)
+        if LAYER_PROFILE and layer_shape(before) != layer_shape(after):
+            raise RuntimeError('The layer agent may change only the extraPackages list.')
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
         say('The agent failed: ' + str(error), CRIMSON)
         return 1
-    after = (WORK / EDITABLE).read_text()
+    (WORK / EDITABLE).unlink()
+    (WORK / EDITABLE).write_text(after)
     if after == before:
         say('Nothing to change. ' + summary, BRASS)
         return 0
@@ -146,12 +201,43 @@ def ask(args):
         record({'request': request, 'summary': summary, 'agent': name})
         say('Applied to the OniNix profile. Log out and in to reload the desktop. Undo with oninix-spirit undo.')
         return 0
-    shutil.copyfile(FLAKE / EDITABLE, PREVIOUS)
-    subprocess.run(['sudo', 'install', '-m', '644', str(WORK / EDITABLE), str(FLAKE / EDITABLE)], check=True)
-    subprocess.run(['sudo', 'nixos-rebuild', 'switch', '--flake', f'{FLAKE}#oninix'], check=True)
+    apply_system(before, after, result)
     record({'request': request, 'summary': summary, 'agent': name})
     say('Applied. `oninix-spirit undo` brings back the previous system.')
     return 0
+
+def install_settings(text):
+    with tempfile.NamedTemporaryFile(dir=STATE, mode='w') as source:
+        source.write(text)
+        source.flush()
+        staged = FLAKE / Path(source.name).with_suffix('.nix.tmp').name
+        subprocess.run(['sudo', 'install', '-m', '644', source.name, str(staged)], check=True)
+        try:
+            subprocess.run(['sudo', 'mv', '-T', str(staged), str(FLAKE / EDITABLE)], check=True)
+        except (OSError, subprocess.CalledProcessError):
+            subprocess.run(['sudo', 'rm', '-f', str(staged)], check=True)
+            raise
+
+def activate(system):
+    subprocess.run(['sudo', 'nix-env', '--profile', str(SYSTEM_PROFILE), '--set', str(system)], check=True)
+    subprocess.run(['sudo', 'systemd-run', '--collect', '--no-ask-password', '--quiet',
+                    '--service-type=exec', '--pipe', str(system / 'bin/switch-to-configuration'), 'switch'], check=True)
+
+def apply_system(before, after, result):
+    if (FLAKE / EDITABLE).read_text() != before or (FLAKE / 'flake.lock').read_bytes() != (WORK / 'flake.lock').read_bytes():
+        raise RuntimeError('The machine configuration changed during the preview. Run the request again.')
+    previous = SYSTEM_PROFILE.resolve(strict=True)
+    if previous != Path('/run/current-system').resolve(strict=True):
+        raise RuntimeError('The active and boot-default systems differ. Boot the default generation before applying.')
+    subprocess.run(['sudo', '-v'], check=True)
+    install_settings(after)
+    try:
+        activate(result)
+    except (OSError, subprocess.CalledProcessError):
+        install_settings(before)
+        activate(previous)
+        raise
+    SYSTEM_UNDO.write_text(json.dumps({'before': before, 'after': after, 'previous': str(previous), 'current': str(result)}))
 
 def write_flake(text):
     dest = FLAKE / EDITABLE
@@ -195,11 +281,25 @@ def undo_layer():
     return 0
 
 def undo():
+    if not SYSTEM_UNDO.exists():
+        raise RuntimeError('No machine spirit change to undo.')
+    change = json.loads(SYSTEM_UNDO.read_text())
+    current = SYSTEM_PROFILE.resolve(strict=True)
+    if str(current) != change['current'] or (FLAKE / EDITABLE).read_text() != change['after']:
+        raise RuntimeError('The system or its settings changed after the last spirit request.')
+    previous = Path(change['previous'])
+    if not (previous / 'bin/switch-to-configuration').is_file():
+        raise RuntimeError('The previous NixOS generation is no longer available.')
     say('Returning to the previous system…', BRASS)
-    if PREVIOUS.exists():
-        subprocess.run(['sudo', 'install', '-m', '644', str(PREVIOUS), str(FLAKE / EDITABLE)], check=True)
-        PREVIOUS.unlink()
-    subprocess.run(['sudo', 'nixos-rebuild', 'switch', '--rollback'], check=True)
+    subprocess.run(['sudo', '-v'], check=True)
+    install_settings(change['before'])
+    try:
+        activate(previous)
+    except (OSError, subprocess.CalledProcessError):
+        install_settings(change['after'])
+        activate(current)
+        raise
+    SYSTEM_UNDO.unlink()
     record({'request': 'undo', 'summary': 'rolled back', 'agent': ''})
     say('Done. The previous system and its settings are back.')
     return 0
@@ -215,17 +315,18 @@ def main(args):
     if args[:1] == ['ask']:
         args = args[1:]
     action = undo if undo_requested else lambda: ask(args)
-    if LAYER_PROFILE:
-        if undo_requested:
-            action = undo_layer
-        with Path(LAYER_PROFILE).with_name('lock').open('a') as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX)
-            try:
-                return action()
-            except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as error:
-                say(str(error), CRIMSON)
-                return 1
-    return action()
+    STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
+    STATE.chmod(0o700)
+    lock_path = Path(LAYER_PROFILE).with_name('lock') if LAYER_PROFILE else STATE / 'lock'
+    if LAYER_PROFILE and undo_requested:
+        action = undo_layer
+    with lock_path.open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            return action()
+        except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as error:
+            say(str(error), CRIMSON)
+            return 1
 
 if __name__ == '__main__':
     raise SystemExit(main(sys.argv[1:]))

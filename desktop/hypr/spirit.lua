@@ -3,7 +3,7 @@ local sequence = 0
 local token = nil
 local command = "oninix-dictation "
 
-hl.bind("SUPER + A", hl.dsp.exec_cmd("oninix-app kitty --class oninix-spirit --title 'Machine spirit' oninix-spirit"),
+hl.bind("SUPER + A", hl.dsp.exec_cmd("oninix-app kitty --hold --class oninix-spirit --title 'Machine spirit' oninix-spirit"),
     { description = "machine spirit: ask the system to change itself" })
 
 hl.bind("Control_R", function()

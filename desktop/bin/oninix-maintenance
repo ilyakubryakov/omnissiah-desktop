@@ -117,16 +117,19 @@ def launch():
     terminal = shutil.which('kitty')
     if not terminal:
         return {'error': 'kitty is not installed'}
-    script = ('set -e; echo "Updating OniNix in ' + str(FLAKE) + '"; '
-              'sudo nix flake update --flake ' + str(FLAKE) + '; '
-              'sudo nixos-rebuild switch --flake ' + str(FLAKE) + '#oninix; '
-              'echo; echo "Done. The previous generation stays in the boot menu."; '
-              'oninix-maintenance check >/dev/null; read -r -p "Press Enter to close" _')
+    script = (
+        'echo "Updating OniNix in $1"; '
+        'if sudo nix flake update oninix --flake "$1" && '
+        'sudo nixos-rebuild switch --flake "$1#oninix"; then '
+        'echo "Done. The previous generation stays in the boot menu."; '
+        'oninix-maintenance check >/dev/null; fi; '
+        'read -r -p "Press Enter to close" _'
+    )
     if LAYER_PROFILE:
         script = ('oninix-maintenance apply-layer && oninix-maintenance check >/dev/null; '
                   'read -r -p "Press Enter to close" _')
-    process = subprocess.Popen([terminal, '--class', 'oninix-update', '--title', 'OniNix update', 'bash', '-c', script],
-                               start_new_session=True)
+    process = subprocess.Popen([terminal, '--class', 'oninix-update', '--title', 'OniNix update',
+                                'bash', '-c', script, '_', str(FLAKE)], start_new_session=True)
     write_json(SESSION, {'pid': process.pid, 'startedAt': time.time()})
     return {}
 
