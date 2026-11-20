@@ -21,7 +21,9 @@ from oninix_notebook import atomic
 
 STATE = Path(os.environ.get('ONINIX_DICTATION_STATE', str(Path.home() / '.local/state/oninix/dictation')))
 CONFIG = Path(os.environ.get('ONINIX_DICTATION_CONFIG', str(Path.home() / '.config/oninix/dictation.json')))
-RUNTIME = Path(os.environ.get('ONINIX_DICTATION_RUNTIME', str(Path(os.environ.get('XDG_RUNTIME_DIR', '/tmp')) / ('oninix-dictation-' + str(os.getuid())))))
+SESSION_RUNTIME = os.environ.get('XDG_RUNTIME_DIR')
+DEFAULT_RUNTIME = Path(SESSION_RUNTIME) / f'oninix-dictation-{os.getuid()}' if SESSION_RUNTIME else STATE / 'runtime'
+RUNTIME = Path(os.environ.get('ONINIX_DICTATION_RUNTIME', DEFAULT_RUNTIME))
 SOCKET = RUNTIME / 'socket'
 VAD = speech.CACHE / 'ggml-silero-v6.2.0.bin'
 ASSISTANT = Path(shutil.which('oninix-spirit') or '/run/current-system/sw/bin/oninix-spirit')
@@ -375,7 +377,9 @@ class Dictation:
         finally: self.downloading=False
 
 def serve():
-    os.umask(0o077); RUNTIME.mkdir(parents=True,exist_ok=True,mode=0o700)
+    os.umask(0o077)
+    speech.private_directory(STATE, create=True)
+    speech.private_directory(RUNTIME, create=True)
     guard=(RUNTIME/'lock').open('a');fcntl.flock(guard,fcntl.LOCK_EX|fcntl.LOCK_NB)
     manager=Dictation()
     class Handler(socketserver.StreamRequestHandler):
@@ -403,6 +407,7 @@ def serve():
         server.serve_forever()
 
 def rpc(request):
+    speech.private_directory(RUNTIME)
     with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as client:
         client.settimeout(12);client.connect(str(SOCKET))
         client.sendall((json.dumps(request)+'\n').encode())

@@ -11,6 +11,7 @@ import shutil
 import signal
 import socket
 import socketserver
+import stat
 import subprocess
 import tempfile
 import threading
@@ -32,7 +33,9 @@ REMIND_LEAD = timedelta(minutes=2)
 REMIND_LATE = timedelta(minutes=5)
 WEEKDAYS = ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday')
 MONTHS = ('January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December')
-SOCKET = Path(os.environ.get('ONINIX_MEETINGS_SOCKET', str(Path(os.environ.get('XDG_RUNTIME_DIR', '/tmp')) / ('oninix-meetings-' + str(os.getuid()) + '.sock'))))
+RUNTIME = os.environ.get('XDG_RUNTIME_DIR')
+DEFAULT_SOCKET = Path(RUNTIME) / f'oninix-meetings-{os.getuid()}.sock' if RUNTIME else STATE / 'socket'
+SOCKET = Path(os.environ.get('ONINIX_MEETINGS_SOCKET', DEFAULT_SOCKET))
 MODELS = {
     'tiny': ('ggml-tiny-q5_1.bin', 32152673, '818710568da3ca15689e31a743197b520007872ff9576237bda97bd1b469c3d7'),
     'base': ('ggml-base-q5_1.bin', 59707625, '422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898'),
@@ -690,9 +693,17 @@ class Meetings:
         self.patch(ident, **{key: str(path)})
         return dict(url='obsidian://open?path=' + quote(str(path), safe=''))
 
+def private_directory(path, *, create=False):
+    if create:
+        path.mkdir(parents=True, exist_ok=True, mode=0o700)
+    info = path.lstat()
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or (info.st_mode & 0o077):
+        raise PermissionError(f'OniNix needs a private runtime directory owned by the current user: {path}')
+
 def serve():
     os.umask(0o077)
-    STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
+    private_directory(STATE, create=True)
+    private_directory(SOCKET.parent)
     guard = (STATE / 'service.lock').open('a')
     fcntl.flock(guard, fcntl.LOCK_EX | fcntl.LOCK_NB)
     manager = Meetings()
@@ -723,6 +734,7 @@ def serve():
         server.serve_forever()
 
 def rpc(request):
+    private_directory(SOCKET.parent)
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
         client.settimeout(15)
         client.connect(str(SOCKET))
