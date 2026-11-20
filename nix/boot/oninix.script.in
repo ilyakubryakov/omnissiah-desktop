@@ -1,0 +1,120 @@
+Window.SetBackgroundTopColor(@dark_backgroundR@, @dark_backgroundG@, @dark_backgroundB@);
+Window.SetBackgroundBottomColor(@dark_backgroundR@, @dark_backgroundG@, @dark_backgroundB@);
+
+width = 0;
+height = 0;
+safe_width = 0;
+safe_height = 0;
+original_emblem = Image("mechanicus.png");
+crest = Sprite();
+
+fun set_text(sprite, text, relative_y, red, green, blue) {
+    if (text == "" || global.safe_height <= 0) {
+        sprite.SetOpacity(0);
+        return;
+    }
+    font = "DejaVu Sans 16";
+    if (global.safe_height >= 1300) font = "DejaVu Sans 24";
+    if (global.safe_height >= 1800) font = "DejaVu Sans 32";
+    image = Image.Text(text, red, green, blue, 1, font);
+    if (image.GetWidth() > global.safe_width - 32) {
+        ratio = (global.safe_width - 32) / image.GetWidth();
+        image = image.Scale(image.GetWidth() * ratio, image.GetHeight() * ratio);
+    }
+    sprite.SetImage(image);
+    sprite.SetPosition((global.width - image.GetWidth()) / 2,
+        global.height / 2 + (relative_y - 0.5) * global.safe_height, 10);
+    sprite.SetOpacity(1);
+}
+
+caption = "AWAKENING THE MACHINE SPIRIT";
+if (Plymouth.GetMode() == "shutdown") caption = "RESTING THE MACHINE SPIRIT";
+if (Plymouth.GetMode() == "reboot") caption = "REAWAKENING THE MACHINE SPIRIT";
+label = Sprite();
+pulse = Sprite();
+message = Sprite();
+prompt = Sprite();
+entry = Sprite();
+prompt_text = "";
+entry_text = "";
+message_text = "";
+phase = 0;
+prompting = 0;
+
+fun layout() {
+    next_width = Window.GetWidth();
+    next_height = Window.GetHeight();
+    if (next_width <= 0 || next_height <= 0) return;
+    next_safe_width = next_width;
+    next_safe_height = next_height;
+    for (i = 0; Window.GetWidth(i) != NULL; i++) {
+        next_safe_width = Math.Min(next_safe_width, Window.GetWidth(i));
+        next_safe_height = Math.Min(next_safe_height, Window.GetHeight(i));
+    }
+    if (next_width == global.width && next_height == global.height &&
+        next_safe_width == global.safe_width && next_safe_height == global.safe_height) return;
+    global.width = next_width;
+    global.height = next_height;
+    global.safe_width = next_safe_width;
+    global.safe_height = next_safe_height;
+    size = Math.Min(next_safe_width, next_safe_height) * 0.30;
+    scale = size / Math.Max(global.original_emblem.GetWidth(), global.original_emblem.GetHeight());
+    emblem = global.original_emblem.Scale(global.original_emblem.GetWidth() * scale,
+        global.original_emblem.GetHeight() * scale);
+    global.crest.SetImage(emblem);
+    global.crest.SetPosition((next_width - emblem.GetWidth()) / 2,
+        next_height / 2 - next_safe_height * 0.07 - emblem.GetHeight() / 2, 0);
+    set_text(global.label, global.caption, 0.68, @foregroundR@, @foregroundG@, @foregroundB@);
+    set_text(global.pulse, "·  ·  ·", 0.74, @accentR@, @accentG@, @accentB@);
+    set_text(global.prompt, global.prompt_text, 0.78, @foregroundR@, @foregroundG@, @foregroundB@);
+    set_text(global.entry, global.entry_text, 0.85, @accentR@, @accentG@, @accentB@);
+    set_text(global.message, global.message_text, 0.94, @foregroundR@, @foregroundG@, @foregroundB@);
+    global.label.SetOpacity(!global.prompting);
+    global.pulse.SetOpacity(!global.prompting);
+}
+
+fun refresh() {
+    layout();
+    global.phase += 0.035;
+    if (!global.prompting) global.pulse.SetOpacity(0.35 + (Math.Sin(global.phase) + 1) * 0.325);
+}
+Plymouth.SetRefreshFunction(refresh);
+layout();
+
+fun display_prompt(prompt_text, entry_text) {
+    global.prompting = 1;
+    global.prompt_text = prompt_text;
+    global.entry_text = entry_text;
+    layout();
+    global.label.SetOpacity(0);
+    global.pulse.SetOpacity(0);
+    set_text(global.prompt, prompt_text, 0.78, @foregroundR@, @foregroundG@, @foregroundB@);
+    set_text(global.entry, entry_text, 0.85, @accentR@, @accentG@, @accentB@);
+}
+fun password(prompt_text, bullets) {
+    stars = "";
+    for (i = 0; i < bullets; i++) stars += "*";
+    display_prompt(prompt_text, stars);
+}
+fun question(prompt_text, entry_text) { display_prompt(prompt_text, entry_text); }
+fun normal() {
+    global.prompting = 0;
+    global.prompt_text = "";
+    global.entry_text = "";
+    global.prompt.SetOpacity(0);
+    global.entry.SetOpacity(0);
+    global.label.SetOpacity(1);
+}
+fun display_message(text) {
+    global.message_text = text;
+    set_text(global.message, text, 0.94, @foregroundR@, @foregroundG@, @foregroundB@);
+}
+fun hide_message(text) {
+    global.message_text = "";
+    global.message.SetOpacity(0);
+}
+Plymouth.SetDisplayPasswordFunction(password);
+Plymouth.SetDisplayQuestionFunction(question);
+Plymouth.SetDisplayNormalFunction(normal);
+Plymouth.SetDisplayMessageFunction(display_message);
+Plymouth.SetHideMessageFunction(hide_message);

@@ -15,6 +15,20 @@ let
     '';
     derivationArgs.passthru.providedSessions = [ "oninix-uwsm" ];
   };
+  greeter = config.services.displayManager.regreet;
+  greeterDataDirs = lib.makeSearchPath "share" (
+    [ session greeter.iconTheme.package greeter.cursorTheme.package ]
+    ++ lib.optional (greeter.theme.package != null) greeter.theme.package
+  );
+  palette = builtins.fromTOML (builtins.readFile ../../themes/omnissiah/colors.toml);
+  paletteNames = builtins.attrNames palette;
+  greeterCss = lib.replaceStrings
+    (map (name: "@${name}@") paletteNames)
+    (map (name: palette.${name}) paletteNames)
+    (builtins.readFile ../greeter/style.css.in);
+  cage = pkgs.cage.overrideAttrs (old: {
+    patches = (old.patches or [ ]) ++ [ ../greeter/cage-last-output-teardown.patch ];
+  });
 in
 lib.mkIf cfg.enable {
   programs.hyprland = {
@@ -33,10 +47,29 @@ lib.mkIf cfg.enable {
   xdg.portal.extraPortals = [ pkgs.xdg-desktop-portal-gtk ];
   xdg.mime.defaultApplications."inode/directory" = "org.kde.dolphin.desktop";
 
-  services.greetd = {
+  services.displayManager.regreet = {
     enable = true;
-    settings.default_session.command =
-      "${pkgs.tuigreet}/bin/tuigreet --time --remember --cmd 'uwsm start oninix-uwsm.desktop'";
+    font = { package = pkgs.inter; name = "Inter"; size = 16; };
+    iconTheme = { package = pkgs.papirus-icon-theme; name = "Papirus-Dark"; };
+    cageArgs = [ "-s" "-d" "-m" "last" ];
+    extraCss = greeterCss;
+    settings = {
+      skip_selection = false;
+      background = { path = "${../boot/mechanicus-dark.png}"; fit = "Cover"; };
+      GTK.application_prefer_dark_theme = true;
+      appearance.greeting_msg = "ONINIX · Communing with the machine spirit";
+      widget.clock = { format = "%H:%M · %A, %e %B"; resolution = "1s"; };
+    };
+  };
+  services.greetd.settings.default_session.command = lib.concatStringsSep " " [
+    "${lib.getExe' pkgs.coreutils "env"} XDG_DATA_DIRS=${greeterDataDirs}"
+    "GSK_RENDERER=cairo LIBSEAT_BACKEND=logind XKB_DEFAULT_OPTIONS=grp:caps_toggle"
+    "${lib.getExe' pkgs.dbus "dbus-run-session"} ${lib.getExe cage}"
+    "${lib.escapeShellArgs greeter.cageArgs} -- ${lib.getExe greeter.package}"
+  ];
+  systemd.services.greetd.serviceConfig = {
+    Restart = lib.mkForce "always";
+    RestartSec = "1s";
   };
 
   security.rtkit.enable = true;

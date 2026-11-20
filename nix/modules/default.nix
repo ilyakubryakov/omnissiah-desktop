@@ -5,6 +5,7 @@ in
 {
   imports = [
     ./base.nix
+    ./boot-appearance.nix
     ./desktop.nix
     ./hardware.nix
     ./features.nix

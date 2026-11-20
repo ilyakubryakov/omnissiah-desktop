@@ -1,0 +1,61 @@
+title-text: ""
+desktop-image: "background.png"
+desktop-image-scale-method: "crop"
+desktop-color: "@dark_background@"
+terminal-font: "OniNix Sans Regular 24"
+terminal-left: "5%"
+terminal-top: "20%"
+terminal-width: "90%"
+terminal-height: "65%"
++ label {
+  left = 6%
+  top = 18%
+  width = 40%
+  height = 32
+  text = "OMNISSIAH"
+  font = "OniNix Sans Regular 24"
+  color = "@accent@"
+}
++ label {
+  left = 6%
+  top = 23%
+  width = 40%
+  height = 32
+  text = "ONINIX / NIXOS"
+  font = "OniNix Sans Regular 24"
+  color = "@foreground@"
+}
++ boot_menu {
+  left = 6%
+  top = 34%
+  width = 82%
+  height = 35%
+  item_font = "OniNix Sans Regular 24"
+  selected_item_font = "OniNix Sans Regular 24"
+  item_color = "@muted@"
+  selected_item_color = "@bright_foreground@"
+  item_height = 38
+  item_spacing = 8
+  icon_width = 0
+  icon_height = 0
+  item_padding = 8
+}
++ label {
+  id = "__timeout__"
+  left = 6%
+  top = 78%
+  width = 40%
+  height = 32
+  text = "Booting in %d seconds"
+  font = "OniNix Sans Regular 24"
+  color = "@accent@"
+}
++ label {
+  left = 6%
+  top = 85%
+  width = 88%
+  height = 32
+  text = "Enter: boot    Arrows: select    e: edit    c: console"
+  font = "OniNix Sans Regular 24"
+  color = "@muted@"
+}

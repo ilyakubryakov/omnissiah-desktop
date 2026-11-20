@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=OniNix
+Description=Mechanicus artwork with a quiet brass pulse
+ModuleName=script
+
+[script]
+ImageDir=@THEME_DIR@
+ScriptFile=@THEME_DIR@/oninix.script
