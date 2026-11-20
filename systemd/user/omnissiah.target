@@ -1,6 +1,0 @@
-[Unit]
-Description=Omnissiah Desktop
-PartOf=graphical-session.target
-After=graphical-session.target
-Wants=omnissiah-vpn.service
-Wants=omnissiah-polkit.service pipewire.service pipewire-pulse.service wireplumber.service omnissiah-prepare.service station-panel.service omnissiah-guide.service omnissiah-wallpaper.service omnissiah-idle.service omnissiah-clipboard.service omnissiah-notifications.service station-notebook.service station-status.service caldash.timer theme-schedule.timer omnissiah-launcher-cache.timer

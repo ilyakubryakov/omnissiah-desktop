@@ -1,7 +1,0 @@
-# Screenshot editor opened from the capture notification (hypr/scripts/shot.sh).
-[Default]
-save_dir=$HOME/Pictures/Screenshots
-save_filename_format=Screenshot %Y-%m-%d %H.%M.%S.png
-# Copy or Save closes the editor: it is a quick annotate-and-go step.
-early_exit=true
-show_panel=false
