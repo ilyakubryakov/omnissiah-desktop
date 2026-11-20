@@ -114,6 +114,38 @@ def model_ready(key):
     p = model_path(key)
     return p.is_file() and p.stat().st_size == MODELS[key][1] and read(p.with_suffix('.verified'), '') == MODELS[key][2]
 
+def download_verified(path, url, size, checksum, progress=None):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, name = tempfile.mkstemp(prefix='.' + path.name + '-', dir=path.parent)
+    temporary = Path(name)
+    try:
+        digest = hashlib.sha256()
+        count = 0
+        with os.fdopen(fd, 'wb') as out, urlopen(url, timeout=30) as response:
+            while chunk := response.read(min(1024 * 1024, size - count + 1)):
+                count += len(chunk)
+                if count > size:
+                    raise ValueError('Speech model size did not match.')
+                out.write(chunk)
+                digest.update(chunk)
+                if progress is not None:
+                    progress(int(count * 100 / size))
+            if count != size or digest.hexdigest() != checksum:
+                raise ValueError('Speech model checksum did not match.')
+            out.flush()
+            os.fsync(out.fileno())
+        temporary.replace(path)
+        write(path.with_suffix('.verified'), checksum)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+def fetch_model(key, progress=None):
+    name, size, checksum = MODELS[key]
+    path = model_path(key)
+    download_verified(path, 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/' + name,
+                      size, checksum, progress)
+    return path
+
 def stamp(seconds):
     value = max(0, int(seconds))
     return f'{value // 3600:02}:{value // 60 % 60:02}:{value % 60:02}'
@@ -494,30 +526,16 @@ class Meetings:
         return self.status()
 
     def download_model(self, key):
-        name, size, checksum = MODELS[key]
-        CACHE.mkdir(parents=True, exist_ok=True)
-        path = model_path(key)
-        temporary = path.with_suffix('.partial')
+        def progress(percent):
+            self.download = dict(model=key, state='downloading', progress=percent)
+
         try:
-            if shutil.disk_usage(CACHE).free < size + 256 * 1024 * 1024:
+            CACHE.mkdir(parents=True, exist_ok=True)
+            if shutil.disk_usage(CACHE).free < MODELS[key][1] + 256 * 1024 * 1024:
                 raise ValueError('Not enough storage for this model.')
-            digest = hashlib.sha256()
-            with urlopen('https://huggingface.co/ggerganov/whisper.cpp/resolve/main/' + name, timeout=30) as response, temporary.open('wb') as f:
-                count = 0
-                while chunk := response.read(1024 * 1024):
-                    count += len(chunk)
-                    if count > size:
-                        raise ValueError('Model size did not match.')
-                    f.write(chunk); digest.update(chunk)
-                    self.download = dict(model=key, state='downloading', progress=int(count * 100 / size))
-                f.flush(); os.fsync(f.fileno())
-            if count != size or digest.hexdigest() != checksum:
-                raise ValueError('Model verification failed. Try downloading again.')
-            os.replace(temporary, path)
-            write(path.with_suffix('.verified'), checksum)
+            fetch_model(key, progress)
             self.download = dict(model=key, state='ready', progress=100)
         except Exception:
-            temporary.unlink(missing_ok=True)
             self.download = dict(model=key, state='error', message='Model download or checksum verification failed. Check your connection and free space, then retry.')
 
     def worker(self):

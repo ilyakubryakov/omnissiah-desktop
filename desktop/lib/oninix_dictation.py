@@ -1,6 +1,5 @@
 import array
 import fcntl
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -12,7 +11,6 @@ import socketserver
 import subprocess
 import threading
 import time
-from urllib.request import urlopen
 import wave
 
 import oninix_meetings as speech
@@ -361,15 +359,9 @@ class Dictation:
                 speech.Meetings.download_model(self,key)
                 if not speech.model_ready(key): raise ValueError('Whisper download failed.')
             if not available_vad():
-                speech.CACHE.mkdir(parents=True,exist_ok=True)
-                partial=VAD.with_suffix('.partial')
-                try:
-                    with urlopen('https://huggingface.co/ggml-org/whisper-vad/resolve/main/'+VAD.name,timeout=30) as response:
-                        data=response.read(885099)
-                    if len(data)!=885098 or hashlib.sha256(data).hexdigest()!=VAD_HASH: raise ValueError('Speech filter checksum did not match.')
-                    partial.write_bytes(data); os.replace(partial,VAD)
-                    speech.write(VAD.with_suffix('.verified'),VAD_HASH)
-                finally: partial.unlink(missing_ok=True)
+                speech.download_verified(
+                    VAD, 'https://huggingface.co/ggml-org/whisper-vad/resolve/main/' + VAD.name,
+                    885098, VAD_HASH)
             self.download=dict(state='ready',progress=100)
             if self.phase=='error': self.message='Models ready. Hold Right Alt in a text field.'
         except Exception:
