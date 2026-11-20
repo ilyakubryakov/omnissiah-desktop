@@ -67,23 +67,28 @@ def agent():
             return name
     return None
 
-def keep_refreshed_login(original, copy):
-    if copy.is_symlink() or not copy.is_file() or not original.is_file():
+def keep_refreshed_login(original, copy, initial):
+    if initial is None or copy.is_symlink() or not copy.is_file() or original.is_symlink():
         return
     fresh = copy.read_bytes()
-    if fresh == original.read_bytes():
+    if fresh == initial:
         return
     try:
-        json.loads(fresh)
+        update = json.loads(fresh)
     except ValueError:
         return
-    temporary = original.with_name(original.name + '.oninix-new')
-    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(descriptor, 'wb') as out:
-        out.write(fresh)
-        out.flush()
-        os.fsync(out.fileno())
-    os.replace(temporary, original)
+    if not isinstance(update, dict) or not update:
+        return
+    with tempfile.NamedTemporaryFile(prefix='.oninix-auth-', dir=original.parent, delete=False) as handle:
+        temporary = Path(handle.name)
+        try:
+            handle.write(fresh)
+            handle.flush()
+            os.fsync(handle.fileno())
+            if original.is_file() and not original.is_symlink() and original.read_bytes() == initial:
+                temporary.replace(original)
+        finally:
+            temporary.unlink(missing_ok=True)
 
 def run_agent(name, request, before):
     prompt = (LAYER_PROMPT if LAYER_PROFILE else PROMPT).format(request=request)
@@ -99,10 +104,11 @@ def run_agent(name, request, before):
         auth = (Path(os.environ.get('CLAUDE_CONFIG_DIR', home / '.claude')) / '.credentials.json'
                 if name == 'claude' else Path(os.environ.get('CODEX_HOME', home / '.codex')) / 'auth.json')
         auth_copy = agent_home / f'.{name}' / auth.name
-        if auth.is_file():
-            auth_copy.parent.mkdir()
-            shutil.copyfile(auth, auth_copy)
-            auth_copy.chmod(0o600)
+        initial = auth.read_bytes() if auth.is_file() else None
+        if initial is not None:
+            auth_copy.parent.mkdir(mode=0o700)
+            with os.fdopen(os.open(auth_copy, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), 'wb') as handle:
+                handle.write(initial)
         if name == 'claude':
             command = ['-p', prompt, '--permission-mode', 'acceptEdits', '--tools', 'Read,Edit,Write',
                        '--strict-mcp-config', '--setting-sources', '']
@@ -135,7 +141,10 @@ def run_agent(name, request, before):
             result = subprocess.run([*sandbox, '--', executable, *command], cwd=job,
                                     capture_output=True, text=True, timeout=900)
         finally:
-            keep_refreshed_login(auth, auth_copy)
+            try:
+                keep_refreshed_login(auth, auth_copy, initial)
+            except OSError:
+                say('Could not save the agent login refresh. Sign in again if the next request fails.', CRIMSON)
         if result.returncode != 0:
             detail = (result.stderr or result.stdout).strip()
             raise RuntimeError(detail[-600:] or f'{name} failed')

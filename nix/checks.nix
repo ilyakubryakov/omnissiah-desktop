@@ -23,7 +23,7 @@ runCommand "oninix-checks" { nativeBuildInputs = [ nodejs python3 lua5_4 nix bas
   done
   export HOME=$TMPDIR NIX_STATE_DIR=$TMPDIR/nix-state
   ONINIX_TEMPLATE=nix/template python3 -I - <<'EOF'
-  import importlib.machinery, importlib.util, json, subprocess
+  import importlib.machinery, importlib.util, json, pathlib, subprocess, tempfile
   from unittest.mock import patch
   spec = importlib.util.spec_from_file_location('installer', 'nix/installer/oninix-installer.py')
   m = importlib.util.module_from_spec(spec)
@@ -52,6 +52,18 @@ runCommand "oninix-checks" { nativeBuildInputs = [ nodejs python3 lua5_4 nix bas
       pass
   else:
       raise AssertionError('Expected rejection of a layer package expression')
+  with tempfile.TemporaryDirectory() as folder:
+      original = pathlib.Path(folder) / 'auth.json'
+      refreshed = pathlib.Path(folder) / 'new-auth.json'
+      initial = b'{"auth":"old"}'
+      original.write_bytes(initial)
+      refreshed.write_text('{"auth":"refreshed"}')
+      spirit.keep_refreshed_login(original, refreshed, initial)
+      assert original.read_bytes() == refreshed.read_bytes()
+      assert original.stat().st_mode & 0o777 == 0o600
+      original.write_text('{"auth":"updated in another session"}')
+      spirit.keep_refreshed_login(original, refreshed, initial)
+      assert original.read_text() == '{"auth":"updated in another session"}'
   EOF
   touch $out
 ''
