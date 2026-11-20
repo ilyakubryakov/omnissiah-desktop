@@ -1,6 +1,11 @@
 { config, lib, pkgs, ... }:
 let
   cfg = config.oninix;
+  gpu = cfg.hardware.gpu;
+  acceleration = lib.optionalAttrs (gpu != "none") {
+    cudaSupport = gpu == "nvidia";
+    vulkanSupport = gpu == "amd" || gpu == "intel";
+  };
   path = [ "/run/wrappers" "/run/current-system/sw" ];
 in
 {
@@ -11,7 +16,13 @@ in
   };
 
   config = lib.mkIf (cfg.enable && cfg.voice.enable) {
-    environment.systemPackages = with pkgs; [ whisper-cpp llama-cpp ffmpeg-headless wtype pciutils ];
+    environment.systemPackages = with pkgs; [
+      (whisper-cpp.override acceleration)
+      (llama-cpp.override acceleration)
+      ffmpeg-headless
+      wtype
+      pciutils
+    ];
 
     systemd.user.services.oninix-voice-profile = {
       description = "Pick the Whisper model this machine can run live";
