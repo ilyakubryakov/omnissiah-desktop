@@ -9,6 +9,7 @@ in
     ./desktop.nix
     ./hardware.nix
     ./features.nix
+    ./updates.nix
   ];
 
   options.oninix = {
