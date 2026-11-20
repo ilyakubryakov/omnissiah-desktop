@@ -62,13 +62,21 @@ def monitor_key(monitor, live):
 
 def primary_output(config, live, saved=None):
     saved = saved or overlay()
-    names = {m['name'] for m in live}
+    appliances = {config[role].get('output') for role in APPLIANCES if role in config}
+    names = [m['name'] for m in live if not m.get('disabled') and
+             m.get('mirrorOf') in (None, '', 'none') and m['name'] not in appliances]
     found = None
     if saved.has_section('primary'):
         key = saved['primary'].get('display', '')
-        found = next((m['name'] for m in live if monitor_key(m, live) == key and not m.get('disabled')), None)
+        if key in names:
+            found = key
+        elif key.startswith('desc:'):
+            matching = [m['name'] for m in live if (m.get('description') or '').strip() == key[5:]]
+            candidate = matching[0] if len(matching) == 1 else saved['primary'].get('output')
+            if candidate in matching and candidate in names:
+                found = candidate
     if os.environ.get('ONINIX_LAPTOP') == '1' and 'main' in config:
-        outside = sorted(m['name'] for m in live if m['name'] != config['main'].get('output') and not m.get('disabled'))
+        outside = sorted(name for name in names if name != config['main'].get('output'))
         if outside:
             return found if found in outside else outside[0]
     if found:
@@ -76,7 +84,7 @@ def primary_output(config, live, saved=None):
     for role in ('main', 'vm'):
         if role in config and config[role].get('output') in names:
             return config[role]['output']
-    return None
+    return next(iter(names), None)
 
 def tv_rule(config, active):
     tv = config['tv']
@@ -168,7 +176,7 @@ def data():
     saved = overlay()
     live = monitors(everything=True)
     role_of = {config[s]['output']: s for s in config.sections() if 'output' in config[s]}
-    primary = primary_output(config, [m for m in live if not m.get('disabled')], saved)
+    primary = primary_output(config, live, saved)
     tv = config['tv']['output'] if 'tv' in config else None
     displays = []
     for m in live:
@@ -302,7 +310,7 @@ def apply_layout(request):
     live = monitors(everything=True)
     config = roles()
     before = snapshot()
-    old_primary = primary_output(config, [m for m in live if not m.get('disabled')])
+    old_primary = primary_output(config, live)
     entries, primary, role_of = checked(request, live)
     saved = overlay()
     tv_on = None
@@ -366,7 +374,7 @@ def main():
         elif len(args) == 2 and args[0] == 'output':
             config = roles()
             if args[1] == 'main':
-                print(primary_output(config, monitors()) or config['main']['output'])
+                print(primary_output(config, monitors(everything=True)) or config.get('main', 'output', fallback=''))
             else:
                 print(config[args[1]]['output'] if args[1] in config else '')
         elif len(args) == 2 and args[0] == 'profile':
