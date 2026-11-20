@@ -1,0 +1,1736 @@
+#!/usr/bin/env python3
+"""Data and explicit actions for the desktop panels. Never evaluates user text."""
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import selectors
+import shutil
+import time
+import subprocess
+import sys
+import tempfile
+import urllib.parse
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
+import oninix_notifications as notes
+import oninix_shell as shell
+import oninix_gaming as gaming
+import oninix_compute as compute
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'themes'))
+import ui_metrics
+
+BIN = Path.home() / '.local/bin'
+ENV = {**os.environ, 'LC_ALL': 'C'}
+# Direct D-Bus: powerprofilesctl (PyGObject) can segfault on exit under Python 3.14.
+PPD = ['busctl', '--system']
+PPD_IFACE = ['net.hadess.PowerProfiles', '/net/hadess/PowerProfiles', 'net.hadess.PowerProfiles']
+
+
+def run(args, data=None, timeout=6):
+    return subprocess.run([str(a) for a in args], input=data, capture_output=True,
+                          timeout=timeout, check=True, env=ENV).stdout
+
+
+def runtime():
+    base = os.environ.get('XDG_RUNTIME_DIR')
+    if not base:
+        raise RuntimeError('The graphical session runtime directory is unavailable')
+    path = Path(base) / 'oninix-desktop'
+    path.mkdir(mode=0o700, exist_ok=True)
+    return path
+
+
+def read_json(path, default):
+    try:
+        return json.loads(path.read_text())
+    except (OSError, ValueError):
+        return default
+
+
+def save(path, value):
+    tmp = path.with_suffix('.tmp')
+    tmp.write_text(json.dumps(value))
+    tmp.replace(path)
+
+
+def modes():
+    return run(['makoctl', 'mode']).decode().splitlines()
+
+
+def nightlight():
+    return json.loads(run([BIN / 'theme-schedule', '--status']))['nightlight']
+
+
+def set_dnd(value):
+    run(['makoctl', 'mode', '-a' if value else '-r', 'do-not-disturb'])
+
+
+def audio_defaults():
+    objects = json.loads(run(['pw-dump']))
+    configured = {'sink': None, 'source': None}
+    available = {'sink': set(), 'source': set()}
+    for obj in objects:
+        props = obj.get('info', {}).get('props', {})
+        for kind in available:
+            if props.get('media.class') == 'Audio/' + ('Sink' if kind == 'sink' else 'Source'):
+                available[kind].add(props.get('node.name'))
+        if obj.get('type') == 'PipeWire:Interface:Metadata' and obj.get('props', {}).get('metadata.name') == 'default':
+            for entry in obj.get('metadata', []):
+                for kind in configured:
+                    if entry.get('subject') == 0 and entry.get('key') == 'default.configured.audio.' + kind:
+                        value = entry.get('value', {})
+                        if isinstance(value, str):
+                            value = json.loads(value)
+                        configured[kind] = value.get('name')
+    return configured, available
+
+
+def set_audio_default(kind, name):
+    command = ['pw-metadata', '-n', 'default']
+    key = 'default.configured.audio.' + kind
+    if name is None:
+        run(command + ['-d', '0', key])
+    else:
+        run(command + ['0', key, json.dumps({'name': name}), 'Spa:String:JSON'])
+
+
+def profile(name):
+    if name not in {'normal', 'work', 'call', 'game', 'music'}:
+        raise ValueError('Unknown desktop mode')
+    path = runtime() / 'mode.json'
+    with (runtime() / 'mode.lock').open('w') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        old = read_json(path, {})
+        audio, available = audio_defaults()
+        current = {'dnd': 'do-not-disturb' in modes(), 'nightlight': nightlight(),
+                   **{'audio_' + k: v for k, v in audio.items()}}
+        base = {**current, **old.get('base', {})}
+        # A manual change made while a mode is active becomes the new baseline.
+        for key, value in current.items():
+            if old and value != old.get('applied', {}).get(key):
+                base[key] = value
+        target = base.copy()
+        game_state = old.get('gaming', {})
+        if name != 'normal':
+            target['dnd'] = name != 'work'
+            if name == 'game':
+                target['nightlight'] = False
+            devices = read_json(shell.state() / 'oninix/work-mode-devices.json', {}).get(name, {})
+            for kind in ('sink', 'source'):
+                device = devices.get(kind)
+                if device:
+                    if device not in available[kind]:
+                        raise ValueError('The selected ' + kind + ' is disconnected. Choose an available device in Work modes.')
+                    target['audio_' + kind] = device
+        try:
+            for kind in ('sink', 'source'):
+                if target['audio_' + kind] != current['audio_' + kind]:
+                    set_audio_default(kind, target['audio_' + kind])
+            set_dnd(target['dnd'])
+            if target['nightlight'] != current['nightlight']:
+                run([BIN / 'theme-schedule', '--nightlight', 'on' if target['nightlight'] else 'off'])
+            if name == 'music':
+                run([BIN / 'oninix-audio', 'music', 'on'])
+            elif old.get('name') == 'music':
+                run([BIN / 'oninix-audio', 'music', 'off'])
+            if name == 'game' and old.get('name') != 'game':
+                run(['makoctl', 'mode', '-a', 'gaming'])
+                game_state = gaming.enter()
+            elif old.get('name') == 'game' and name != 'game':
+                run(['makoctl', 'mode', '-r', 'gaming'])
+                gaming.leave(game_state)
+        except Exception:
+            rollback = [lambda: set_dnd(current['dnd'])]
+            rollback.extend(lambda k=k: set_audio_default(k, current['audio_' + k]) for k in ('sink', 'source'))
+            if target['nightlight'] != current['nightlight']:
+                rollback.append(lambda: run([BIN / 'theme-schedule', '--nightlight', 'on' if current['nightlight'] else 'off']))
+            if name == 'music' and old.get('name') != 'music':
+                rollback.append(lambda: run([BIN / 'oninix-audio', 'music', 'off']))
+            elif old.get('name') == 'music' and name != 'music':
+                rollback.append(lambda: run([BIN / 'oninix-audio', 'music', 'on']))
+            if name == 'game' and old.get('name') != 'game':
+                rollback.append(lambda: run(['makoctl', 'mode', '-r', 'gaming']))
+            elif old.get('name') == 'game' and name != 'game':
+                rollback.append(lambda: run(['makoctl', 'mode', '-a', 'gaming']))
+            for restore in rollback:
+                try:
+                    restore()
+                except Exception:
+                    pass
+            raise
+        if name == 'normal':
+            path.unlink(missing_ok=True)
+        else:
+            save(path, {'name': name, 'base': base, 'applied': target, 'gaming': game_state if name == 'game' else {}})
+        if old.get('name', 'normal') != name:
+            # oninix-doctor --events shows these lines in the Doctor timeline.
+            previous = old.get('name', 'normal').capitalize()
+            try:
+                run(['logger', '-t', 'oninix-mode', f'{name.capitalize()} mode on (was {previous})'])
+            except (OSError, subprocess.SubprocessError):
+                pass
+
+
+def game_offer():
+    """A Steam game opened outside Game mode (gaming.lua): offer it, never switch alone."""
+    if read_json(runtime() / 'mode.json', {}).get('name') == 'game':
+        return
+    chosen = subprocess.run(['notify-send', '--app-name=Game mode', '--icon=input-gaming', '--wait',
+                             '--action=enable=Enable Game mode', 'Game started',
+                             'Free VRAM: close Chrome, Telegram, Thunderbird and Slack, pause local AI '
+                             'and background jobs. Everything comes back when you turn it off.'],
+                            capture_output=True, text=True, env=ENV).stdout.strip()
+    if chosen == 'enable':
+        profile('game')
+
+
+def split_nm(line):
+    fields, field, escaped = [], '', False
+    for char in line:
+        if escaped:
+            field += char
+            escaped = False
+        elif char == chr(92):
+            escaped = True
+        elif char == ':':
+            fields.append(field)
+            field = ''
+        else:
+            field += char
+    fields.append(field)
+    return fields
+
+
+def battery_watts(battery):
+    # Some firmware reports only current and voltage (micro-units).
+    try:
+        if (battery / 'power_now').exists():
+            return round(int((battery / 'power_now').read_text()) / 1e6, 1)
+        return round(int((battery / 'current_now').read_text()) * int((battery / 'voltage_now').read_text()) / 1e12, 1)
+    except (OSError, ValueError):
+        return None
+
+
+def laptop_state():
+    result = {'battery': None, 'brightness': None, 'profile': None, 'profiles': []}
+    for battery in Path('/sys/class/power_supply').glob('*'):
+        try:
+            if (battery / 'type').read_text().strip() != 'Battery':
+                continue
+            if (battery / 'scope').exists() and (battery / 'scope').read_text().strip() == 'Device':
+                continue
+            result['battery'] = {'percent': int((battery / 'capacity').read_text()),
+                                 'status': (battery / 'status').read_text().strip(),
+                                 'watts': battery_watts(battery)}
+            break
+        except (OSError, ValueError):
+            continue
+    try:
+        result['brightness'] = round(int(run(['brightnessctl', '-c', 'backlight', 'get'])) * 100 /
+                                     int(run(['brightnessctl', '-c', 'backlight', 'max'])))
+    except (OSError, ValueError, ZeroDivisionError, subprocess.SubprocessError):
+        pass
+    try:
+        result['profile'] = json.loads(run(PPD + ['--json=short', 'get-property'] + PPD_IFACE + ['ActiveProfile'],
+                                           timeout=2))['data']
+        raw = json.loads(run(PPD + ['--json=short', 'get-property'] + PPD_IFACE + ['Profiles'], timeout=2))
+        result['profiles'] = [item['Profile']['data'] for item in raw['data']]
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+        pass
+    return result
+
+
+def network_state():
+    """NetworkManager state without triggering probes or changing connections."""
+    links = []
+    lines = run(['nmcli', '-t', '-f', 'DEVICE,TYPE,STATE,CONNECTION', 'device']).decode().splitlines()
+    for fields in map(split_nm, lines):
+        if len(fields) < 4 or fields[1] not in {'ethernet', 'wifi'} or fields[2] != 'connected':
+            continue
+        device = fields[0]
+        details = run(['nmcli', '-t', '-f', 'GENERAL.CON-UUID,IP4.ADDRESS,IP4.GATEWAY,IP4.DNS,IP6.DNS', 'device', 'show', device]).decode().splitlines()
+        values = {}
+        for line in details:
+            key, _, value = line.partition(':')
+            values.setdefault(key.split('[')[0], []).append(value.replace('\\:', ':'))
+        def first(key):
+            return next(iter(values.get(key, [])), '')
+        stats = Path('/sys/class/net') / device / 'statistics'
+        def counter(name):
+            try: return int((stats / name).read_text())
+            except (OSError, ValueError): return None
+        links.append({'device': device, 'name': fields[3], 'type': fields[1],
+                      'uuid': first('GENERAL.CON-UUID'), 'address': first('IP4.ADDRESS'),
+                      'gateway': first('IP4.GATEWAY'), 'dns': values.get('IP4.DNS', []) + values.get('IP6.DNS', []),
+                      'received': counter('rx_bytes'), 'sent': counter('tx_bytes')})
+    connectivity = run(['nmcli', '-t', '-f', 'CONNECTIVITY', 'general']).decode().strip()
+    return {'connectivity': connectivity, 'links': links, 'timestamp': time.time()}
+
+
+def network_dns(provider, uuid):
+    # Scope changes to a visible physical connection, never VPN/Tailscale DNS.
+    state = network_state()
+    link = next((x for x in state['links'] if x['uuid'] == uuid), None)
+    if not link:
+        raise ValueError('Connection is no longer active')
+    servers = {'dhcp': '', 'cloudflare': '1.1.1.1,1.0.0.1', 'google': '8.8.8.8,8.8.4.4'}.get(provider)
+    if servers is None:
+        raise ValueError('Unknown DNS provider')
+    run(['nmcli', 'connection', 'modify', 'uuid', uuid,
+         'ipv4.ignore-auto-dns', 'no' if provider == 'dhcp' else 'yes', 'ipv4.dns', servers,
+         'ipv6.ignore-auto-dns', 'no' if provider == 'dhcp' else 'yes', 'ipv6.dns', ''])
+    run(['nmcli', 'device', 'reapply', link['device']])
+
+
+def controls():
+    result = {'mode': read_json(runtime() / 'mode.json', {}).get('name', 'normal'), 'capture': capture_settings()}
+    if os.environ.get('ONINIX_LAPTOP') == '1':
+        result['laptop'] = laptop_state()
+    for key, fn in [('dnd', lambda: 'do-not-disturb' in modes()), ('nightlight', nightlight)]:
+        try:
+            result[key] = fn()
+        except Exception:
+            result[key] = None
+    try:
+        lines = run(['nmcli', '-t', '-f', 'UUID,NAME,TYPE,ACTIVE', 'connection', 'show']).decode().splitlines()
+        result['connections'] = [dict(zip(['uuid', 'name', 'type', 'active'], split_nm(line))) for line in lines]
+    except Exception:
+        result['connections'] = None
+    try:
+        result['network'] = network_state()
+    except Exception:
+        result['network'] = None
+    try:
+        autostart = vpn_autostart()
+        result['vpns'] = [{**v, 'autostart': v['id'] in autostart} for v in vpn_profiles()]
+    except Exception:
+        result['vpns'] = None
+    try:
+        status = json.loads(run(['tailscale', 'status', '--json'], timeout=2))
+        state = status.get('BackendState', 'Unknown')
+        result['tailscale'] = {
+            'state': state,
+            'online': state == 'Running' and status.get('Self', {}).get('Online', False),
+            'ips': status.get('TailscaleIPs') or [],
+        }
+    except Exception:
+        result['tailscale'] = {'state': 'Unavailable', 'online': False, 'ips': []}
+    try:
+        run(['systemctl', '--user', 'is-active', '--quiet', 'oninix-keep-awake.service'])
+        result['awake'] = True
+        result['vdi'] = read_json(runtime().parent / 'vdi-pulse.json', None)
+    except subprocess.CalledProcessError:
+        result['awake'] = False
+    except Exception:
+        result['awake'] = None
+    return result
+
+
+VPN_PROFILES = Path('/etc/oninix/vpns.json')
+VPN_AUTOSTART = Path(os.environ.get('XDG_STATE_HOME', str(Path.home() / '.local/state'))) / 'oninix-vpn-autostart.json'
+
+
+def vpn_autostart():
+    return set(read_json(VPN_AUTOSTART, {}).get('ids', []))
+
+
+# OpenVPN system units (nixos/modules/vpn.nix). The unit runs while it retries;
+# the tunnel device exists only once the server has accepted the client.
+def vpn_profiles():
+    profiles = [p for p in read_json(VPN_PROFILES, []) if Path(p['key']).exists()]
+    if not profiles:
+        return []
+    states = run(['systemctl', 'show', '--property', 'ActiveState', '--value'] + [p['unit'] for p in profiles]).decode().split()
+    result = []
+    for p, state in zip(profiles, states):
+        up = Path('/sys/class/net', p['device']).exists()
+        running = state in {'active', 'activating', 'reloading'}
+        result.append({'id': p['id'], 'name': p['name'], 'unit': p['unit'], 'active': 'yes' if up else 'no',
+                       'state': 'connected' if up else 'connecting' if running else 'disconnected'})
+    return result
+
+
+def vpn_profile(vpn_id):
+    vpn = next((v for v in vpn_profiles() if v['id'] == vpn_id), None)
+    if not vpn:
+        raise ValueError('VPN profile is unavailable')
+    return vpn
+
+
+# Reconnecting after sleep or a network change is the units' own business
+# (openvpn-restart, the NM dispatcher hook); login only starts the chosen ones.
+def vpn_login():
+    wanted = vpn_autostart()
+    for vpn in vpn_profiles():
+        if vpn['id'] in wanted and vpn['state'] == 'disconnected':
+            run(['systemctl', 'start', vpn['unit']], timeout=30)
+
+
+def wifi_device():
+    for fields in map(split_nm, run(['nmcli', '-t', '-f', 'DEVICE,TYPE', 'device']).decode().splitlines()):
+        if len(fields) >= 2 and fields[1] == 'wifi':
+            return fields[0]
+    return None
+
+
+def wifi():
+    device = wifi_device()
+    if not device:
+        return {'device': None, 'enabled': False, 'networks': []}
+    enabled = run(['nmcli', '-t', '-f', 'WIFI', 'radio']).decode().strip() == 'enabled'
+    known = {}
+    for fields in map(split_nm, run(['nmcli', '-t', '-f', 'UUID,TYPE', 'connection', 'show']).decode().splitlines()):
+        if len(fields) >= 2 and fields[1] == '802-11-wireless':
+            ssid = run(['nmcli', '-g', '802-11-wireless.ssid', 'connection', 'show', 'uuid', fields[0]]).decode().strip()
+            known.setdefault(ssid.replace(chr(92) + ':', ':'), fields[0])
+    networks = {}
+    if enabled:
+        listing = run(['nmcli', '-t', '-f', 'IN-USE,SSID,SIGNAL,SECURITY', 'device', 'wifi', 'list',
+                       'ifname', device, '--rescan', 'no']).decode().splitlines()
+        for fields in map(split_nm, listing):
+            if len(fields) < 4 or not fields[1]:
+                continue
+            row = {'ssid': fields[1], 'signal': int(fields[2] or 0), 'security': fields[3].strip(),
+                   'active': fields[0] == '*', 'known': known.get(fields[1])}
+            best = networks.get(row['ssid'])
+            if not best or row['active'] or (not best['active'] and row['signal'] > best['signal']):
+                networks[row['ssid']] = row
+    rows = sorted(networks.values(), key=lambda r: (not r['active'], r['known'] is None, -r['signal']))
+    return {'device': device, 'enabled': enabled, 'networks': rows[:30]}
+
+
+def wifi_connect(ssid, password):
+    state = wifi()
+    net = next((n for n in state['networks'] if n['ssid'] == ssid), None)
+    if net is None:
+        raise ValueError('Network not found; scan again')
+    security = net['security'] if net['security'] != '--' else ''
+    if net['known'] and not password:
+        try:
+            run(['nmcli', 'connection', 'up', 'uuid', net['known']], timeout=60)
+        except subprocess.SubprocessError:
+            raise ValueError('Could not connect to ' + ssid)
+        return
+    if not security:
+        run(['nmcli', 'device', 'wifi', 'connect', ssid, 'ifname', state['device']], timeout=60)
+        return
+    if '802.1X' in security:
+        raise ValueError('Enterprise network: use Network settings')
+    if not password:
+        raise ValueError('Password required')
+    uuid, created = net['known'], False
+    if not uuid:
+        key = 'sae' if 'WPA3' in security and 'WPA2' not in security else 'wpa-psk'
+        out = run(['nmcli', 'connection', 'add', 'type', 'wifi', 'ifname', state['device'], 'con-name', ssid,
+                   'ssid', ssid, 'wifi-sec.key-mgmt', key]).decode()
+        uuid, created = re.search(r'\(([0-9a-f-]{36})\)', out).group(1), True
+    # The password reaches nmcli through a private file, never the command line.
+    secret = runtime() / 'wifi-secret'
+    try:
+        secret.write_text(f'802-11-wireless-security.psk:{password}\n')
+        run(['nmcli', 'connection', 'up', 'uuid', uuid, 'passwd-file', secret], timeout=60)
+    except subprocess.SubprocessError:
+        if created:
+            run(['nmcli', 'connection', 'delete', 'uuid', uuid])
+        raise ValueError('Could not connect: check the password')
+    finally:
+        secret.unlink(missing_ok=True)
+
+
+# ---- Control Center settings (Devices, Session and System tabs) ----
+# Per-machine preferences live in $XDG_STATE_HOME/oninix/*.conf as key=value
+# lines; Hyprland reads them as data (hypr/prefs.lua), hypridle via idle.sh.
+STATE_HOME = Path(os.environ.get('XDG_STATE_HOME', str(Path.home() / '.local/state')))
+ONINIX_STATE = STATE_HOME / 'oninix'
+LAPTOP = os.environ.get('ONINIX_LAPTOP') == '1'
+TZ_MANUAL = Path('/var/lib/oninix/timezone-manual')
+USER_AUTOSTART = Path.home() / '.config/autostart'
+INPUT_DEFAULTS = {'layouts': 'us,ru', 'repeat_rate': '25', 'repeat_delay': '600', 'mouse_speed': '0',
+                  'mouse_natural': 'no', 'scroll': '0.7', 'natural': 'yes', 'tap': 'yes'}
+INPUT_VALUES = {'layouts': r'[a-z]{2,3}(,[a-z]{2,3}){0,3}', 'repeat_rate': r'[1-7]\d|80', 'repeat_delay': r'[1-9]\d{2}|1000',
+                'mouse_speed': r'-?(0(\.\d{1,2})?|1(\.0{1,2})?)', 'mouse_natural': 'yes|no',
+                'scroll': r'(0\.(\d[1-9]|[1-9]\d?)|1(\.\d{1,2})?|2(\.0{1,2})?)',
+                'natural': 'yes|no', 'tap': 'yes|no'}
+IDLE_DEFAULTS = {'lock': 5, 'screen': 6, 'suspend': 0} if LAPTOP else {'lock': 20, 'screen': 0, 'suspend': 0}
+DEFAULT_APPS = [
+    ('browser', 'Web browser', ['x-scheme-handler/http', 'x-scheme-handler/https', 'text/html']),
+    ('mail', 'Email', ['x-scheme-handler/mailto']),
+    ('files', 'Files', ['inode/directory']),
+    ('pdf', 'PDF', ['application/pdf']),
+    ('image', 'Images', ['image/png', 'image/jpeg', 'image/webp']),
+    ('video', 'Video', ['video/mp4', 'video/x-matroska', 'video/webm']),
+    ('audio', 'Music', ['audio/mpeg', 'audio/flac', 'audio/ogg']),
+    ('text', 'Text', ['text/plain']),
+]
+# Started by hypr/autostart.lua, not XDG autostart: shown, not switchable here.
+SESSION_APPS = ['Quickshell panels', 'Clipboard history', 'Idle and lock (hypridle)']
+WM_CLASS = re.compile(r'[A-Za-z0-9._ -]{1,64}')
+
+
+def read_conf(name):
+    try:
+        lines = (ONINIX_STATE / f'{name}.conf').read_text().splitlines()
+    except OSError:
+        return {}
+    return dict(line.split('=', 1) for line in lines if '=' in line)
+
+
+def write_conf(name, values):
+    ONINIX_STATE.mkdir(parents=True, exist_ok=True)
+    path = ONINIX_STATE / f'{name}.conf'
+    tmp = path.with_suffix('.tmp')
+    tmp.write_text(''.join(f'{k}={v}\n' for k, v in values.items()))
+    tmp.replace(path)
+
+
+def desktop_entry(path):
+    data, section = {}, None
+    try:
+        text = path.read_text(errors='replace')
+    except OSError:
+        return {}
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith('['):
+            section = line
+        elif section == '[Desktop Entry]' and '=' in line and not line.startswith('#'):
+            key, value = line.split('=', 1)
+            data.setdefault(key.strip(), value.strip())
+    return data
+
+
+def applications():
+    dirs = [Path.home() / '.local/share'] + [Path(d) for d in os.environ.get('XDG_DATA_DIRS', '').split(':') if d]
+    apps = {}
+    for base in (d / 'applications' for d in dirs):
+        for path in sorted(base.rglob('*.desktop')) if base.is_dir() else []:
+            app_id = str(path.relative_to(base))[:-8].replace('/', '-')
+            if app_id in apps:
+                continue
+            entry = desktop_entry(path)
+            apps[app_id] = {'path': path, 'name': entry.get('Name', app_id),
+                            'mime': [m for m in entry.get('MimeType', '').split(';') if m],
+                            'class': entry.get('StartupWMClass', ''),
+                            'shown': entry.get('Type') == 'Application' and entry.get('NoDisplay') != 'true'
+                            and entry.get('Hidden') != 'true'}
+    return apps
+
+
+def applies_here(entry):
+    desktops = {'Hyprland'}
+    only = {d for d in entry.get('OnlyShowIn', '').split(';') if d}
+    never = {d for d in entry.get('NotShowIn', '').split(';') if d}
+    return (not only or only & desktops) and not never & desktops
+
+
+def autostart_dirs():
+    dirs = [Path(d) / 'autostart' for d in os.environ.get('XDG_CONFIG_DIRS', '/etc/xdg').split(':') if d]
+    return [d for d in dirs if d.is_dir()]
+
+
+def system_autostart(name):
+    return next((d / f'{name}.desktop' for d in autostart_dirs() if (d / f'{name}.desktop').exists()), None)
+
+
+def autostart_entries():
+    names = {p.stem for d in autostart_dirs() + [USER_AUTOSTART] if d.is_dir() for p in d.glob('*.desktop')}
+    rows = []
+    for name in sorted(names):
+        system, user = system_autostart(name), USER_AUTOSTART / f'{name}.desktop'
+        entry = desktop_entry(user if user.exists() else system)
+        base = desktop_entry(system) if system else entry
+        rows.append({'id': name, 'name': base.get('Name', name),
+                     'enabled': entry.get('Hidden') != 'true' and entry.get('X-GNOME-Autostart-enabled') != 'false',
+                     'system': system is not None, 'applies': bool(applies_here(base))})
+    return rows
+
+
+def set_desktop_hidden(path, hidden):
+    lines = [l for l in path.read_text().splitlines()
+             if not l.startswith(('Hidden=', 'X-GNOME-Autostart-enabled='))]
+    if hidden:
+        at = lines.index('[Desktop Entry]') + 1 if '[Desktop Entry]' in lines else 0
+        lines.insert(at, 'Hidden=true')
+    path.write_text('\n'.join(lines) + '\n')
+
+
+def autostart_set(name, on):
+    system, user = system_autostart(name), USER_AUTOSTART / f'{name}.desktop'
+    if not system and not user.exists():
+        raise ValueError('Autostart entry is unavailable')
+    USER_AUTOSTART.mkdir(parents=True, exist_ok=True)
+    if on and user.exists() and desktop_entry(user).get('X-OniNix-Override') == 'true':
+        user.unlink()
+    elif user.exists():
+        set_desktop_hidden(user, not on)
+    elif not on:
+        # A system entry is switched off by a user copy that hides it.
+        user.write_text('[Desktop Entry]\nType=Application\nName=' + desktop_entry(system).get('Name', name)
+                        + '\nHidden=true\nX-OniNix-Override=true\n')
+
+
+def battery_health():
+    for bat in Path('/sys/class/power_supply').glob('BAT*'):
+        def read(name):
+            try:
+                return int((bat / name).read_text())
+            except (OSError, ValueError):
+                return None
+        full = read('energy_full') or read('charge_full')
+        design = read('energy_full_design') or read('charge_full_design')
+        return {'cycles': read('cycle_count'), 'health': round(full * 100 / design) if full and design else None,
+                'limit': read('charge_control_end_threshold')}
+    return None
+
+
+def printers():
+    if not shutil.which('lpstat'):
+        return None
+    queues = [line.strip() for line in run(['lpstat', '-e']).decode().splitlines() if line.strip()]
+    default = run(['lpstat', '-d']).decode()
+    jobs = [line for line in run(['lpstat', '-o']).decode().splitlines() if line.strip()]
+    return {'queues': queues, 'default': default.split(':', 1)[1].strip() if ':' in default else '', 'jobs': len(jobs)}
+
+
+def timezone():
+    zone = run(['timedatectl', 'show', '-p', 'Timezone', '--value']).decode().strip()
+    zones = run(['timedatectl', 'list-timezones']).decode().split()
+    try:
+        run(['systemctl', 'is-active', '--quiet', 'automatic-timezoned.service'])
+        service = True
+    except subprocess.CalledProcessError:
+        service = False
+    return {'zone': zone, 'zones': zones, 'auto': not TZ_MANUAL.exists(), 'service': service}
+
+
+def nightlight_settings():
+    theme = STATE_HOME / 'theme'
+    data = read_json(theme / 'nightlight.json', {})
+    return {'on': (theme / 'nightlight').exists(), 'kelvin': data.get('kelvin', 4000),
+            'from': data.get('from', ''), 'to': data.get('to', '')}
+
+
+def system_info():
+    profiles = Path('/nix/var/nix/profiles')
+    current = int(re.search(r'(\d+)', os.readlink(profiles / 'system')).group(1))
+    generations = sorted(int(m.group(1)) for p in profiles.glob('system-*-link')
+                         if (m := re.match(r'system-(\d+)-link$', p.name)))
+    built = (profiles / f'system-{current}-link').lstat().st_mtime
+    disks, seen = [], set()
+    for line in run(['df', '-B1', '--output=target,size,used', '/', '/home', '/nix']).decode().splitlines()[1:]:
+        target, size, used = line.split()
+        if (size, used) not in seen:
+            seen.add((size, used))
+            disks.append({'mount': target, 'size': int(size), 'used': int(used)})
+    return {'version': run(['nixos-version']).decode().strip(), 'generation': current,
+            'generations': len(generations), 'built': int(built), 'disks': disks}
+
+
+def default_apps(apps):
+    rows = []
+    for key, label, mimes in DEFAULT_APPS:
+        current = run(['xdg-mime', 'query', 'default', mimes[0]]).decode().strip().removesuffix('.desktop')
+        choices = sorted(({'id': i, 'name': a['name']} for i, a in apps.items() if a['shown'] and mimes[0] in a['mime']),
+                         key=lambda c: c['name'].lower())
+        rows.append({'key': key, 'label': label, 'current': current, 'choices': choices})
+    return rows
+
+
+def workspace_rules():
+    rules = [{'class': k, 'workspace': int(v)} for k, v in read_conf('workspaces').items()
+             if WM_CLASS.fullmatch(k) and v.isdigit()]
+    try:
+        clients = json.loads(run(['hyprctl', 'clients', '-j']))
+        running = sorted({c['class'] for c in clients if c.get('class') and WM_CLASS.fullmatch(c['class'])})
+    except (subprocess.SubprocessError, ValueError):
+        running = []
+    return {'rules': rules, 'running': running, 'fixed': []}
+
+
+CAPTURE_DEFAULTS = {'mode': 'region', 'audio': 'yes', 'mic': 'no', 'pointer': 'no',
+                    'key': 'SUPER+SHIFT+S', 'key_save': 'CTRL+SUPER+SHIFT+S'}
+KEY_COMBO = r'((SUPER|CTRL|ALT|SHIFT)\+){1,4}([A-Z0-9]|F([1-9]|1[0-2])|Print|space)'
+CAPTURE_VALUES = {'mode': 'region|screen|video', 'audio': 'yes|no', 'mic': 'yes|no', 'pointer': 'yes|no',
+                  'key': KEY_COMBO, 'key_save': KEY_COMBO}
+MOD_BITS = {'SHIFT': 1, 'CTRL': 4, 'ALT': 8, 'SUPER': 64}
+
+
+def capture_settings():
+    return {**CAPTURE_DEFAULTS, **{k: v for k, v in read_conf('capture').items()
+                                   if k in CAPTURE_VALUES and re.fullmatch(CAPTURE_VALUES[k], v)}}
+
+
+def bind_owner(combo):
+    *mods, key = combo.split('+')
+    mask = sum(MOD_BITS[m] for m in set(mods))
+    for bind in json.loads(run(['hyprctl', 'binds', '-j'])):
+        if bind.get('modmask') == mask and bind.get('key', '').lower() == key.lower() and not bind.get('release'):
+            return bind.get('description') or bind.get('dispatcher') or 'another shortcut'
+    return None
+
+
+def capture_set(key, value):
+    if key not in CAPTURE_VALUES or not re.fullmatch(CAPTURE_VALUES[key], value):
+        raise ValueError('Invalid capture setting')
+    current = capture_settings()
+    if key in {'key', 'key_save'}:
+        other = current['key_save' if key == 'key' else 'key']
+        owner = bind_owner(value)
+        if value == other or owner and not owner.startswith('capture'):
+            raise ValueError('Already used by: ' + (owner or 'the other capture key'))
+    write_conf('capture', {**current, key: value})
+    if key in {'key', 'key_save'}:
+        run(['hyprctl', 'reload'])
+
+
+def settings():
+    apps = applications()
+    result = {'laptop': LAPTOP}
+    sections = {
+        'input': lambda: {**INPUT_DEFAULTS, **{k: v for k, v in read_conf('input').items()
+                                               if k in INPUT_VALUES and re.fullmatch(INPUT_VALUES[k], v)}},
+        'touchpad': lambda: any('touchpad' in m['name'] for m in json.loads(run(['hyprctl', 'devices', '-j']))['mice']),
+        'idle': lambda: {**IDLE_DEFAULTS, **{k: int(v) for k, v in read_conf('idle').items()
+                                             if k in IDLE_DEFAULTS and v.isdigit()}},
+        'battery': battery_health,
+        'printers': printers,
+        'scanners': scanners,
+        'timezone': timezone,
+        'nightlight': nightlight_settings,
+        'system': system_info,
+        'defaults': lambda: default_apps(apps),
+        'autostart': autostart_entries,
+        'sessionApps': lambda: SESSION_APPS,
+        'apps': lambda: sorted(({'id': i, 'name': a['name']} for i, a in apps.items() if a['shown']),
+                               key=lambda a: a['name'].lower()),
+        'workspaces': workspace_rules,
+        'capture': capture_settings,
+    }
+    for key, fn in sections.items():
+        try:
+            result[key] = fn()
+        except Exception:
+            result[key] = None
+    return result
+
+
+def scanners():
+    """Network discovery takes seconds: a background refresh at most every 5 minutes."""
+    if not shutil.which('scanimage'):
+        return None
+    cache, pending = runtime() / 'scanners.json', runtime() / 'scanners.pending'
+    data = read_json(cache, None)
+    stale = data is None or time.time() - data.get('at', 0) > 300
+    busy = pending.exists() and time.time() - pending.stat().st_mtime < 60
+    if stale and not busy:
+        pending.touch()
+        subprocess.Popen([sys.argv[0], 'scanners-refresh'], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, start_new_session=True, env=ENV)
+        busy = True
+    return {'devices': data['devices'] if data else [], 'searching': busy}
+
+
+def scanners_refresh():
+    try:
+        out = run(['scanimage', '-L'], timeout=40).decode(errors='replace')
+        # Webcams show up through SANE's v4l backend; they are not scanners.
+        devices = [{'id': d, 'name': n} for d, n in re.findall(r"device `([^']+)' is an? (.+)", out)
+                   if not d.startswith('v4l:')]
+        save(runtime() / 'scanners.json', {'at': time.time(), 'devices': devices})
+    finally:
+        (runtime() / 'scanners.pending').unlink(missing_ok=True)
+
+
+def restart_idle():
+    subprocess.run(['pkill', '-x', 'hypridle'], check=False)
+    subprocess.Popen(['uwsm', 'app', '--', str(Path.home() / '.config/hypr/scripts/idle.sh')],
+                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                     start_new_session=True, env=ENV)
+
+
+def set_input(key, value):
+    paths = {'layouts': 'kb_layout', 'repeat_rate': 'repeat_rate', 'repeat_delay': 'repeat_delay',
+             'mouse_speed': 'sensitivity', 'mouse_natural': 'natural_scroll', 'scroll': 'touchpad.scroll_factor',
+             'natural': 'touchpad.natural_scroll', 'tap': 'touchpad.tap_to_click'}
+    def expression(v):
+        val = json.dumps(v) if key == 'layouts' else ('true' if v == 'yes' else 'false') if key in {
+            'mouse_natural', 'natural', 'tap'} else str(round(float(v))) if key in {
+            'repeat_rate', 'repeat_delay'} else str(float(v))
+        parts = paths[key].split('.')
+        body = parts[-1] + ' = ' + val
+        if len(parts) == 2:
+            body = parts[0] + ' = {' + body + '}'
+        return 'hl.config({ input = {' + body + '} })'
+    ONINIX_STATE.mkdir(parents=True, exist_ok=True)
+    with (ONINIX_STATE / 'input.lock').open('w') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        old = read_conf('input')
+        previous = old.get(key, INPUT_DEFAULTS[key])
+        if previous == value:
+            return
+        # A full reload rebuilt keymaps and disconnected Wayland clients on 0.56.2.
+        # Only apply the changed option, then persist it for the next login/reload.
+        result = run(['hyprctl', 'eval', expression(value)]).decode().strip()
+        if result != 'ok':
+            raise RuntimeError('Hyprland could not apply the input setting')
+        try:
+            write_conf('input', {**old, key: value})
+        except Exception:
+            run(['hyprctl', 'eval', expression(previous)])
+            raise
+
+
+def settings_action(command, args):
+    if command == 'input-set' and len(args) == 2 and args[0] in INPUT_VALUES:
+        if not re.fullmatch(INPUT_VALUES[args[0]], args[1]):
+            raise ValueError('Invalid value')
+        set_input(*args)
+    elif command == 'idle-set' and len(args) == 2 and args[0] in IDLE_DEFAULTS and args[1].isdigit() and int(args[1]) <= 720:
+        write_conf('idle', {**IDLE_DEFAULTS, **read_conf('idle'), args[0]: str(int(args[1]))})
+        restart_idle()
+    elif command == 'nightlight-set' and len(args) == 3:
+        kelvin, start, end = args
+        hm = re.compile(r'([01]\d|2[0-3]):[0-5]\d')
+        if not (kelvin.isdigit() and 2500 <= int(kelvin) <= 6000) or (start or end) and not (hm.fullmatch(start) and hm.fullmatch(end)):
+            raise ValueError('Invalid night light settings')
+        theme = STATE_HOME / 'theme'
+        theme.mkdir(parents=True, exist_ok=True)
+        save(theme / 'nightlight.json', {'kelvin': int(kelvin), 'from': start, 'to': end})
+        run([BIN / 'theme-schedule'], timeout=20)
+    elif command == 'tz-auto' and len(args) == 1 and args[0] in {'on', 'off'}:
+        if args[0] == 'on':
+            TZ_MANUAL.unlink(missing_ok=True)
+            run(['systemctl', 'start', 'automatic-timezoned.service'], timeout=20)
+        else:
+            TZ_MANUAL.touch()
+            run(['systemctl', 'stop', 'automatic-timezoned.service'], timeout=20)
+    elif command == 'tz-set' and len(args) == 1:
+        if args[0] not in run(['timedatectl', 'list-timezones']).decode().split():
+            raise ValueError('Unknown time zone')
+        TZ_MANUAL.touch()
+        subprocess.run(['systemctl', 'stop', 'automatic-timezoned.service'], capture_output=True, env=ENV)
+        run(['timedatectl', 'set-timezone', args[0]], timeout=20)
+    elif command == 'printer-default' and len(args) == 1:
+        if args[0] not in (printers() or {}).get('queues', []):
+            raise ValueError('Printer is unavailable')
+        run(['lpoptions', '-d', args[0]])
+    elif command == 'print-cancel' and not args:
+        run(['cancel', '-a'])
+    elif command == 'default-app' and len(args) == 2:
+        category = next((c for c in DEFAULT_APPS if c[0] == args[0]), None)
+        app = applications().get(args[1])
+        if not category or not app or category[2][0] not in app['mime']:
+            raise ValueError('Application cannot open these files')
+        run(['xdg-mime', 'default', args[1] + '.desktop'] + [m for m in category[2] if m in app['mime']])
+    elif command == 'autostart-set' and len(args) == 2 and args[1] in {'on', 'off'} and re.fullmatch(r'[\w.@+-]+', args[0]):
+        autostart_set(args[0], args[1] == 'on')
+    elif command == 'autostart-add' and len(args) == 1:
+        app = applications().get(args[0])
+        if not app or not app['shown']:
+            raise ValueError('Application is unavailable')
+        USER_AUTOSTART.mkdir(parents=True, exist_ok=True)
+        target = USER_AUTOSTART / Path(app['path']).name
+        if not target.exists():
+            target.write_text(Path(app['path']).read_text())
+    elif command == 'autostart-remove' and len(args) == 1 and re.fullmatch(r'[\w.@+-]+', args[0]):
+        if system_autostart(args[0]):
+            raise ValueError('System entries can only be switched off')
+        (USER_AUTOSTART / f'{args[0]}.desktop').unlink(missing_ok=True)
+    elif command == 'capture-set' and len(args) == 2:
+        capture_set(*args)
+    elif command == 'workspace-set' and len(args) == 2 and WM_CLASS.fullmatch(args[0]) and args[1].isdigit() and int(args[1]) <= 10:
+        rules = {k: v for k, v in read_conf('workspaces').items() if k != args[0]}
+        if int(args[1]) > 0:
+            rules[args[0]] = str(int(args[1]))
+        write_conf('workspaces', rules)
+        run(['hyprctl', 'reload'])
+    else:
+        return False
+    return True
+
+
+def notification_owner():
+    # IDs restart with the notification daemon. Scope UI marks to its D-Bus owner.
+    return run(['busctl', '--user', 'call', 'org.freedesktop.DBus',
+                '/org/freedesktop/DBus', 'org.freedesktop.DBus', 'GetNameOwner',
+                's', 'org.freedesktop.Notifications']).decode().strip()
+
+
+def notification_state(owner):
+    state = read_json(runtime() / 'notifications-state.json', {})
+    return state if state.get('owner') == owner else {'owner': owner}
+
+
+def notification_update(owner, **changes):
+    with (runtime() / 'notifications.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        state = notification_state(owner)
+        state.update(changes)
+        save(runtime() / 'notifications-state.json', state)
+
+
+def notifications(popup_only=False):
+    owner = notification_owner()
+    result = {'owner': owner}
+    for kind, command in ([('current', 'list')] if popup_only else [('current', 'list'), ('history', 'history')]):
+        raw = json.loads(run(['makoctl', command, '-j']))
+        rows = raw.get('data', []) if isinstance(raw, dict) else raw
+        result[kind] = [item for row in rows for item in (row if isinstance(row, list) else [row]) if isinstance(item, dict)]
+    if popup_only:
+        active_modes = modes()
+        rules = notes.load_rules()
+        rows = []
+        for n in result['current']:
+            n['tier'] = 'critical' if n.get('urgency') == 'critical' else notes.tier(n.get('app_name', ''), n.get('summary', ''), rules)
+            if not n.get('actions') or n['tier'] in ('quiet', 'hidden'):
+                continue
+            if 'gaming' in active_modes or ('do-not-disturb' in active_modes and n['tier'] != 'critical'):
+                continue
+            rows.append(n)
+        return {'current': rows}
+    ids = {n['id'] for n in result['current'] + result['history'] if isinstance(n.get('id'), int)}
+    state = notification_state(owner)
+    cleared, hidden = state.get('cleared', 0), set(state.get('hidden', []))
+    rules = notes.load_rules()
+    quiet = set()
+    for kind in ('current', 'history'):
+        result[kind] = [n for n in result[kind] if n.get('id', 0) > cleared and n.get('id') not in hidden]
+        for n in result[kind]:
+            # Critical alerts are never quieter than critical, whatever the rules say.
+            n['tier'] = 'critical' if n.get('urgency') == 'critical' else notes.tier(n.get('app_name', ''), n.get('summary', ''), rules)
+            if n['tier'] == 'quiet':
+                quiet.add(n.get('id'))
+    result['latest'] = max(ids, default=0)
+    # Quiet notifications wait in the centre without raising the unread count.
+    result['unread'] = sum(1 for i in ids if i > max(state.get('seen', 0), cleared) and i not in hidden and i not in quiet)
+    result['rules'] = rules
+    try:
+        result['suggestions'] = notes.suggestions(rules=rules)
+    except OSError:
+        result['suggestions'] = []
+    return result
+
+
+def notification_hide(identifier, snapshot=None):
+    data = snapshot or notifications()
+    if any(n.get('id') == identifier for n in data['current']):
+        try:
+            run(['makoctl', 'dismiss', '-n', str(identifier), '--no-history'])
+        except subprocess.CalledProcessError:
+            pass  # It may have expired between the snapshot and dismissal.
+    with (runtime() / 'notifications.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        state = notification_state(data['owner'])
+        state['hidden'] = sorted(set(state.get('hidden', [])) | {identifier})[-512:]
+        save(runtime() / 'notifications-state.json', state)
+
+
+def notification_open(identifier):
+    data = notifications()
+    item = next((n for n in data['current'] if n.get('id') == identifier), None)
+    # Only the default action means opening. Never guess a reply/delete action.
+    if item and 'default' in (item.get('actions') or {}):
+        try:
+            run(['makoctl', 'invoke', '-n', str(identifier), '--', 'default'])
+        except subprocess.CalledProcessError:
+            pass  # Expired actions fall back to dismissal.
+    notification_hide(identifier)
+
+
+def clipboard_rows():
+    return [line for line in run(['cliphist', 'list']).decode(errors='replace').splitlines() if re.match(r'^\d+\t', line)]
+
+
+def clip_line(identifier):
+    if not re.fullmatch(r'\d+', identifier):
+        raise ValueError('Invalid clipboard ID')
+    line = next((line for line in clipboard_rows() if line.split('\t', 1)[0] == identifier), None)
+    if line is None:
+        raise ValueError('This clipboard entry has expired')
+    return line
+
+
+def decode(line, limit=16 * 1024 * 1024, timeout=3):
+    with subprocess.Popen(['cliphist', 'decode'], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                          stderr=subprocess.DEVNULL, env=ENV) as process:
+        try:
+            process.stdin.write((line + '\n').encode())
+            process.stdin.close()
+            data = bytearray()
+            deadline = time.monotonic() + timeout
+            with selectors.DefaultSelector() as selector:
+                selector.register(process.stdout, selectors.EVENT_READ)
+                while True:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0 or not selector.select(remaining):
+                        raise ValueError('Clipboard entry took too long to read')
+                    chunk = os.read(process.stdout.fileno(), min(65536, limit + 1 - len(data)))
+                    if not chunk:
+                        break
+                    data.extend(chunk)
+                    if len(data) > limit:
+                        raise ValueError('Entry is too large for the desktop preview (16 MiB)')
+            if process.wait(timeout=max(0.01, deadline - time.monotonic())):
+                raise ValueError('Clipboard entry is unavailable')
+            return bytes(data)
+        finally:
+            if process.poll() is None:
+                process.kill()
+            process.wait()
+
+
+CLIP_PINS_MAX = 12
+CLIP_PIN_BYTES = 64 * 1024
+
+
+def clip_pins_path():
+    # Host-local and outside Git and oninix-profile: pins can hold tokens.
+    return shell.state() / 'oninix/clipboard-pins.json'
+
+
+def clip_pins():
+    pins = read_json(clip_pins_path(), [])
+    return [p for p in pins if isinstance(p, dict) and isinstance(p.get('key'), str) and isinstance(p.get('text'), str)] if isinstance(pins, list) else []
+
+
+def clip_pins_save(pins):
+    path = clip_pins_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix('.tmp')
+    with os.fdopen(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), 'w') as stream:
+        json.dump(pins, stream)
+    tmp.replace(path)
+
+
+def clip_text(identifier):
+    """Full text of a history entry (digits) or a pin ("pin:<key>")."""
+    if identifier.startswith('pin:'):
+        pin = next((p for p in clip_pins() if p['key'] == identifier[4:]), None)
+        if pin is None:
+            raise ValueError('This pinned entry no longer exists')
+        return pin['text'].encode()
+    return decode(clip_line(identifier))
+
+
+def clip_pin(identifier):
+    data = clip_text(identifier)
+    if b'\x00' in data[:4096] or data.startswith((b'\x89PNG', b'\xff\xd8\xff', b'GIF8', b'RIFF')):
+        raise ValueError('Only text entries can be pinned')
+    if len(data) > CLIP_PIN_BYTES:
+        raise ValueError('Entry is too large to pin (64 KiB)')
+    text = data.decode(errors='replace')
+    pins = [p for p in clip_pins() if p['text'] != text]
+    if len(pins) >= CLIP_PINS_MAX:
+        raise ValueError(f'Up to {CLIP_PINS_MAX} pins: unpin one first')
+    pins.insert(0, {'key': hashlib.sha256(text.encode()).hexdigest()[:12], 'text': text, 'at': int(time.time())})
+    clip_pins_save(pins)
+
+
+def clip_transform(identifier, kind):
+    text = clip_text(identifier).decode(errors='strict').strip()
+    if kind == 'json':
+        result = json.dumps(json.loads(text), indent=2, ensure_ascii=False)
+    elif kind == 'base64':
+        import base64
+        import binascii
+        try:
+            raw = base64.b64decode(text + '=' * (-len(text) % 4), altchars=b'-_' if ('-' in text or '_' in text) else None, validate=True)
+            result = raw.decode('utf-8')
+        except (binascii.Error, UnicodeDecodeError):
+            raise ValueError('Not base64-encoded text')
+    else:
+        raise ValueError('Unknown transform')
+    subprocess.run(['wl-copy'], input=result.encode(), stdout=subprocess.DEVNULL,
+                   stderr=subprocess.DEVNULL, timeout=6, check=True, env=ENV)
+
+
+def clipboard():
+    rows = []
+    directory = runtime() / 'clipboard'
+    directory.mkdir(mode=0o700, exist_ok=True)
+    for old in directory.glob('*.preview'):
+        old.unlink()
+    rows = [{'id': 'pin:' + p['key'], 'text': p['text'][:8192], 'image': '', 'pinned': True} for p in clip_pins()]
+    for line in clipboard_rows()[:200]:
+        identifier, text = line.split('\t', 1)
+        row = {'id': identifier, 'text': text, 'image': '', 'pinned': False}
+        if len(rows) < 30:
+            try:
+                data = decode(line)
+                if data.startswith((b'\x89PNG\r\n', b'\xff\xd8\xff', b'GIF87a', b'GIF89a')) or (data[:4] == b'RIFF' and data[8:12] == b'WEBP'):
+                    target = directory / (identifier + '.preview')
+                    target.write_bytes(data)
+                    row['image'] = target.as_uri()
+                elif b'\x00' not in data[:4096]:
+                    row['text'] = data[:8192].decode(errors='replace')
+            except Exception:
+                pass
+        rows.append(row)
+    return rows
+
+
+SHELF_MAX = 5
+SHELF_IMAGES = ('.png', '.jpg', '.jpeg', '.webp', '.gif')
+
+
+def shelf_dir():
+    # A temporary tray: runtime tmpfs, gone after logout or reboot.
+    path = runtime() / 'shelf'
+    path.mkdir(mode=0o700, exist_ok=True)
+    return path
+
+
+def shelf_items():
+    entries = read_json(shelf_dir() / 'shelf.json', [])
+    return [e for e in entries if isinstance(e, dict) and isinstance(e.get('path'), str)] if isinstance(entries, list) else []
+
+
+def shelf_save(entries):
+    save(shelf_dir() / 'shelf.json', entries)
+
+
+def shelf_drop(entry):
+    # Only copies the shelf made itself are deleted; added files stay where they are.
+    if entry.get('owned'):
+        Path(entry['path']).unlink(missing_ok=True)
+
+
+def shelf_add(paths, copy=False):
+    with (shelf_dir() / 'shelf.lock').open('w') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        entries = shelf_items()
+        for raw in paths:
+            source = Path(raw).expanduser()
+            if not source.is_file():
+                raise ValueError('Not a file: ' + source.name)
+            if copy:
+                target = shelf_dir() / source.name
+                shutil.copyfile(source, target)
+                target.chmod(0o600)
+                entry = {'path': str(target), 'owned': True}
+            else:
+                entry = {'path': str(source.resolve()), 'owned': False}
+            entries = [e for e in entries if e['path'] != entry['path']]
+            entries.insert(0, entry)
+        for old in entries[SHELF_MAX:]:
+            shelf_drop(old)
+        shelf_save(entries[:SHELF_MAX])
+
+
+def shelf_clip(data):
+    """Files copied in a file manager (text/uri-list on the clipboard) join the shelf by path."""
+    paths = []
+    for line in data.decode(errors='replace').splitlines():
+        line = line.strip()
+        if not line.startswith('file://'):
+            continue
+        path = Path(urllib.parse.unquote(urllib.parse.urlsplit(line).path))
+        # Already-shelved copies and folders stay out; the shelf holds files.
+        if path.is_file() and shelf_dir() not in path.parents:
+            paths.append(str(path))
+    if paths:
+        # Oldest first, so the first copied file ends on top.
+        shelf_add(list(reversed(paths[:SHELF_MAX])))
+
+
+def shelf_remove(path):
+    with (shelf_dir() / 'shelf.lock').open('w') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        entries = shelf_items()
+        for entry in entries:
+            if path in (entry['path'], '*'):
+                shelf_drop(entry)
+        shelf_save([e for e in entries if path not in (e['path'], '*')])
+
+
+def shelf():
+    rows = []
+    for entry in shelf_items():
+        target = Path(entry['path'])
+        if not target.is_file():
+            continue
+        rows.append({'path': str(target), 'name': target.name, 'uri': target.as_uri(),
+                     'image': target.suffix.lower() in SHELF_IMAGES, 'size': target.stat().st_size})
+    return rows
+
+
+DESKTOP_DEFAULTS = {'windows': 'flat', 'gap': '0', 'outer': '0', 'motion': 'off', 'density': 'compact', 'agent': 'claude',
+                    **ui_metrics.preference_defaults()}
+
+
+def desktop_path():
+    return Path(os.environ.get('XDG_STATE_HOME', str(Path.home() / '.local/state'))) / 'theme/desktop.conf'
+
+
+def desktop_preferences():
+    values = DESKTOP_DEFAULTS.copy()
+    try:
+        for line in desktop_path().read_text().splitlines():
+            if '=' not in line:
+                continue
+            key, value = line.split('=', 1)
+            if key in values and valid_preference(key, value):
+                values[key] = value
+    except (OSError, ValueError):
+        pass
+    return values
+
+
+def valid_preference(key, value):
+    if key.startswith('ui_'):
+        return ui_metrics.valid_preference(key, value)
+    return (key in {'gap', 'outer'} and value.isdigit() and 0 <= int(value) <= 24 and int(value) % 2 == 0) or value in {
+        'windows': {'flat', 'soft'}, 'motion': {'off', 'subtle', 'smooth'},
+        'density': {'compact', 'comfortable'}, 'agent': {'claude', 'codex', 'opencode', 'agy'}
+    }.get(key, set())
+
+
+def set_desktop_preference(key, value):
+    if not valid_preference(key, value):
+        raise ValueError('Invalid desktop preference')
+    path = desktop_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with (path.parent / 'desktop.lock').open('w') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        old = path.read_bytes() if path.exists() else None
+        prefs = desktop_preferences()
+        prefs[key] = value
+        temp = path.with_suffix('.tmp')
+        temp.write_text(''.join(f'{k}={v}\n' for k, v in prefs.items()))
+        temp.replace(path)
+        if key == 'agent':
+            return
+        expression = 'dofile(' + json.dumps(str(Path.home() / '.config/hypr/appearance.lua')) + ')'
+        try:
+            if key in {'windows', 'density'} or key.startswith('ui_'):
+                run([BIN / 'theme', 'metrics-apply'], timeout=120)
+            output = run(['hyprctl', 'eval', expression]).decode().strip()
+            if output != 'ok':
+                raise RuntimeError('Hyprland could not apply desktop appearance')
+        except Exception:
+            if old is None:
+                path.unlink(missing_ok=True)
+            else:
+                temp.write_bytes(old)
+                temp.replace(path)
+            try:
+                if key in {'windows', 'density'} or key.startswith('ui_'):
+                    run([BIN / 'theme', 'metrics-apply'], timeout=120)
+                run(['hyprctl', 'eval', expression])
+            except Exception:
+                pass
+            raise
+
+
+def wallpaper_command(command, *args):
+    try:
+        return json.loads(run([BIN / 'theme', command, *args], timeout=30))
+    except subprocess.CalledProcessError as error:
+        try:
+            message = json.loads(error.stdout).get('error')
+        except (ValueError, AttributeError):
+            message = None
+        raise ValueError(message or 'Could not update wallpaper settings') from None
+
+
+# Login screen: choices stay in the user's state; a resolved, validated request goes to
+# /var/lib/station, where the unprivileged oninix-greeter-apply service renders it.
+GREETER_PREFS = STATE_HOME / 'oninix/greeter.json'
+GREETER_REQUEST = Path('/var/lib/oninix/greeter.json')
+GREETER_IMAGE = Path('/var/lib/oninix/greeter-wallpaper')
+GREETER_STATUS = Path('/var/lib/oninix-greeter/status.json')
+GREETER_DEFAULTS = {'version': 1, 'palette': 'desktop', 'wallpaper': 'desktop', 'image': '', 'blur': 8, 'dim': 15,
+                    'cardOpacity': 92, 'radius': 8, 'border': True, 'greeting': 'OMNISSIAH · Welcome back, Ilya',
+                    'clock': 'date', 'fontSize': 16, 'showSelectors': True}
+GREETER_RANGES = {'blur': (0, 40), 'dim': (0, 70), 'cardOpacity': (60, 100), 'radius': (0, 24), 'fontSize': (12, 22)}
+
+
+def greeter_prefs():
+    try:
+        stored = json.loads(GREETER_PREFS.read_text())
+    except (OSError, ValueError):
+        stored = {}
+    return {**GREETER_DEFAULTS, **{k: v for k, v in stored.items() if k in GREETER_DEFAULTS}}
+
+
+def greeter_set(key, value, palettes):
+    prefs = greeter_prefs()
+    if key in GREETER_RANGES:
+        low, high = GREETER_RANGES[key]
+        if not re.fullmatch(r'\d{1,3}', value) or not low <= int(value) <= high:
+            raise ValueError('Value is out of range')
+        value = int(value)
+    elif key in {'border', 'showSelectors'} and value in {'on', 'off'}:
+        value = value == 'on'
+    elif key == 'palette' and value in palettes | {'desktop'}:
+        pass
+    elif key == 'wallpaper' and value in {'desktop', 'artwork', 'image'}:
+        if value == 'image' and not prefs['image']:
+            raise ValueError('Choose an image in the gallery first')
+    elif key == 'clock' and value in {'date', 'time', 'seconds'}:
+        pass
+    elif key == 'greeting' and len(value) <= 80 and value.isprintable():
+        pass
+    elif key == 'reset' and value == 'all':
+        prefs = dict(GREETER_DEFAULTS)
+        key = None
+    else:
+        raise ValueError('Invalid login screen setting')
+    if key:
+        prefs[key] = value
+    GREETER_PREFS.parent.mkdir(parents=True, exist_ok=True)
+    save(GREETER_PREFS, prefs)
+    greeter_sync()
+
+
+def greeter_choose_image(value):
+    path = Path(urllib.parse.unquote(value[7:]) if value.startswith('file://') else value).expanduser().resolve()
+    if path.suffix.lower() not in {'.png', '.jpg', '.jpeg', '.webp'} or not path.is_file():
+        raise ValueError('Choose a PNG, JPEG or WebP image')
+    prefs = greeter_prefs()
+    prefs.update(image=str(path), wallpaper='image')
+    GREETER_PREFS.parent.mkdir(parents=True, exist_ok=True)
+    save(GREETER_PREFS, prefs)
+    greeter_sync()
+
+
+def greeter_sync():
+    """Resolve 'same as desktop' choices and publish only when the result changed."""
+    if not GREETER_REQUEST.parent.is_dir():
+        return  # Host without the login-screen service.
+    prefs = greeter_prefs()
+    palette = prefs['palette']
+    if palette == 'desktop':
+        try:
+            palette = (STATE_HOME / 'theme/name').read_text().strip()
+        except OSError:
+            palette = 'omnissiah'
+    source = None
+    if prefs['wallpaper'] == 'desktop':
+        current = wallpaper_command('wallpaper-config').get('current', '')
+        source = Path(current) if current and Path(current).is_file() else None
+    elif prefs['wallpaper'] == 'image' and prefs['image'] and Path(prefs['image']).is_file():
+        source = Path(prefs['image'])
+    request = {k: prefs[k] for k in GREETER_DEFAULTS if k not in {'image', 'palette', 'wallpaper'}}
+    request.update(palette=palette, wallpaper='image' if source else 'artwork')
+    if source:
+        stat = source.stat()
+        if stat.st_size > 64 * 1024 * 1024:
+            raise ValueError('Images larger than 64 MiB are not supported')
+        # The key changes with the image, so a new image always triggers a render.
+        request['imageKey'] = hashlib.sha256(f'{source}:{stat.st_size}:{stat.st_mtime_ns}'.encode()).hexdigest()[:16]
+    try:
+        if json.loads(GREETER_REQUEST.read_text()) == request:
+            return
+    except (OSError, ValueError):
+        pass
+    if source:
+        tmp = GREETER_IMAGE.with_name('.greeter-wallpaper.tmp')
+        shutil.copyfile(source, tmp)
+        tmp.chmod(0o644)
+        tmp.replace(GREETER_IMAGE)
+    tmp = GREETER_REQUEST.with_name('.greeter.json.tmp')
+    tmp.write_text(json.dumps(request))
+    tmp.chmod(0o644)
+    tmp.replace(GREETER_REQUEST)
+
+
+def greeter_data():
+    try:
+        status = json.loads(GREETER_STATUS.read_text())
+    except (OSError, ValueError):
+        status = {}
+    preview = ''
+    if status.get('ok') and status.get('background'):
+        try:
+            preview = wallpaper_thumbnail(status['background'])['url']
+        except ValueError:
+            pass
+    return {'available': GREETER_REQUEST.parent.is_dir(), 'prefs': greeter_prefs(), 'status': status,
+            'preview': preview}
+
+
+def appearance():
+    repo = Path(__file__).resolve().parents[3]
+    palettes = []
+    wallpaper = wallpaper_command('wallpaper-config')
+    directory = wallpaper.get('directory', '')
+    wallpaper['directoryUrl'] = Path(directory).as_uri() if directory and Path(directory).is_absolute() else ''
+    for directory in sorted((repo / 'themes').iterdir()):
+        if not (directory / 'colors.toml').is_file():
+            continue
+        import tomllib
+        colors = tomllib.loads((directory / 'colors.toml').read_text())
+        palettes.append({'id': directory.name, 'mode': colors['mode'],
+                         'background': colors['background'], 'accent': colors['accent'],
+                         'foreground': colors['foreground']})
+    schedule = json.loads(run([BIN / 'theme-schedule', '--status']))
+    metric_settings, metric_values = ui_metrics.resolve(desktop_preferences())
+    return {'desktop': desktop_preferences(), 'metrics': {'settings': metric_settings, 'effective': metric_values},
+            'palettes': palettes, 'schedule': schedule,
+            'wallpaper': wallpaper, 'greeter': greeter_data()}
+
+
+def wallpaper_gallery():
+    # Listing is on demand; opening Appearance never scans or decodes a collection.
+    directory = wallpaper_command('wallpaper-config').get('directory', '')
+    if not directory:
+        return {'images': [], 'error': 'Choose a wallpaper folder to start.'}
+    root = Path(directory)
+    if not root.is_dir():
+        return {'images': [], 'error': 'This folder is unavailable. Reconnect the drive or choose another folder.'}
+    # Subfolders are part of the collection; hidden folders and deep trees are not.
+    images = []
+    for folder, dirs, files in os.walk(root, onerror=lambda _: None):
+        relative = Path(folder).relative_to(root)
+        dirs[:] = [] if len(relative.parts) >= 3 else [d for d in dirs if not d.startswith('.')]
+        images += [Path(folder) / f for f in files
+                   if Path(f).suffix.lower() in {'.png', '.jpg', '.jpeg', '.webp'} and not f.startswith('.')]
+    images.sort(key=lambda p: str(p.relative_to(root)).casefold())
+    return {'images': [{'path': str(p), 'name': ' / '.join(p.relative_to(root).with_suffix('').parts).replace('_', ' ')}
+                       for p in images[:5000]]}
+
+
+def wallpaper_thumbnail(value=None):
+    if value is None:
+        value = wallpaper_command('wallpaper-config').get('current', '')
+    if not value:
+        return {'url': ''}
+    path = Path(value).expanduser().resolve()
+    if path.suffix.lower() not in {'.png', '.jpg', '.jpeg', '.webp'} or not path.is_file():
+        raise ValueError('This image is no longer available')
+    stat = path.stat()
+    key = hashlib.sha256(f'v1:{path}:{stat.st_size}:{stat.st_mtime_ns}'.encode()).hexdigest()
+    cache = Path(os.environ.get('XDG_CACHE_HOME', str(Path.home() / '.cache'))) / 'oninix/wallpapers'
+    cache.mkdir(parents=True, exist_ok=True)
+    target = cache / (key + '.jpg')
+    if not target.is_file():
+        # Gallery and panel color extraction share one decoder and the same cache.
+        # Qt only receives the small JPEG, including for very large source PNGs.
+        with (cache / '.lock').open('a') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            if not target.is_file():
+                fd, name = tempfile.mkstemp(suffix='.jpg', prefix='.preview-', dir=cache)
+                os.close(fd)
+                try:
+                    subprocess.run(['ffmpeg', '-nostdin', '-v', 'error', '-threads', '1',
+                                    '-max_alloc', '536870912', '-i', str(path), '-frames:v', '1',
+                                    '-vf', 'scale=512:320:force_original_aspect_ratio=decrease',
+                                    '-threads', '1', '-q:v', '3', '-update', '1', '-y', name],
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                   timeout=15, check=True, env=ENV)
+                    os.replace(name, target)
+                except (OSError, subprocess.SubprocessError):
+                    raise ValueError('Preview unavailable for this image') from None
+                finally:
+                    Path(name).unlink(missing_ok=True)
+                # Bounded, regenerable cache. Do not evict the image just requested.
+                files = sorted(cache.glob('*.jpg'), key=lambda p: p.stat().st_mtime, reverse=True)
+                total = 0
+                for item in files:
+                    total += item.stat().st_size
+                    if total > 128 * 1024 * 1024 and item != target:
+                        item.unlink(missing_ok=True)
+    return {'url': target.as_uri(), 'path': str(path)}
+
+
+def appearance_action(args):
+    if not args:
+        raise ValueError('Choose an appearance action')
+    kind, *values = args
+    repo = Path(__file__).resolve().parents[3]
+    valid_palettes = {p.parent.name for p in (repo / 'themes').glob('*/colors.toml')}
+    if kind == 'desktop' and len(values) == 2:
+        set_desktop_preference(*values)
+    elif kind == 'icons' and len(values) == 1 and values[0] in {'papirus', 'breeze', 'tela', 'colloid', 'fluent'}:
+        run([BIN / 'theme', 'icons', values[0]], timeout=120)
+    elif kind == 'launchers' and len(values) == 1:
+        config = json.loads(values[0])
+        ids = config.get('ids') if isinstance(config, dict) else None
+        if (not isinstance(ids, list) or len(ids) > 100
+                or any(not isinstance(i, str) or not re.fullmatch(r'[\w. @+-]{1,200}', i) for i in ids) or len(set(ids)) != len(ids)):
+            raise ValueError('Invalid pinned applications')
+        state = desktop_path().parent
+        state.mkdir(parents=True, exist_ok=True)
+        with (state / 'launchers.lock').open('a') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            save(state / 'launchers.json', {'ids': ids})
+    elif kind == 'palette' and len(values) == 1 and values[0] in valid_palettes:
+        run([BIN / 'theme-schedule', '--set', 'manual'], timeout=120)
+        run([BIN / 'theme', 'set', values[0]], timeout=120)
+    elif (kind == 'schedule-palette' and len(values) == 2
+          and values[0] in {'light', 'dark'} and values[1] in valid_palettes):
+        run([BIN / 'theme-schedule', '--palette', *values], timeout=120)
+    elif kind == 'schedule' and len(values) == 1 and values[0] in {'manual', 'sun', 'fixed'}:
+        run([BIN / 'theme-schedule', '--set', values[0]], timeout=120)
+    elif (kind == 'time' and len(values) == 2 and values[0] in {'light', 'dark'}
+          and re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d', values[1])):
+        run([BIN / 'theme-schedule', '--time', *values], timeout=120)
+    elif kind == 'wallpaper' and len(values) == 2 and values[0] == 'greeter':
+        greeter_choose_image(values[1])
+    elif kind == 'greeter' and len(values) == 2:
+        greeter_set(values[0], values[1], valid_palettes)
+    elif kind == 'greeter-preview' and not values:
+        out = GREETER_STATUS.parent
+        if not (out / 'regreet.toml').is_file():
+            raise ValueError('The login screen has not been rendered yet')
+        # Demo mode never talks to greetd: the same look, without a real login.
+        log = Path(os.environ.get('XDG_RUNTIME_DIR', '/tmp')) / 'regreet-preview.log'
+        subprocess.Popen(['uwsm', 'app', '--', 'regreet', '--demo', '--logs', str(log),
+                          '--config', str(out / 'regreet.toml'), '--style', str(out / 'regreet.css')],
+                         env={**os.environ, 'GSK_RENDERER': 'cairo'}, start_new_session=True,
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    elif kind == 'wallpaper' and len(values) == 2 and values[0] in {'shared', 'light', 'dark'} | valid_palettes:
+        wallpaper_command('wallpaper', *values)
+    elif kind == 'wallpaper-directory' and len(values) == 1:
+        wallpaper_command('wallpaper-directory', *values)
+    elif kind == 'wallpaper-mode' and len(values) == 1 and values[0] in {'shared', 'variant'}:
+        wallpaper_command('wallpaper-mode', *values)
+    elif kind == 'panels' and len(values) == 1 and values[0] in {'flat', 'islands'}:
+        state = Path(os.environ.get('XDG_STATE_HOME', str(Path.home() / '.local/state'))) / 'theme'
+        state.mkdir(parents=True, exist_ok=True)
+        save(state / 'panels.json', {'style': values[0]})
+    elif kind in {'layout', 'panel-width', 'panel-height', 'panel-radius', 'panel-opacity', 'panel-background', 'adaptive-panels', 'group-tone', 'group-strength', 'button-mode', 'button-tone', 'button-strength'}:
+        state = Path(os.environ.get('XDG_STATE_HOME', str(Path.home() / '.local/state'))) / 'theme'
+        state.mkdir(parents=True, exist_ok=True)
+        with (state / 'shell.lock').open('a') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            target = state / 'shell.json'
+            config = read_json(target, {})
+            if not isinstance(config, dict):
+                raise ValueError('Invalid shell settings file')
+            if kind == 'layout' and len(values) == 1 and values[0] in {'classic'}:
+                config['layout'] = values[0]
+            elif kind == 'panel-width' and len(values) == 1 and values[0].isdigit() and 60 <= int(values[0]) <= 100:
+                config['panelWidth'] = int(values[0])
+            elif kind == 'panel-height' and len(values) == 1 and values[0].isdigit() and 28 <= int(values[0]) <= 56:
+                config['panelHeight'] = int(values[0])
+            elif kind == 'panel-radius' and len(values) == 1 and values[0].isdigit() and 0 <= int(values[0]) <= 24:
+                config['panelRadius'] = int(values[0])
+            elif kind == 'panel-opacity' and len(values) == 1 and values[0].isdigit() and 40 <= int(values[0]) <= 100:
+                config['panelOpacity'] = int(values[0])
+            elif kind == 'panel-background' and len(values) == 1 and values[0] in {'plain', 'accent', 'wallpaper'}:
+                config['panelBackground'] = values[0]
+            elif kind == 'adaptive-panels' and len(values) == 1 and values[0] in {'on', 'off'}:
+                config['adaptivePanels'] = values[0] == 'on'
+            elif kind == 'group-strength' and len(values) == 1 and values[0].isdigit() and 0 <= int(values[0]) <= 30:
+                config['groupStrength'] = int(values[0])
+            elif kind == 'button-mode' and len(values) == 1 and values[0] in {'neutral', 'theme', 'groups'}:
+                config['buttonMode'] = values[0]
+            elif kind == 'button-strength' and len(values) == 1 and values[0].isdigit() and 0 <= int(values[0]) <= 100:
+                config['buttonStrength'] = int(values[0])
+            elif (kind in {'group-tone', 'button-tone'} and len(values) == 2
+                  and values[0] in {'launchers', 'workspaces', 'status', 'media', 'window', 'metrics'}
+                  and values[1] in {'none', 'neutral', 'accent', 'warm', 'green', 'cyan', 'blue', 'magenta'}):
+                key = 'groupTones' if kind == 'group-tone' else 'buttonTones'
+                tones = config.get(key, {})
+                if not isinstance(tones, dict):
+                    tones = {}
+                config[key] = dict(tones, **{values[0]: values[1]})
+            else:
+                raise ValueError('Invalid layout setting')
+            # Only Classic remains; retire old layout/dock preferences on the next save.
+            config = {key: value for key, value in config.items() if key in {
+                'layout', 'panelWidth', 'panelHeight', 'panelRadius', 'panelOpacity', 'panelBackground', 'adaptivePanels', 'groupStrength', 'groupTones', 'buttonMode', 'buttonTones', 'buttonStrength'}}
+            config['layout'] = 'classic'
+            save(target, config)
+    else:
+        raise ValueError('Invalid appearance setting')
+
+
+def action(command, args):
+    if command == 'system-agent' and not args:
+        agent = desktop_preferences()['agent']
+        if not shutil.which(agent):
+            raise RuntimeError(f'{agent} is not installed or unavailable in PATH')
+        repo = Path(__file__).resolve().parents[3]
+        subprocess.Popen(['uwsm', 'app', '--', 'kitty', '--title', 'System management',
+                          '--directory', str(repo), '--hold', agent],
+                         start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    elif command == 'agent-launch' and len(args) == 1:
+        agent = {'codex': 'codex', 'claude': 'claude', 'opencode': 'opencode', 'ollama': 'opencode', 'google': 'agy'}.get(args[0])
+        if not agent or not shutil.which(agent):
+            raise ValueError('Agent is not installed')
+        repo = Path(__file__).resolve().parents[3]
+        subprocess.Popen(['uwsm', 'app', '--', 'kitty', '--directory', str(repo), '--hold', agent],
+                         start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    elif command == 'window-mode' and len(args) == 1 and args[0] in {'toggle', 'floating', 'tiling'}:
+        ONINIX_STATE.mkdir(parents=True, exist_ok=True)
+        expression = 'require("windowmode").' + ('toggle()' if args[0] == 'toggle' else 'set(' + ('true' if args[0] == 'floating' else 'false') + ')')
+        if run(['hyprctl', 'eval', expression]).decode().strip() != 'ok':
+            raise RuntimeError('Could not change the global window mode')
+    elif command == 'appearance':
+        appearance_action(args)
+        if args and args[0] in {'palette', 'wallpaper', 'wallpaper-mode'}:
+            # Best effort: a login-screen problem must not undo a desktop change.
+            try:
+                greeter_sync()
+            except (OSError, ValueError, RuntimeError):
+                pass
+    elif command == 'greeter-sync' and not args:
+        greeter_sync()
+    elif command == 'display' and len(args) == 1 and args[0] in {'desk', 'extended'}:
+        run([BIN / 'oninix-display', 'profile', args[0]])
+    elif command == 'power-profile' and len(args) == 1 and args[0] in {'power-saver', 'balanced', 'performance'}:
+        run(PPD + ['set-property'] + PPD_IFACE + ['ActiveProfile', 's', args[0]])
+    elif command == 'brightness' and len(args) == 1 and args[0].isdigit() and 5 <= int(args[0]) <= 100:
+        run(['brightnessctl', '-c', 'backlight', 'set', args[0] + '%'])
+    elif command == 'mode' and len(args) == 1:
+        profile(args[0])
+    elif command == 'game-offer' and not args:
+        game_offer()
+    elif command == 'dnd' and not args:
+        set_dnd('do-not-disturb' not in modes())
+    elif command == 'nightlight' and not args:
+        run([BIN / 'theme-schedule', '--nightlight', 'toggle'])
+    elif command == 'vpn' and len(args) == 1:
+        vpn = vpn_profile(args[0])
+        run(['systemctl', 'stop' if vpn['state'] != 'disconnected' else 'start', vpn['unit']], timeout=30)
+    elif command == 'vpn-autostart' and len(args) == 2 and args[1] in {'on', 'off'}:
+        vpn = vpn_profile(args[0])
+        wanted = vpn_autostart() - {vpn['id']} | ({vpn['id']} if args[1] == 'on' else set())
+        VPN_AUTOSTART.parent.mkdir(parents=True, exist_ok=True)
+        save(VPN_AUTOSTART, {'ids': sorted(wanted)})
+    elif command == 'network-dns' and len(args) == 2:
+        network_dns(args[0], args[1])
+    elif command == 'network-portal' and not args:
+        subprocess.Popen(['xdg-open', 'http://networkcheck.kde.org/'], start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    elif command == 'wifi-radio' and len(args) == 1 and args[0] in {'on', 'off'}:
+        run(['nmcli', 'radio', 'wifi', args[0]])
+    elif command == 'wifi-scan' and not args:
+        run(['nmcli', 'device', 'wifi', 'rescan'], timeout=20)
+    elif command == 'wifi-connect' and len(args) == 1:
+        wifi_connect(args[0], '' if sys.stdin.isatty() else sys.stdin.read().rstrip('\n'))
+    elif command == 'wifi-forget' and len(args) == 1:
+        if args[0] not in {n['known'] for n in wifi()['networks'] if n['known']}:
+            raise ValueError('Saved network is unavailable')
+        run(['nmcli', 'connection', 'delete', 'uuid', args[0]])
+    elif command in {'copy', 'delete'} and len(args) == 1 and args[0].startswith('pin:'):
+        if command == 'copy':
+            subprocess.run(['wl-copy'], input=clip_text(args[0]), stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL, timeout=6, check=True, env=ENV)
+        else:
+            clip_pins_save([p for p in clip_pins() if 'pin:' + p['key'] != args[0]])
+    elif command == 'clip-pin' and len(args) == 1:
+        clip_pin(args[0])
+    elif command == 'clip-format' and len(args) == 2:
+        clip_transform(args[0], args[1])
+    elif command in {'copy', 'delete'} and len(args) == 1:
+        line = clip_line(args[0])
+        if command == 'copy':
+            # The clipboard owner may keep inherited pipes open after its parent exits.
+            subprocess.run(['wl-copy'], input=decode(line), stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL, timeout=6, check=True, env=ENV)
+        else:
+            run(['cliphist', 'delete'], (line+'\n').encode())
+    elif command == 'shelf-add' and args:
+        copy = args[0] == '--copy'
+        shelf_add(args[1:] if copy else args, copy)
+    elif command == 'shelf-clip' and not args:
+        # wl-paste --watch feeds every clipboard change here; only file URIs count.
+        if os.environ.get('CLIPBOARD_STATE', 'data') == 'data':
+            shelf_clip(sys.stdin.buffer.read(256 * 1024))
+    elif command == 'shelf-remove' and len(args) == 1:
+        shelf_remove(args[0])
+    elif command == 'shelf-copy' and len(args) == 1:
+        entry = next((e for e in shelf_items() if e['path'] == args[0]), None)
+        if entry is None:
+            raise ValueError('This file is no longer on the shelf')
+        target = Path(entry['path'])
+        image = target.suffix.lower() in ('.png', '.jpg', '.jpeg', '.webp')
+        mime = {'.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp'}.get(target.suffix.lower())
+        data = target.read_bytes() if image else (target.as_uri() + '\r\n').encode()
+        subprocess.run(['wl-copy', '--type', mime if image else 'text/uri-list'], input=data, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL, timeout=6, check=True, env=ENV)
+    elif command == 'clear-previews' and not args:
+        for p in (runtime() / 'clipboard').glob('*.preview'):
+            p.unlink()
+    elif command == 'dismiss-all' and not args:
+        run(['makoctl', 'dismiss', '--all'])
+    elif command == 'mark-seen' and not args:
+        data = notifications()
+        notification_update(data['owner'], seen=data['latest'])
+    elif command == 'clear' and not args:
+        data = notifications()
+        run(['makoctl', 'dismiss', '--all', '--no-history'])
+        notification_update(data['owner'], cleared=data['latest'], seen=data['latest'], hidden=[])
+    elif command == 'restore' and not args:
+        run(['makoctl', 'restore'])
+    elif command == 'dismiss' and args and len(args) <= 200 and all(a.isdigit() for a in args):
+        snapshot = notifications()
+        for identifier in args:
+            notification_hide(int(identifier), snapshot)
+    elif command == 'notification-rule' and len(args) == 3:
+        notes.set_rule(args[1], args[2], args[0])
+        run(['makoctl', 'reload'])
+    elif command == 'notification-render' and not args:
+        notes.render()
+        run(['makoctl', 'reload'])
+    elif command == 'notification-copy-code' and len(args) == 1 and args[0].isdigit():
+        data = notifications()
+        item = next((n for n in data['current'] + data['history'] if str(n['id']) == args[0]), None)
+        if not item:
+            raise ValueError('Notification is no longer available')
+        text = re.sub(r'<[^>]*>', '', item.get('summary', '') + ' ' + item.get('body', ''))
+        if not re.search(r'verif|one.time|login|sign.in|authentic|security|код|подтвержд|вход', text, re.I):
+            raise ValueError('No verification code found')
+        code = re.search(r'\b\d{4,8}\b', text)
+        if not code:
+            raise ValueError('No verification code found')
+        subprocess.run(['wl-copy'], input=code[0].encode(), check=True, timeout=6,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=ENV)
+    elif command == 'notification-open' and len(args) == 1 and args[0].isdigit():
+        notification_open(int(args[0]))
+    elif command == 'diagnose' and len(args) == 1 and args[0].isdigit():
+        subprocess.Popen([str(BIN / 'agent-crash'), '--notification', args[0]],
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, start_new_session=True, env=ENV)
+    elif command == 'invoke' and len(args) == 2 and args[0].isdigit():
+        run(['makoctl', 'invoke', '-n', args[0], '--', args[1]])
+    elif not settings_action(command, args):
+        raise ValueError('Unknown desktop action')
+    return {'ok': True}
+
+
+def main():
+    os.umask(0o077)
+    try:
+        command, *args = sys.argv[1:]
+        if command == 'vpn-login' and not args:
+            vpn_login()
+            return
+        if command == 'scanners-refresh' and not args:
+            scanners_refresh()
+            return
+        if command == 'compute' and len(args) == 3:
+            result = compute.action(*args)
+        elif command == 'shell':
+            result = shell.dispatch(args)
+        elif command == 'appearance' and args and args[0] in {
+                'palette', 'launchers', 'desktop', 'panels', 'layout', 'panel-width', 'panel-height', 'panel-radius',
+                'panel-opacity', 'panel-background', 'adaptive-panels', 'group-tone', 'group-strength',
+                'button-mode', 'button-tone', 'button-strength', 'icons'}:
+            with shell.change_lock():
+                before = shell.snapshot()
+                result = action(command, args)
+                shell.remember(before)
+        elif command == 'wallpaper-preview' and len(args) <= 1:
+            result = wallpaper_thumbnail(*args)
+        elif command == 'data' and len(args) == 1:
+            result = {'compute': compute.status, 'controls': controls, 'notifications': notifications, 'notification-popups': lambda: notifications(popup_only=True), 'clipboard': clipboard, 'shelf': shelf,
+                      'appearance': appearance, 'wallpapers': wallpaper_gallery, 'wifi': wifi, 'settings': settings}[args[0]]()
+        else:
+            result = action(command, args)
+        print(json.dumps(result))
+    except Exception as error:
+        # Command output may contain notification text or secrets; never log it.
+        message = str(error) if isinstance(error, (ValueError, RuntimeError)) else 'Service unavailable or action failed'
+        print(json.dumps({'error': message}))
+        raise SystemExit(1)
+
+
+if __name__ == '__main__':
+    main()

@@ -1,0 +1,819 @@
+#!/usr/bin/env bash
+# Render every themed config from one palette, for every palette at once.
+#
+#   theme            re-render and re-apply the current theme
+#   theme set <name> switch palette and re-apply
+#   theme sync       adopt the system's appearance (macOS Light/Dark)
+#   theme list       palettes in themes/
+#   theme render-only render files without applying them to the session
+#   theme check      exit 1 if any generated file is stale (for CI or a hook)
+#   theme diff       show what a re-render would change
+#   theme metrics    show palette-independent UI metrics and effective values
+#   theme wallpaper <shared|light|dark|palette> PATH  choose a local image
+#   theme wallpaper-directory PATH | wallpaper-mode shared|variant
+#
+# Why: the same palette used to be copied by hand into kitty, Konsole, btop and
+# the shell, and they drifted - kitty was on Kanagawa Dragon while the fzf and
+# LS_COLORS blocks in .zshrc were still on Wave. Now one colors.toml feeds all
+# of them and the copies are generated.
+#
+# EVERY palette is rendered on every run, into themes/<palette>/out/, and the
+# machine picks one by pointing a single symlink at that directory:
+#
+#     ~/.local/state/theme/current -> $REPO/themes/<palette>/out
+#
+# The consumers read through that symlink and never move. This is what lets two
+# machines share one repo: before, the generated files sat at one fixed path
+# each and held whichever palette the station had last rendered, so the mac got
+# the station's choice by `git pull` and could not have its own. Switching also
+# dirtied the repo every time. Now a switch is one local symlink, and the
+# generated files only change when a palette does.
+#
+# They are still committed on purpose: a palette edit shows up as a reviewable
+# diff instead of as drift nobody notices, and a fresh machine gets colours
+# before it has ever run this.
+#
+# Plasma IS a consumer on the station, as of 2026-09-21 - Ilya asked for a
+# light and a dark variant that switch together. Only discrete pieces are
+# switched: colour scheme, icon theme, wallpaper, and the keepawake icon. The
+# look-and-feel packages are left alone because they carry a layout script and
+# applying one rewrites the panels, which is what plasma-profile exists to
+# protect.
+#
+# macOS does its own switching (System Settings -> Appearance -> Auto) and owns
+# the decision there: `theme-follow-macos` watches it and calls `theme set`.
+# Nothing here writes the system appearance back, so the two cannot fight.
+#
+# bash 3.2 compatible - that is what /bin/bash on macOS is, and this runs from
+# a launchd agent where a brew bash is not guaranteed to be on PATH.
+set -eu
+
+self=$(readlink -f "$0" 2>/dev/null || python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "$0")
+REPO="${ONINIX_THEME_ROOT:-${ONINIX_SHARE:-/run/current-system/sw/share/oninix}}"
+[ -d "$REPO/themes/templates" ] || { echo "Cannot find OniNix themes in $REPO" >&2; exit 1; }
+
+case "$(uname -s)" in
+Darwin) OS=macos ;;
+Linux) OS=linux ;;
+*) OS=other ;;
+esac
+
+STATE="${XDG_STATE_HOME:-$HOME/.local/state}/theme"
+# Serialize the whole render/apply transaction on Linux and macOS alike.
+# The parent holds the advisory lock; child tools do not inherit its descriptor.
+needs_lock=yes
+case "${1:-render}" in icons-resolve | wallpaper-path | wallpaper-config | list | -h | --help) needs_lock=no ;; esac
+if [ "$needs_lock" = yes ] && [ "${ONINIX_THEME_LOCKED:-}" != "$self" ]; then
+    exec python3 - "$self" "$STATE" "$@" <<'PY'
+import fcntl, os, pathlib, subprocess, sys
+script, state, *args = sys.argv[1:]
+pathlib.Path(state).mkdir(parents=True, exist_ok=True)
+with open(pathlib.Path(state) / 'apply.lock', 'a') as lock:
+    fcntl.flock(lock, fcntl.LOCK_EX)
+    raise SystemExit(subprocess.call(['bash', script, *args], env={**os.environ, 'ONINIX_THEME_LOCKED': script}))
+PY
+fi
+unset ONINIX_THEME_LOCKED
+NAME_FILE="$STATE/name"
+CURRENT_LINK="$STATE/current"
+DEFAULT_THEME=kanagawa-dragon
+
+# The two variants the light/dark switchers speak in. The station's dark one
+# is the Omnissiah palette, made for its wallpaper; the mac has a different
+# wallpaper and stays on Dragon.
+LIGHT_THEME=kanagawa-lotus
+DARK_THEME=kanagawa-dragon
+[ "$OS" = linux ] && DARK_THEME=omnissiah
+DEFAULT_THEME=$DARK_THEME
+
+current_name() {
+    n=""
+    [ -r "$NAME_FILE" ] && read -r n <"$NAME_FILE" 2>/dev/null || true
+    [ -n "$n" ] && printf '%s' "$n" || printf '%s' "$DEFAULT_THEME"
+}
+
+save_name() {
+    mkdir -p "$STATE"
+    name_tmp=$(mktemp "$STATE/.name.XXXXXX")
+    printf '%s\n' "$1" >"$name_tmp"
+    mv "$name_tmp" "$NAME_FILE"
+}
+
+palette_file() { printf '%s/themes/%s/colors.toml' "$REPO" "$1"; }
+out_dir() { printf '%s/themes/%s/out' "$REPO" "$1"; }
+
+# Not a TOML parser: the palettes are flat `key = "#rrggbb"` lines and that is
+# all this needs to read. A palette that grows tables will need a real one.
+#
+# The palette is held in one delimited string rather than an associative array,
+# which bash 3.2 does not have. A `#` only starts a comment at the start of a
+# line or after whitespace, so the hex values (which follow a quote) survive.
+PAL=""
+load_palette() {
+    _file=$1
+    [ -r "$_file" ] || { echo "No such palette: $_file" >&2; exit 1; }
+    PAL=":$(sed -e 's/^#.*//' -e 's/[[:space:]]#.*//' -e 's/"//g' -e 's/[[:space:]]//g' \
+             -e '/^$/d' "$_file" | tr '\n' ':')"
+}
+
+color() {
+    _rest=${PAL#*:$1=}
+    if [ "$_rest" = "$PAL" ]; then
+        # Status roles are independent of decorative terminal ANSI colors.
+        case "$1" in
+            status_warning) color yellow; return ;;
+            status_available) color green; return ;;
+            status_urgent) color red; return ;;
+        esac
+        return 1
+    fi
+    printf '%s' "${_rest%%:*}"
+}
+
+hex_to_rgb() {  # Konsole wants "r,g,b"
+    _h=${1#\#}
+    printf '%d,%d,%d' "0x${_h:0:2}" "0x${_h:2:2}" "0x${_h:4:2}"
+}
+
+hex_to_sgr() {  # SGR truecolor wants "r;g;b" - LS_COLORS and friends
+    _h=${1#\#}
+    printf '%d;%d;%d' "0x${_h:0:2}" "0x${_h:2:2}" "0x${_h:4:2}"
+}
+
+hex_to_iterm() {  # iTerm2 colour dict, components as 0..1 fractions
+    _h=${1#\#}
+    awk -v r=$((0x${_h:0:2})) -v g=$((0x${_h:2:2})) -v b=$((0x${_h:4:2})) 'BEGIN {
+        printf "{ \"Red Component\": %.6f, \"Green Component\": %.6f, \"Blue Component\": %.6f, \"Color Space\": \"sRGB\" }", r/255, g/255, b/255 }'
+}
+
+# {{role}} -> #rrggbb
+# {{role:rgb}} -> 24,22,22   Konsole colorscheme format
+# {{role:sgr}} -> 24;22;22   SGR truecolor, which is what LS_COLORS needs.
+#                            Getting these two confused is how LS_COLORS ended
+#                            up emitting "38;2;139,164,176" and fzf-tab printed
+#                            the escape as literal text.
+# {{role:iterm}} -> { "Red Component": 0.094, ... }   iTerm2 dynamic profile
+# {{role:hex}} -> 181616     Hyprland's rgb(...) wants the bare hex
+render() {
+    _tpl=$1
+    _metrics_block=no
+    while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in
+            '/* theme:metrics-begin */') _metrics_block=yes; continue ;;
+            '/* theme:metrics-end */') _metrics_block=no; continue ;;
+        esac
+        [ "$_metrics_block" = no ] || continue
+        # The header naming the destination is metadata, not content.
+        case "$line" in *theme:out=* | *theme:comment=*) continue ;; esac
+        while [[ $line =~ \{\{([a-z_]+)(:rgb|:sgr|:iterm|:hex)?\}\} ]]; do
+            key=${BASH_REMATCH[1]}
+            rest=${BASH_REMATCH[2]:-}
+            value=$(color "$key") \
+                || { echo "Template $_tpl wants an undefined colour: $key" >&2; exit 1; }
+            case "$rest" in
+            :rgb) value=$(hex_to_rgb "$value") ;;
+            :sgr) value=$(hex_to_sgr "$value") ;;
+            :iterm) value=$(hex_to_iterm "$value") ;;
+            :hex) value=${value#\#} ;;
+            esac
+            line=${line/"${BASH_REMATCH[0]}"/$value}
+        done
+        printf '%s\n' "$line"
+    done <"$_tpl"
+}
+
+template_out() { sed -n 's|^[#;]* *theme:out= *||p' "$1" | head -1; }
+
+# The generated-by header is a `#` comment unless the template says otherwise:
+# JSON and Lua reject `#`, VS Code's JSONC takes `//`.
+template_comment() {
+    _c=$(sed -n 's|^[#;]* *theme:comment= *||p' "$1" | head -1)
+    printf '%s' "${_c:-#}"
+}
+
+# ---- wallpaper -----------------------------------------------------------
+wallpaper_path() {
+    python3 "$REPO/themes/wallpapers.py" path "${1:-$(current_name)}"
+}
+
+apply_wallpaper() {
+    python3 "$REPO/themes/wallpapers.py" apply "$(current_name)" "$1" >/dev/null
+}
+
+# ---- where the machine reads the generated files from --------------------
+# One symlink decides the palette; everything else points at a fixed path
+# underneath it and never has to be touched again.
+install_state() {
+    name=$1
+    mkdir -p "$STATE"
+    ln -sfn "$(out_dir "$name")" "$CURRENT_LINK"
+
+    # btop reads its themes out of its own directory, by name, so this one
+    # needs a link of its own rather than a path it could be pointed at.
+    if [ -d "$HOME/.config/btop" ] || command -v btop >/dev/null 2>&1; then
+        mkdir -p "$HOME/.config/btop/themes"
+        ln -sfn "$CURRENT_LINK/btop.theme" "$HOME/.config/btop/themes/kanagawa.theme"
+    fi
+
+    # starship re-reads its config on every prompt, so a link here is all a
+    # live switch needs.
+    mkdir -p "$HOME/.config"
+    ln -sfn "$CURRENT_LINK/starship.toml" "$HOME/.config/starship.toml"
+
+    if [ "$OS" != macos ]; then
+        mkdir -p "$HOME/.config/MangoHud"
+        hud="$HOME/.config/MangoHud/MangoHud.conf"
+        if [ -e "$hud" ] && [ ! -L "$hud" ]; then
+            mv "$hud" "$hud.bak-$(date +%Y%m%d-%H%M%S)"
+        fi
+        ln -sfn "$CURRENT_LINK/MangoHud.conf" "$hud"
+        # REAPER reads its SWELL dialog colors at startup; a running DAW keeps
+        # the previous palette until it is restarted.
+        mkdir -p "$HOME/.config/REAPER"
+        ln -sfn "$CURRENT_LINK/libSwell-user.colortheme" "$HOME/.config/REAPER/libSwell-user.colortheme"
+        # Chrome takes its colour as a managed policy: NixOS links
+        # /etc/opt/chrome/policies/managed/oninix-theme.json to this file.
+        # A plain JSON copy, without the generated-by line on top.
+        tail -n +2 "$CURRENT_LINK/chrome-policy.json" >"$STATE/chrome-policy.json.tmp"
+        cmp -s "$STATE/chrome-policy.json.tmp" "$STATE/chrome-policy.json" 2>/dev/null \
+            && rm -f "$STATE/chrome-policy.json.tmp" \
+            || mv "$STATE/chrome-policy.json.tmp" "$STATE/chrome-policy.json"
+    fi
+
+    # iTerm2 watches its DynamicProfiles folder and re-reads a profile the
+    # moment the file changes, open windows included - that is the live switch.
+    # A copy rather than a link: the file has to be plain JSON, so the
+    # generated-by line on top is dropped, and iTerm2 notices a rewritten file
+    # more reliably than a retargeted symlink.
+    if [ "$OS" = macos ] && [ -d /Applications/iTerm.app ]; then
+        profiles="$HOME/Library/Application Support/iTerm2/DynamicProfiles"
+        mkdir -p "$profiles"
+        tail -n +2 "$CURRENT_LINK/iterm2.json" >"$profiles/oninix.json.tmp"
+        cmp -s "$profiles/oninix.json.tmp" "$profiles/oninix.json" 2>/dev/null \
+            && rm -f "$profiles/oninix.json.tmp" \
+            || mv "$profiles/oninix.json.tmp" "$profiles/oninix.json"
+    fi
+}
+
+# ---- applications that only read the theme at startup --------------------
+# kitty reloads its config on SIGUSR1, which is enough: the palette is an
+# include.
+reload_terminals() {
+    for proc in kitty .kitty-wrapped; do
+        pkill -USR1 -x "$proc" 2>/dev/null && printf 'reloaded %s\n' "$proc" || true
+    done
+}
+
+# tmux keeps its options in the server, so a running one has to be told. Only
+# when a server is up: `tmux source-file` would start one otherwise, and a tmux
+# server nobody asked for outlives the switch that created it.
+reload_tmux() {
+    command -v tmux >/dev/null 2>&1 || return 0
+    tmux has-session >/dev/null 2>&1 || return 0
+    tmux source-file "$CURRENT_LINK/tmux-theme.conf" >/dev/null 2>&1 \
+        && echo "reloaded tmux" || true
+}
+
+# Chrome re-reads policy files only every 15 minutes; a running browser is told
+# to reload them now. Never launched: without a running instance this command
+# would start a windowless one.
+reload_chrome() {
+    pgrep -x chrome >/dev/null 2>&1 || return 0
+    command -v google-chrome-stable >/dev/null 2>&1 || return 0
+    google-chrome-stable --refresh-platform-policy --no-startup-window >/dev/null 2>&1 \
+        && echo "reloaded chrome policy" || true
+}
+
+# Slack has its own "sync with OS" switch, and with it on it still only asks
+# the system when it launches: after a live switch it keeps the old theme while
+# reporting that it is syncing. VS Code and Thunderbird follow properly, so
+# this list is short on purpose. Station only - the mac's Slack follows macOS.
+#
+# Restarted only when already running - never launched. An application the user
+# has closed should stay closed.
+restart_slack() {
+    pgrep -x slack >/dev/null 2>&1 || return 0
+    # Signal only the main (oldest) process. Killing Electron's renderers at the
+    # same time can turn a normal restart into a crash notification.
+    slack_pid=$(pgrep -o -x slack) || return 0
+    kill -TERM "$slack_pid" 2>/dev/null || true
+    # Wait for it to actually go: relaunching over a still-dying instance is how
+    # you end up with two trays and one of them wrong.
+    i=0
+    while [ "$i" -lt 20 ] && kill -0 "$slack_pid" 2>/dev/null; do
+        sleep 0.5
+        i=$((i + 1))
+    done
+    if kill -0 "$slack_pid" 2>/dev/null; then
+        echo "Slack is still closing; leaving it to finish" >&2
+        return 0
+    fi
+    # UWSM supplies the graphical session environment even when theme runs from
+    # SSH/a timer. A detached launch with the caller's environment crashed here.
+    if command -v uwsm >/dev/null 2>&1 && uwsm check is-active >/dev/null 2>&1; then
+        uwsm app -t service -- slack --gtk-version=3 -s >/dev/null 2>&1 &
+    else
+        setsid nohup slack --gtk-version=3 -s >/dev/null 2>&1 &
+    fi
+    echo "restarted slack"
+}
+
+# ---- folder icons in the palette's colours -------------------------------
+# Papirus ships its folders in fixed colours, blue by default. This builds a
+# small theme that inherits the base one and overrides only the places icons
+# that alias the blue variant, recoloured from the palette: accent for the
+# front, orange for the back, selection for the dark emblem. Prints the name
+# of the theme to use; rebuilt only when the base or the colours change.
+build_folder_icons() {
+    base=$1; palette=$2; src=""
+    for d in "$HOME/.local/share/icons/$base" "/run/current-system/sw/share/icons/$base" "/usr/share/icons/$base"; do
+        [ -r "$d/index.theme" ] && { src=$(readlink -f "$d"); break; }
+    done
+    [ -n "$src" ] || return 1
+    load_palette "$(palette_file "$palette")"
+    front=$(color accent); back=$(color orange); emblem=$(color selection)
+    name="$base-$palette"
+    dest="$HOME/.local/share/icons/$name"
+    stamp="v2 $src $front $back $emblem"
+    if [ "$(cat "$dest/.stamp" 2>/dev/null)" != "$stamp" ]; then
+        rm -rf "$dest"
+        dirs=""
+        for pdir in "$src"/*/places; do
+            sub=${pdir#"$src"/}
+            case "$sub" in *@*) continue ;; esac
+            mkdir -p "$dest/$sub"
+            for f in "$pdir"/*.svg; do
+                [ -L "$f" ] || continue
+                n=${f##*/}
+                case "$n" in *-blue*) continue ;; esac
+                t=$(readlink -f "$f")
+                case "${t##*/}" in *-blue-* | *-blue.svg) ;; *) continue ;; esac
+                sed -e "s/#5294e2/$front/g" -e "s/#4877b1/$back/g" -e "s/#1d344f/$emblem/g" "$f" >"$dest/$sub/$n"
+            done
+            dirs="$dirs${dirs:+,}$sub"
+        done
+        {
+            printf '[Icon Theme]\nName=%s\nInherits=%s\nDirectories=%s\n\n' "$name" "$base" "$dirs"
+            for sub in ${dirs//,/ }; do
+                sed -n "\\|^\\[$sub\\]|,/^\$/p" "$src/index.theme"
+            done
+        } >"$dest/index.theme"
+        printf '%s\n' "$stamp" >"$dest/.stamp"
+    fi
+    printf '%s' "$name"
+}
+
+# ---- the desktop side (Plasma) -------------------------------------------
+# Driven by themes/<name>/desktop.conf. Everything here is best-effort: a
+# missing tool or a wallpaper that has been moved must not stop the palette
+# from being applied, since the terminals are the part that always works.
+# GTK3 loads user gtk.css only once per process. Put our palette in a named
+# theme instead, so gtk-theme-name changes replace the complete live provider.
+install_gtk3_theme() {
+    gtk_base=""
+    for d in "${XDG_DATA_HOME:-$HOME/.local/share}/themes" "$HOME/.themes" /run/current-system/sw/share/themes /usr/share/themes; do
+        if [ -r "$d/$2/gtk-3.0/gtk.css" ]; then gtk_base="$d/$2/gtk-3.0/gtk.css"; break; fi
+    done
+    [ -n "$gtk_base" ] || return 1
+    gtk_source="$(out_dir "$1")/gtk.css"
+    gtk_revision=$(cat "$gtk_source" "$STATE/gtk-metrics.css" | cksum | awk '{print $1}')
+    gtk_mode=$(sed -n 's/^mode *= *"\(.*\)"/\1/p' "$(palette_file "$1")")
+    gtk_name="OniNix-$1-$gtk_revision-$gtk_mode"
+    gtk_target="${XDG_DATA_HOME:-$HOME/.local/share}/themes/$gtk_name/gtk-3.0"
+    mkdir -p "$gtk_target"
+    python3 - "$gtk_base" "$gtk_source" "$STATE/gtk-metrics.css" >"$gtk_target/gtk.css" <<'GTKCSS'
+from pathlib import Path
+import sys
+for source in sys.argv[1:]:
+    print(f'@import url("{Path(source).absolute().as_uri()}");')
+GTKCSS
+    ln -sf gtk.css "$gtk_target/gtk-dark.css"
+    # The same gtk-theme-name is shared by GTK2/3/4. Retain the base resources
+    # for the other versions, including GTK4 apps that do not use libadwaita.
+    gtk_root=${gtk_target%/gtk-3.0}
+    gtk_base_root=${gtk_base%/gtk-3.0/gtk.css}
+    if [ -d "$gtk_base_root/gtk-2.0" ]; then
+        ln -sfn "$gtk_base_root/gtk-2.0" "$gtk_root/gtk-2.0"
+    fi
+    if [ -r "$gtk_base_root/gtk-4.0/gtk.css" ]; then
+        mkdir -p "$gtk_root/gtk-4.0"
+        python3 - "$gtk_base_root/gtk-4.0/gtk.css" "$(out_dir "$1")/gtk4.css" "$STATE/gtk4-metrics.css" >"$gtk_root/gtk-4.0/gtk.css" <<'GTKCSS'
+from pathlib import Path
+import sys
+for source in sys.argv[1:]:
+    print(f'@import url("{Path(source).absolute().as_uri()}");')
+GTKCSS
+        ln -sf gtk.css "$gtk_root/gtk-4.0/gtk-dark.css"
+    fi
+    printf '%s' "$gtk_name"
+}
+
+apply_desktop() {
+    python3 "$REPO/themes/ui_metrics.py" apply
+    ui_font=$(sed -n 's/^font=//p' "$STATE/kde-fonts.ini")
+    ui_small_font=$(sed -n 's/^smallestReadableFont=//p' "$STATE/kde-fonts.ini")
+    ui_mono_font=$(sed -n 's/^fixed=//p' "$STATE/kde-fonts.ini")
+    qt_ui_font=$(sed -n 's/^general=//p' "$STATE/qt-fonts.ini")
+    qt_mono_font=$(sed -n 's/^fixed=//p' "$STATE/qt-fonts.ini")
+    ui_gtk_font=$(python3 - "$STATE/ui-metrics.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+print(f"{d['font_family']} {d['font_size']}")
+PY
+)
+    ui_gtk_mono=$(python3 - "$STATE/ui-metrics.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+print(f"{d['mono_family']} {d['mono_size']}")
+PY
+)
+    if [ "$OS" = linux ]; then
+        fontconfig_dir="${XDG_CONFIG_HOME:-$HOME/.config}/fontconfig/conf.d"
+        mkdir -p "$fontconfig_dir"
+        ln -sfn "$STATE/ui-fontconfig.conf" "$fontconfig_dir/50-oninix-ui.conf"
+    fi
+    conf="$REPO/themes/$1/desktop.conf"
+    [ -r "$conf" ] || return 0
+
+    colorscheme=""; icontheme=""; folders=""; plasmatheme=""; gtktheme=""; wallpaper=""; keepawake_icon=""
+    while IFS='=' read -r k v; do
+        case "$k" in
+        \#* | "") continue ;;
+        icontheme) icontheme=$v ;;
+        folders) folders=$v ;;
+        plasmatheme) plasmatheme=$v ;;
+        gtktheme) gtktheme=$v ;;
+        wallpaper) wallpaper=${v/#\~/$HOME} ;;
+        keepawake_icon) keepawake_icon=$v ;;
+        esac
+    done <"$conf"
+    wallpaper=$(wallpaper_path "$1")
+
+    # The plasma-apply-* tools abort without a display (ssh, the timer after a
+    # logout); offscreen is enough, they only write config and signal over D-Bus.
+    # The current palette supplies Qt's full colour scheme, not only light/dark.
+    mkdir -p "$HOME/.local/share/color-schemes"
+    colorscheme="Station-$1"
+    scheme_changed=0
+    cmp -s "$CURRENT_LINK/Station.colors" "$HOME/.local/share/color-schemes/$colorscheme.colors" || scheme_changed=1
+    cp "$CURRENT_LINK/Station.colors" "$HOME/.local/share/color-schemes/$colorscheme.colors"
+    # Explicit UI fonts avoid Qt/KDE falling back to a serif font outside Plasma.
+    if command -v kwriteconfig6 >/dev/null 2>&1; then
+        for font_key in font menuFont toolBarFont; do
+            kwriteconfig6 --file kdeglobals --group General --key "$font_key" "$ui_font"
+        done
+        kwriteconfig6 --file kdeglobals --group General --key smallestReadableFont "$ui_small_font"
+        kwriteconfig6 --file kdeglobals --group General --key fixed "$ui_mono_font"
+        for qt_version in qt5ct qt6ct; do
+            qt_font_conf="${XDG_CONFIG_HOME:-$HOME/.config}/$qt_version/$qt_version.conf"
+            mkdir -p "$(dirname "$qt_font_conf")"
+            kwriteconfig6 --file "$qt_font_conf" --group Fonts --key general "$qt_ui_font"
+            kwriteconfig6 --file "$qt_font_conf" --group Fonts --key fixed "$qt_mono_font"
+        done
+    fi
+    gtk3_named=""
+    if [ -n "$gtktheme" ]; then gtk3_named=$(install_gtk3_theme "$1" "$gtktheme") || true; fi
+    # Keep application-specific CSS. GTK3's managed import is retired once the
+    # named theme is installed; GTK4/libadwaita retains its separate stylesheet.
+    for gtk_version in 3.0 4.0; do
+        gtk_dir="${XDG_CONFIG_HOME:-$HOME/.config}/gtk-$gtk_version"
+        mkdir -p "$gtk_dir"
+        css="$gtk_dir/gtk.css"
+        if [ "$gtk_version" = 3.0 ] && [ -n "$gtk3_named" ]; then
+            if [ -L "$css" ]; then
+                case "$(readlink "$css")" in
+                    "$REPO"/themes/*/out/gtk.css|"$CURRENT_LINK"/gtk.css) rm -- "$css" ;;
+                esac
+            fi
+            if [ -f "$css" ]; then
+                css_tmp=$(mktemp)
+                sed '/\/\* oninix-theme \*\//d' "$css" >"$css_tmp"
+                [ ! -L "$css" ] || rm -- "$css"
+                cat "$css_tmp" >"$css"
+                rm -f "$css_tmp"
+            fi
+            continue
+        fi
+        gtk_palette=gtk.css
+        [ "$gtk_version" = 4.0 ] && gtk_palette=gtk4.css
+        gtk_import="@import url(\"$CURRENT_LINK/$gtk_palette\"); /* oninix-theme */
+@import url(\"$STATE/${gtk_palette%.css}-metrics.css\"); /* oninix-theme */"
+        # Existing generated-file links must not turn into self-imports.
+        if [ -L "$css" ]; then
+            case "$(readlink "$css")" in
+                "$REPO"/themes/*/out/gtk*.css|"$CURRENT_LINK"/gtk*.css)
+                    rm -- "$css" ;;
+            esac
+        fi
+        css_tmp=$(mktemp)
+        printf '%s\n' "$gtk_import" >"$css_tmp"
+        if [ -f "$css" ]; then sed '/\/\* oninix-theme \*\//d' "$css" >>"$css_tmp"; fi
+        [ ! -L "$css" ] || rm -- "$css"
+        cat "$css_tmp" >"$css"
+        rm -f "$css_tmp"
+    done
+    if [ -n "$colorscheme" ] && command -v plasma-apply-colorscheme >/dev/null 2>&1; then
+        # KDE skips applying an unchanged name even when its palette file changed.
+        if [ "$scheme_changed" = 1 ] && command -v kwriteconfig6 >/dev/null 2>&1; then
+            kwriteconfig6 --file kdeglobals --group General --key ColorScheme ''
+        fi
+        QT_QPA_PLATFORM=offscreen plasma-apply-colorscheme "$colorscheme" >/dev/null 2>&1 \
+            && printf 'colour scheme %s\n' "$colorscheme" \
+            || printf 'colour scheme %s FAILED\n' "$colorscheme" >&2
+    fi
+
+    icon_mode=$(sed -n 's/^mode *= *"\(.*\)"/\1/p' "$(palette_file "$1")")
+    icontheme=$(python3 "$REPO/themes/icons.py" variant "${icon_mode:-dark}")
+    if [ "$icontheme" != Papirus-Light ] && [ "$icontheme" != Papirus-Dark ]; then folders=""; fi
+    if [ -n "$icontheme" ] && [ "$folders" = palette ]; then
+        built=$(build_folder_icons "$icontheme" "$1") && icontheme=$built
+    fi
+    if [ -n "$icontheme" ] && command -v kwriteconfig6 >/dev/null 2>&1; then
+        kwriteconfig6 --file kdeglobals --group Icons --key Theme "$icontheme"
+        # Qt5 applications use qt5ct without changing Qt6's KDE integration.
+        qt5conf="${XDG_CONFIG_HOME:-$HOME/.config}/qt5ct/qt5ct.conf"
+        mkdir -p "$(dirname "$qt5conf")"
+        kwriteconfig6 --file "$qt5conf" --group Appearance --key style Breeze
+        kwriteconfig6 --file "$qt5conf" --group Appearance --key custom_palette true
+        kwriteconfig6 --file "$qt5conf" --group Appearance --key color_scheme_path "$CURRENT_LINK/qt5ct.colors"
+        kwriteconfig6 --file "$qt5conf" --group Appearance --key icon_theme "$icontheme"
+        kwriteconfig6 --file "$qt5conf" --group Fonts --key general "$qt_ui_font"
+        kwriteconfig6 --file "$qt5conf" --group Fonts --key fixed "$qt_mono_font"
+        printf '%s\n' "$icontheme" >"$STATE/icon-theme"
+        printf '[main]\nicon-theme=%s\n' "$icontheme" >"$STATE/fuzzel-icons.ini"
+        # Notify running KDE icon loaders after changing the inherited folder theme.
+        if command -v dbus-send >/dev/null 2>&1; then
+            dbus-send --session --type=signal /KIconLoader org.kde.KIconLoader.iconChanged int32:0 2>/dev/null || true
+        fi
+        printf 'icon theme %s\n' "$icontheme"
+    fi
+
+    # The Plasma (desktop) theme, which the Global Theme packages also set -
+    # both paths have to agree or switching by one leaves the other's value.
+    #
+    # plasma-apply-desktoptheme rather than kwriteconfig6: writing plasmarc sets
+    # the value but sends plasmashell no notification, so the panel keeps
+    # drawing the old theme until something else restarts it. The config ends up
+    # right and the screen does not, which is the worst of both.
+    if [ -n "$plasmatheme" ]; then
+        if command -v plasma-apply-desktoptheme >/dev/null 2>&1; then
+            QT_QPA_PLATFORM=offscreen plasma-apply-desktoptheme "$plasmatheme" >/dev/null 2>&1 \
+                && printf 'plasma theme %s\n' "$plasmatheme" \
+                || printf 'plasma theme %s FAILED\n' "$plasmatheme" >&2
+        elif command -v kwriteconfig6 >/dev/null 2>&1; then
+            kwriteconfig6 --file plasmarc --group Theme --key name "$plasmatheme"
+            printf 'plasma theme %s (written, no live reload)\n' "$plasmatheme"
+        fi
+    fi
+
+    # GTK. KDE writes gtk-theme-name=Breeze for both variants and flips only
+    # gtk-application-prefer-dark-theme, which GTK3 honours and GTK4/libadwaita
+    # ignores - and which Electron does not look at either: it decides by the
+    # theme NAME carrying "-dark". That is why Slack stayed dark with its own
+    # "sync with OS" switched on. Named explicitly here, in every place that
+    # answers the question.
+    #
+    # kde-gtk-config rewrites these files asynchronously after a colour-scheme
+    # change, so this waits for it to finish rather than racing it and losing.
+    if [ -n "$gtktheme" ]; then
+        [ -z "$gtk3_named" ] || gtktheme=$gtk3_named
+        sleep 1
+        for v in 3.0 4.0; do
+            ini="${XDG_CONFIG_HOME:-$HOME/.config}/gtk-$v/settings.ini"
+            # Outside Plasma nothing creates these, so start one.
+            if [ ! -f "$ini" ]; then
+                mkdir -p "${ini%/*}"
+                printf '[Settings]\ngtk-theme-name=%s\n' "$gtktheme" >"$ini"
+            fi
+            if grep -q '^gtk-theme-name=' "$ini"; then
+                sed -i.bak -e "s|^gtk-theme-name=.*|gtk-theme-name=$gtktheme|" "$ini" && rm -f "$ini.bak"
+            else
+                printf 'gtk-theme-name=%s\n' "$gtktheme" >>"$ini"
+            fi
+            if grep -q '^gtk-font-name=' "$ini"; then
+                sed -i.bak "s/^gtk-font-name=.*/gtk-font-name=$ui_gtk_font/" "$ini" && rm -f "$ini.bak"
+            else
+                printf 'gtk-font-name=%s\n' "$ui_gtk_font" >>"$ini"
+            fi
+            if [ -n "$icontheme" ]; then
+                grep -q '^gtk-icon-theme-name=' "$ini" \
+                    && sed -i.bak -e "s|^gtk-icon-theme-name=.*|gtk-icon-theme-name=$icontheme|" "$ini" && rm -f "$ini.bak" \
+                    || printf 'gtk-icon-theme-name=%s\n' "$icontheme" >>"$ini"
+            fi
+        done
+        command -v gsettings >/dev/null 2>&1 && \
+            { gsettings set org.gnome.desktop.interface font-name "$ui_gtk_font" &&
+              gsettings set org.gnome.desktop.interface monospace-font-name "$ui_gtk_mono" &&
+              gsettings set org.gnome.desktop.interface gtk-theme "$gtktheme" &&
+              { [ -z "$icontheme" ] || gsettings set org.gnome.desktop.interface icon-theme "$icontheme"; }; } 2>/dev/null || true
+        printf 'gtk theme %s\n' "$gtktheme"
+    fi
+
+    if [ -n "$wallpaper" ] && [ "${2:-}" != metrics-only ]; then
+        apply_wallpaper "$wallpaper" || printf 'Could not apply wallpaper: %s\n' "$wallpaper" >&2
+    fi
+
+    # The .desktop names one icon, "keepawake", so the variant is installed
+    # under that name rather than the entry being rewritten per theme.
+    if [ -n "$keepawake_icon" ] && [ -f "$REPO/themes/icons/$keepawake_icon" ]; then
+        dest="$HOME/.local/share/icons/hicolor/scalable/apps/keepawake.svg"
+        mkdir -p "$(dirname "$dest")"
+        cp -f "$REPO/themes/icons/$keepawake_icon" "$dest"
+        printf 'keepawake icon %s\n' "$keepawake_icon"
+        # Without this the old pixmap stays in the cache and nothing appears
+        # to have changed.
+        command -v kbuildsycoca6 >/dev/null 2>&1 && kbuildsycoca6 --noincremental >/dev/null 2>&1
+        touch "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
+    fi
+}
+
+# macOS decides light/dark itself; this only reads it. Absent key = Light.
+macos_variant() {
+    if [ "$(defaults read -g AppleInterfaceStyle 2>/dev/null || echo Light)" = Dark ]; then
+        printf '%s' "$DARK_THEME"
+    else
+        printf '%s' "$LIGHT_THEME"
+    fi
+}
+
+mode=${1:-render}
+case "$mode" in
+metrics)
+    python3 "$REPO/themes/ui_metrics.py" status
+    exit 0
+    ;;
+metrics-apply)
+    apply_desktop "$(current_name)" metrics-only
+    exit 0
+    ;;
+icons-resolve)
+    python3 "$REPO/themes/icons.py" catalog
+    exit 0
+    ;;
+icons)
+    python3 "$REPO/themes/icons.py" select "${2:?Choose an icon family}"
+    apply_desktop "$(current_name)"
+    exit 0
+    ;;
+wallpaper-path)
+    wallpaper_path "${2:-$(current_name)}"
+    exit 0
+    ;;
+wallpaper-config)
+    python3 "$REPO/themes/wallpapers.py" config "$(current_name)"
+    exit 0
+    ;;
+wallpaper-directory | wallpaper-mode)
+    python3 "$REPO/themes/wallpapers.py" "${mode#wallpaper-}" "$(current_name)" "${2:?Choose a wallpaper setting}"
+    exit 0
+    ;;
+wallpaper)
+    python3 "$REPO/themes/wallpapers.py" set "$(current_name)" "${2:?usage: theme wallpaper <shared|light|dark|palette> PATH}" "${3:?Choose an image}"
+    exit 0
+    ;;
+list)
+    for d in "$REPO"/themes/*/; do
+        n=$(basename "$d")
+        [ -f "$d/colors.toml" ] || continue
+        [ "$n" = "$(current_name)" ] && printf '=> %s\n' "$n" || printf '   %s\n' "$n"
+    done
+    exit 0
+    ;;
+set)
+    want=${2:?usage: theme set <name>}
+    [ -f "$(palette_file "$want")" ] || { echo "No palette: $want (see: theme list)" >&2; exit 1; }
+    save_name "$want"
+    ;;
+sync)
+    [ "$OS" = macos ] || { echo "theme sync needs a system that has an opinion; use: theme set" >&2; exit 1; }
+    want=$(macos_variant)
+    save_name "$want"
+    mode=set
+    ;;
+render | render-only | check | diff) ;;
+-h | --help)
+    sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
+    exit 0
+    ;;
+*)
+    echo "Unknown command: $mode" >&2
+    exit 1
+    ;;
+esac
+
+# ---- render: every palette, every template -------------------------------
+stale=0
+if [ -w "$REPO/themes" ]; then
+case "$mode" in
+    check) python3 "$REPO/themes/ui_metrics.py" check || stale=1 ;;
+    diff) python3 "$REPO/themes/ui_metrics.py" check || true ;;
+    *) python3 "$REPO/themes/ui_metrics.py" render-defaults ;;
+esac
+for pdir in "$REPO"/themes/*/; do
+    palette=$(basename "$pdir")
+    [ -f "$pdir/colors.toml" ] || continue
+    load_palette "$pdir/colors.toml"
+    dest_dir=$(out_dir "$palette")
+
+    for tpl in "$REPO"/themes/templates/*.tpl; do
+        [ -f "$tpl" ] || continue
+        grep -q '^# theme:scope=metrics$' "$tpl" && continue
+        out=$(template_out "$tpl")
+        [ -n "$out" ] || { echo "Template has no theme:out header: $tpl" >&2; exit 1; }
+        case "$out" in */*) echo "theme:out must be a bare filename: $tpl" >&2; exit 1 ;; esac
+        dest="$dest_dir/$out"
+
+        tmp=$(mktemp)
+        {
+            comment=$(template_comment "$tpl")
+            if [ "$comment" = '/*' ]; then
+                printf '/* GENERATED by theme from themes/%s/colors.toml - do not edit. */\n' "$palette"
+            else
+                printf '%s GENERATED by `theme` from themes/%s/colors.toml - do not edit.\n' "$comment" "$palette"
+            fi
+            render "$tpl"
+        } >"$tmp"
+
+        if [ -f "$dest" ] && cmp -s "$tmp" "$dest"; then
+            rm -f "$tmp"
+            continue
+        fi
+
+        case "$mode" in
+        check)
+            echo "stale: themes/$palette/out/$out"
+            stale=1
+            rm -f "$tmp"
+            ;;
+        diff)
+            diff -u "$dest" "$tmp" 2>/dev/null | sed "s|$tmp|themes/$palette/out/$out (new)|" || true
+            rm -f "$tmp"
+            ;;
+        *)
+            mkdir -p "$dest_dir"
+            mv "$tmp" "$dest"
+            chmod 644 "$dest"
+            printf 'wrote themes/%s/out/%s\n' "$palette" "$out"
+            ;;
+        esac
+    done
+done
+
+fi
+
+if [ "$mode" = check ]; then
+    [ "$stale" -eq 0 ] && echo "all generated files are current"
+    exit "$stale"
+fi
+[ "$mode" = diff ] && exit 0
+[ "$mode" = render-only ] && exit 0
+
+name=$(current_name)
+install_state "$name"
+reload_terminals
+reload_tmux
+case "$OS" in
+linux)
+    # SSH and user timers may lack these even while the graphical session is
+    # active. Read its published values without evaluating shell text, so the
+    # palette reload reaches Quickshell as well as GTK/Qt applications.
+    if command -v systemctl >/dev/null 2>&1; then
+        while IFS='=' read -r key value; do
+            case "$key" in
+                HYPRLAND_INSTANCE_SIGNATURE) [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] || export HYPRLAND_INSTANCE_SIGNATURE="$value" ;;
+                WAYLAND_DISPLAY) [ -n "${WAYLAND_DISPLAY:-}" ] || export WAYLAND_DISPLAY="$value" ;;
+            esac
+        done < <(systemctl --user show-environment 2>/dev/null || true)
+    fi
+    apply_desktop "$name"
+    restart_slack
+    reload_chrome
+    pkill -USR2 -x btop 2>/dev/null && echo "reloaded btop" || true
+    # GTK4/libadwaita apps and the portal read the dark preference, not the theme name.
+    if command -v gsettings >/dev/null 2>&1; then
+        scheme=$(sed -n 's/^mode *= *"\(.*\)"/\1/p' "$(palette_file "$name")")
+        gsettings set org.gnome.desktop.interface color-scheme "prefer-${scheme:-dark}" 2>/dev/null || true
+    fi
+    # Nix wrappers can name the process .mako-wrapped instead of mako.
+    # mako refuses a config whose include is missing: write the tier rules first.
+    oninix-desktop notification-render >/dev/null 2>&1 || true
+    if command -v makoctl >/dev/null 2>&1; then
+        makoctl reload >/dev/null 2>&1 || true
+    fi
+    # Hyprland reads hyprland-colors.lua at load; rofi, fuzzel and hyprlock read
+    # their generated colours at launch; the bar is told to re-read its JSON.
+    if [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] && command -v hyprctl >/dev/null 2>&1; then
+        hyprctl reload >/dev/null && echo "hyprland reloaded"
+        oninix-shell ipc call colors reload >/dev/null 2>&1 && echo "reloaded bar" || true
+    fi
+    # The login screen follows the desktop palette/wallpaper when chosen in Control Station;
+    # it publishes only when the resolved look changed.
+    if command -v oninix-desktop >/dev/null 2>&1; then
+        oninix-desktop greeter-sync >/dev/null 2>&1 || true
+    fi
+    ;;
+macos)
+    ;;
+esac
+echo "theme: $name"
+exit 0

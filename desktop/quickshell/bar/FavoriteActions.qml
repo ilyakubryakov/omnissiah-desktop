@@ -31,8 +31,8 @@ ColumnLayout {
         {id:"network", title:"Connections", glyph:"\uf0ac"}, {id:"bluetooth", title:"Bluetooth", glyph:"\uf293"},
         {id:"dnd", title:"Do not disturb", glyph:"\uf1f6"}, {id:"awake", title:"Keep awake", glyph:"\uf0f4"},
         {id:"nightlight", title:"Night light", glyph:"\uf186"}, {id:"microphone", title:"Microphone", glyph:"\uf130"},
-        {id:"output", title:"Audio output", glyph:"\uf028"}, {id:"vpn:balancy", title:"Balancy VPN", glyph:"\uf023"},
-        {id:"vpn:namico", title:"Namico VPN", glyph:"\uf023"}, {id:"mode:work", title:"Work", glyph:"\uf0b1"},
+        {id:"output", title:"Audio output", glyph:"\uf028"},
+        {id:"mode:work", title:"Work", glyph:"\uf0b1"},
         {id:"mode:call", title:"Call", glyph:"\uf095"}, {id:"mode:music", title:"Recording", glyph:"\uf001"},
         {id:"mode:game", title:"Game", glyph:"\uf11b"}, {id:"mode:normal", title:"Normal", glyph:"\uf015"}
     ]

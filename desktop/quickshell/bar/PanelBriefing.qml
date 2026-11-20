@@ -27,7 +27,7 @@ Singleton {
         { id: 'google', label: 'Google agents', glyph: '\u{F0D5}' }
     ]
     readonly property var chipProviders: providers.slice(0, 2)
-    readonly property var targets: [{ id: 'home', label: 'Home K8s' }, { id: 'prod', label: 'Balancy Prod' }]
+    readonly property var targets: []
     function provider(id) { return usage.find(p => p.id === id) || {} }
     function tightest(data) {
         return (data.windows || []).reduce((best, w) => !best || w.usedPercent > best.usedPercent ? w : best, null)

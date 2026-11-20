@@ -35,9 +35,14 @@ RULES = [
     (re.compile(r'Quickshell\.env\((["\'])HOME\1\) \+ (["\'])/\.config/hypr/monitors\.conf'), r'Quickshell.env(\1HOME\1) + \2/.config/oninix/monitors.conf'),
     (re.compile(r'Quickshell\.env\((["\'])HOME\1\) \+ (["\'])/\.config/(hypr|quickshell)/'), r'Quickshell.env(\1ONINIX_SHARE\1) + \2/\3/'),
     (re.compile(r'/Nextcloud/Img/Screenshots'), '/Pictures/Screenshots'),
+    # Python: state/cache subdirectories and desktop-entry markers.
+    (re.compile(r"(['\"])station/"), r"\1oninix/"),
+    (re.compile(r"/ (['\"])station\1"), r"/ \1oninix\1"),
+    (re.compile(r'\bSTATION_STATE\b'), 'ONINIX_STATE'),
+    (re.compile(r'X-Station-'), 'X-OniNix-'),
     # Bare command names and identifiers.
     (re.compile(r'\bstation-(desktop|display|launcher|maintenance|doctor|audio|theme|profile|phone-clip|status|panel)\b'), r'oninix-\1'),
-    (re.compile(r'\bSTATION_LAPTOP\b'), 'ONINIX_LAPTOP'),
+    (re.compile(r'\bSTATION_([A-Z][A-Z_]*)\b'), r'ONINIX_\1'),
     (re.compile(r'\bstation-([a-z][a-z-]*)'), r'oninix-\1'),
     (re.compile(r'\bstationEase\b'), 'oninixEase'),
     # State and runtime directories.

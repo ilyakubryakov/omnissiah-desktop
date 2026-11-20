@@ -1,0 +1,663 @@
+#!/usr/bin/env python3
+"""Daily update assessment and an interactive, scoped update task.
+
+An hourly timer runs `daily`: at most one read-only check a day (or after the
+system changes), then one notification when an update is due. Updates are only
+ever installed by the agent session the owner starts."""
+import fcntl
+import concurrent.futures
+import fnmatch
+import json
+import os
+import re
+from pathlib import Path
+import shutil
+import socket
+import subprocess
+import sys
+import time
+import tempfile
+import uuid
+import urllib.parse
+import urllib.request
+import urllib.error
+
+ROOT = Path(__file__).resolve().parents[3]
+STATE = Path(os.environ.get('XDG_STATE_HOME', Path.home() / '.local/state')) / 'oninix/maintenance.json'
+AGENTS = ('codex', 'claude')
+DAY = 24 * 60 * 60
+CHECK_INTERVAL = DAY
+# Owner decision 2026-11-08: an update is due when any of these holds.
+DUE_AGE_DAYS = 14          # nixpkgs lock age, while something is pending
+DUE_PACKAGES = 50          # package version changes in the candidate system
+CRITICAL_PACKAGES = {'linux': 'kernel', 'nvidia-x11': 'NVIDIA driver', 'nvidia-open': 'NVIDIA driver'}
+SOURCE_GRACE = 3 * DAY     # a failing source reuses its last result this long
+RENOTIFY = 3 * DAY         # repeat the due notification while it stays due
+# Owner decision 2026-11-20: Claude and Codex ship almost daily. Collect their
+# releases and update every two weeks; until the installed version is that old a
+# newer release is held: not shown, not counted, not updated by the agent.
+AI_APP_HOLD_DAYS = 14
+AI_APPS = {'Claude Code', 'Codex CLI', 'Claude Desktop', 'Codex Desktop'}
+
+
+def fetch(url):
+    request = urllib.request.Request(url, headers={'User-Agent': 'Station-Updates', 'Accept': 'application/json, text/plain'})
+    with urllib.request.urlopen(request, timeout=20) as response:
+        return response.read(8 * 1024 * 1024).decode()
+
+
+def version_key(value):
+    # Compare stable numeric releases only; unknown formats must not look current.
+    value = re.sub(r'^(rust-v|v)', '', value)
+    if not re.fullmatch(r'\d+(?:\.\d+)*', value):
+        raise ValueError('Unsupported release version')
+    return tuple(int(n) for n in value.split('.'))
+
+
+def installed_version(binary, package):
+    resolved = str((Path('/run/current-system/sw/bin') / binary).resolve())
+    match = re.search(r'/nix/store/[a-z0-9]+-' + re.escape(package) + r'-([^/]+)/', resolved)
+    if not match:
+        raise ValueError('Installed version unavailable')
+    return match[1]
+
+
+def release_check(name, binary, package, repo=None, apt=None, tag_prefix='v'):
+    current = installed_version(binary, package)
+    if apt:
+        blocks = fetch(apt).split('\n\n')
+        versions = []
+        for block in blocks:
+            fields = dict(line.split(': ', 1) for line in block.splitlines() if ': ' in line and not line.startswith(' '))
+            if fields.get('Package') == package and fields.get('Architecture') == 'amd64':
+                versions.append(fields['Version'])
+        latest = max(versions, key=version_key)
+        url = apt
+    else:
+        data = stable_release(repo, tag_prefix + current)
+        if data.get('prerelease') or data.get('draft'):
+            raise ValueError('No stable release available')
+        latest = re.sub(r'^(rust-v|v)', '', data['tag_name'])
+        url = data['html_url']
+    newer = version_key(latest) > version_key(current)
+    return {'name': name, 'kind': 'release', 'status': 'available' if newer else 'current',
+            'current': current, 'latest': latest, 'url': url,
+            'detail': current + (' → ' + latest if newer else ' · No newer stable release')}
+
+
+def input_check(name, node):
+    locked, original = node['locked'], node['original']
+    if locked['type'] != 'github' or original.get('type') != 'github':
+        raise ValueError('Unsupported flake input source')
+    repo = locked['owner'] + '/' + locked['repo']
+    ref = original.get('ref', 'HEAD')
+    latest = github_refs(repo, 'HEAD' if ref == 'HEAD' else 'refs/heads/' + ref).split()[0]
+    current = locked['rev']
+    changed = latest != current
+    return {'name': name, 'kind': 'input', 'status': 'available' if changed else 'current',
+            'current': current, 'latest': latest,
+            'url': 'https://github.com/' + repo + '/compare/' + current + '...' + latest,
+            'detail': current[:7] + (' → ' + latest[:7] + ' · Source changed' if changed else ' · Source unchanged')}
+
+
+def check_command(args):
+    return subprocess.run(args, check=True, capture_output=True, text=True, timeout=60).stdout
+
+
+def tag_key(tag):
+    return tuple(int(n) for n in re.findall(r'\d+', tag))
+
+
+def latest_tag(repo, like):
+    """The highest tag shaped like the configured one (rust-v#.#.#, GE-Proton#-#)."""
+    shape = re.sub(r'\d+', '#', like)
+    tags = [line.split('refs/tags/', 1)[1] for line in github_refs(repo, 'refs/tags/*').splitlines()]
+    same = [tag for tag in tags if re.sub(r'\d+', '#', tag) == shape]
+    if not same:
+        raise ValueError('No tag shaped like the configured pin')
+    return max(same, key=tag_key)
+
+
+def stable_release(repo, like=None):
+    """GitHub's latest-release redirect, else the newest tag over the git protocol.
+
+    github.com web pages can stall for this host while git stays reachable and
+    has no API quota, so any web failure falls back to tags (2026-11-08)."""
+    try:
+        request = urllib.request.Request('https://github.com/' + repo + '/releases/latest', method='HEAD')
+        with urllib.request.urlopen(request, timeout=8) as response:
+            url = response.geturl()
+        if '/releases/tag/' not in url:
+            raise ValueError('No stable release redirect')
+        return {'tag_name': urllib.parse.unquote(url.split('/releases/tag/', 1)[1]), 'html_url': url}
+    except (OSError, ValueError):
+        if like:
+            latest = latest_tag(repo, like)
+        else:
+            tags = [line.split('refs/tags/', 1)[1] for line in github_refs(repo, 'refs/tags/*').splitlines()]
+            latest = max([tag for tag in tags if re.fullmatch(r'v?\d+(?:\.\d+)*', tag)], key=version_key)
+        return {'tag_name': latest, 'html_url': 'https://github.com/' + repo + '/releases/tag/' + latest}
+
+
+def github_refs(repo, ref):
+    output = subprocess.run(['git', '-c', 'credential.helper=', 'ls-remote', '--refs' if ref != 'HEAD' else '--quiet',
+                           'https://github.com/' + repo + '.git', ref], check=True, capture_output=True,
+                          text=True, timeout=30, env={**os.environ, 'GIT_TERMINAL_PROMPT': '0'}).stdout
+    if not output.strip():
+        raise ValueError('Upstream reference unavailable')
+    return output
+
+
+def package_inventory(graph):
+    packages = {}
+    for drv, data in graph.get('derivations', graph).items():
+        attrs = data.get('structuredAttrs') or data.get('env', {})
+        name, version = attrs.get('pname'), attrs.get('version')
+        if name and version:
+            packages.setdefault(name, set()).add(str(version))
+    return packages
+
+
+def package_changes(current, candidate):
+    changes = []
+    for name in sorted(current.keys() | candidate.keys()):
+        before, after = sorted(current.get(name, [])), sorted(candidate.get(name, []))
+        if before != after:
+            changes.append({'name': name, 'kind': 'package', 'status': 'available',
+                            'current': ', '.join(before) or 'Not in current plan',
+                            'latest': ', '.join(after) or 'Removed from plan',
+                            'detail': (', '.join(before) or 'Added') + ' → ' + (', '.join(after) or 'Removed')})
+    return changes
+
+
+def evaluation_blocker(stderr):
+    """The final Nix error line, without its prefix and quoting noise."""
+    lines = [line.strip() for line in stderr.splitlines() if line.strip().startswith('error:')]
+    message = lines[-1][len('error:'):].strip() if lines else 'Evaluation failed'
+    return re.sub(r"`([^`']+)'", r'\1', message)
+
+
+def nix_plan_check():
+    """Evaluate the whole candidate graph in a disposable flake; never build it."""
+    host = {'vika-main': 'station', 'vika-elitebook': 'elitebook'}.get(socket.gethostname())
+    if not host:
+        raise ValueError('Unsupported host')
+
+    def command(args, timeout=300):
+        return subprocess.run(args, check=True, capture_output=True, text=True, timeout=timeout).stdout
+
+    current = package_inventory(json.loads(command(['nix', 'derivation', 'show', '--recursive', '/run/current-system'])))
+    with tempfile.TemporaryDirectory(prefix='oninix-update-check-') as directory:
+        flake = Path(directory) / 'nixos'
+        shutil.copytree(ROOT / 'nixos', flake)
+        # Only the isolated lock changes. This downloads Nix expressions, not apps.
+        command(['nix', 'flake', 'update', '--flake', str(flake)])
+        try:
+            drv = command(['nix', 'eval', '--option', 'allow-import-from-derivation', 'false', '--raw',
+                           str(flake) + '#nixosConfigurations.' + host + '.config.system.build.toplevel.drvPath']).strip()
+            candidate = package_inventory(json.loads(command(['nix', 'derivation', 'show', '--recursive', drv])))
+        except subprocess.CalledProcessError as error:
+            return {'name': 'NixOS package plan', 'kind': 'nix', 'status': 'unknown',
+                    'detail': 'The newer inputs do not evaluate with this configuration',
+                    'blocker': evaluation_blocker(error.stderr or ''),
+                    'changes': [], 'count': 0, 'total': len(current)}
+    changes = package_changes(current, candidate)
+    return {'name': 'NixOS package plan', 'kind': 'nix', 'status': 'available' if changes else 'current',
+            'detail': str(len(changes)) + ' package version changes · ' + str(len(candidate)) + ' packages checked',
+            'changes': changes, 'count': len(changes), 'total': len(candidate)}
+
+
+def pinned_checks():
+    """Discover GitHub pins in local Nix recipes, including future additions."""
+    jobs = []
+    for path in sorted((ROOT / 'nixos').rglob('*.nix')):
+        text = path.read_text()
+        for match in re.finditer(r'fetchFromGitHub\s*\{([^{}]*(?:\$\{[^}]*\}[^{}]*)*)\}', text):
+            fields = dict(re.findall(r'(owner|repo|rev|tag)\s*=\s*"([^"]+)"', match[1]))
+            if not {'owner', 'repo'} <= fields.keys():
+                continue
+            ref = fields.get('rev', fields.get('tag', ''))
+            if '${' in ref:
+                versions = re.findall(r'version\s*=\s*"([^"]+)"', text[:match.start()])
+                if versions:
+                    ref = re.sub(r'\$\{(?:finalAttrs\.)?version\}', versions[-1], ref)
+            name = fields['owner'] + '/' + fields['repo']
+            if name in {'openai/codex', 'telegramdesktop/tdesktop'}:
+                continue  # Stable release checks below, not unreleased HEAD commits.
+            jobs.append((name, lambda name=name, ref=ref: pinned_github_check(name, ref)))
+        # Shared omacom builder receives each app's revision as an argument.
+        for name, ref in re.findall(r'mkApp\s*\{\s*name\s*=\s*"([^"]+)";\s*rev\s*=\s*"([^"]+)"', text):
+            repo = 'omacom/' + name
+            jobs.append((repo, lambda repo=repo, ref=ref: pinned_github_check(repo, ref)))
+        for owner, repo, tag in re.findall(r'https://github.com/([^/]+)/([^/]+)/releases/download/([^/]+)/', text):
+            if '${' in tag:
+                versions = re.findall(r'version\s*=\s*"([^"]+)"', text)
+                if versions:
+                    tag = tag.replace('${finalAttrs.version}', versions[0]).replace('${version}', versions[0])
+            name = owner + '/' + repo
+            jobs.append((name, lambda name=name, tag=tag: pinned_github_check(name, tag)))
+    return jobs
+
+
+def pinned_github_check(repo, ref):
+    if not ref or '${' in ref:
+        raise ValueError('Could not resolve configured pin')
+    if re.fullmatch(r'[a-f0-9]{40}', ref):
+        latest = github_refs(repo, 'HEAD').split()[0]
+        changed = ref != latest
+    else:
+        data = stable_release(repo, ref)
+        if data.get('prerelease') or data.get('draft'):
+            raise ValueError('No stable release')
+        latest = data['tag_name']
+        # A changed tag is reported for review, not assumed installable or newer.
+        changed = ref != latest
+    return {'name': repo, 'kind': 'pin', 'status': 'available' if changed else 'current',
+            'current': ref, 'latest': latest, 'detail': ref[:16] + (' → ' + latest[:16] if changed else ' · Pin unchanged'),
+            'url': 'https://github.com/' + repo}
+
+
+def flatpak_check(scope):
+    # Query remote commits without --cached; do not install or refresh applications.
+    output = check_command(['flatpak', 'remote-ls', '--' + scope, '--updates', '--columns=ref,commit'])
+    masks = check_command(['flatpak', 'mask', '--' + scope]).splitlines()
+    refs = [line.split()[0] for line in output.splitlines() if line.strip()]
+    masked = [ref for ref in refs if any(
+        fnmatch.fnmatchcase(ref, mask.strip()) or fnmatch.fnmatchcase(ref.split('/')[1], mask.strip())
+        for mask in masks if mask.strip())]
+    available = [ref for ref in refs if ref not in masked]
+    return {'name': 'Flatpak (' + scope + ')', 'kind': 'flatpak',
+            'status': 'available' if available else 'current', 'count': len(available),
+            'detail': (', '.join(available) if available else 'No unmasked updates') +
+                      (' · ' + str(len(masked)) + ' masked' if masked else '')}
+
+
+def user_tools_check():
+    installed = check_command(['uv', 'tool', 'list', '--color', 'never'])
+    outdated = check_command(['uv', 'tool', 'list', '--outdated', '--color', 'never'])
+    tools = [line for line in installed.splitlines() if line and not line.startswith(('-', ' '))]
+    changes = [line for line in outdated.splitlines() if line and not line.startswith(('-', ' '))]
+    return {'name': 'uv tools', 'kind': 'tools', 'status': 'available' if changes else 'current',
+            'detail': '; '.join(changes) if changes else str(len(tools)) + ' tools checked · No updates'}
+
+
+def pinned_since(version):
+    """When the repository started pinning this version: the commit adding it."""
+    output = subprocess.run(['git', '-C', str(ROOT), 'log', '-1', '--format=%ct', '-S', '"' + version + '"',
+                             '--', 'nixos/modules'], capture_output=True, text=True, timeout=30).stdout.strip()
+    return int(output) if output else None
+
+
+def hold_ai_apps(items, now):
+    for item in items:
+        if item['name'] not in AI_APPS or item.get('status') != 'available':
+            continue
+        since = pinned_since(item.get('current', ''))
+        if since is None:
+            continue  # unknown age: show it rather than hide it forever
+        until = since + AI_APP_HOLD_DAYS * DAY
+        if now < until:
+            item.update(status='held', heldUntil=until,
+                        detail=item['current'] + ' → ' + item['latest'] + ' · held until '
+                        + time.strftime('%d %b', time.localtime(until)))
+    return items
+
+
+def merge_previous(items, previous, now):
+    """A source that fails (rate limit, timeout) keeps its last good result;
+    only a failure lasting SOURCE_GRACE is reported."""
+    before = {item['name']: item for item in previous.get('items', [])}
+    merged = []
+    for item in items:
+        if item.get('kind') == 'error':
+            old = before.get(item['name']) or {}
+            since = old.get('failingSince', now)
+            item = {**(old if old.get('kind') not in (None, 'error') else item), 'failingSince': since}
+            if now - since >= SOURCE_GRACE:
+                item = {**item, 'kind': 'error', 'status': 'unknown',
+                        'detail': 'Not reachable since ' + time.strftime('%d %b', time.localtime(since))}
+        merged.append(item)
+    return merged
+
+
+def assess(items, nixpkgs_modified, now):
+    """The one answer the widget shows: current, available or due, and why."""
+    nix = next((item for item in items if item.get('kind') == 'nix'), {})
+    changes = nix.get('changes', [])
+    # Flake input revisions are the cause of package changes, not updates themselves.
+    others = [item for item in items if item['status'] == 'available' and item.get('kind') not in ('nix', 'input')]
+    count = len(changes) + len(others)
+    blocked = bool(nix.get('blocker'))
+    pending = count > 0 or blocked
+    reasons = []
+    age = int((now - nixpkgs_modified) / DAY) if nixpkgs_modified else 0
+    if pending and age >= DUE_AGE_DAYS:
+        reasons.append('NixOS packages are ' + str(age) + ' days old')
+    if len(changes) >= DUE_PACKAGES:
+        reasons.append(str(len(changes)) + ' package updates')
+    critical = sorted({CRITICAL_PACKAGES[c['name']] for c in changes if c['name'] in CRITICAL_PACKAGES})
+    if critical:
+        reasons.append('new ' + ' and '.join(critical))
+    level = 'due' if reasons else 'available' if pending else 'current'
+    if level == 'due':
+        summary = 'Time to update: ' + ', '.join(reasons)
+    elif level == 'available':
+        summary = (str(count) + (' update' if count == 1 else ' updates') + ' waiting, no rush') if count else 'No rush'
+    else:
+        summary = 'Everything is up to date'
+    if blocked:
+        summary += ' · the NixOS update needs a configuration change'
+    # Only failures past the grace period; a first failure has no result yet but stays quiet.
+    broken = [item['name'] for item in items if item.get('kind') == 'error'
+              and now - item.get('failingSince', now) >= SOURCE_GRACE]
+    return {'level': level, 'count': count, 'reasons': reasons, 'summary': summary,
+            'blocker': nix.get('blocker', ''), 'nixpkgsAgeDays': age, 'unreachable': broken}
+
+
+def availability_check():
+    """Explicit, serialized read-only check. Never called by status or a timer."""
+    path = STATE.with_name('updates-check.json')
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.with_suffix('.lock').open('a') as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise ValueError('An update check is already running')
+        # Do not inspect a package set while an interactive update changes it.
+        if status()['sessionOpen']:
+            raise ValueError('Close the update session before checking')
+        checked_system = os.path.realpath('/run/current-system')
+        jobs = [
+            ('NixOS package plan', nix_plan_check),
+            ('Telegram', lambda: release_check('Telegram', 'Telegram', 'telegram-desktop', 'telegramdesktop/tdesktop')),
+            ('Codex CLI', lambda: release_check('Codex CLI', 'codex', 'codex', 'openai/codex', tag_prefix='rust-v')),
+            ('Claude Code', lambda: release_check('Claude Code', 'claude', 'claude-code', 'anthropics/claude-code')),
+            ('Claude Desktop', lambda: release_check('Claude Desktop', 'claude-desktop', 'claude-desktop', apt=
+                'https://downloads.claude.ai/claude-desktop/apt/stable/dists/stable/main/binary-amd64/Packages')),
+            ('Codex Desktop', lambda: release_check('Codex Desktop', 'chatgpt', 'chatgpt', apt=
+                'https://persistent.oaistatic.com/codex-app-prod/linux/deb/dists/stable/main/binary-amd64/Packages')),
+            ('Flatpak (system)', lambda: flatpak_check('system')),
+            ('Flatpak (user)', lambda: flatpak_check('user')),
+            ('uv tools', user_tools_check),
+        ]
+        jobs.extend(pinned_checks())
+        # Sources without a machine-readable checker (vendor installers, VS Code
+        # extensions, Steam) are the update agent's job, not the widget's.
+        nodes = json.loads((ROOT / 'nixos/flake.lock').read_text())['nodes']
+        for name, target in nodes['root']['inputs'].items():
+            jobs.append((name, lambda name=name, target=target: input_check(name, nodes[target])))
+
+        def safely(job):
+            name, action = job
+            try:
+                return action()
+            except urllib.error.HTTPError as error:
+                reason = 'HTTP ' + str(error.code)
+            except subprocess.CalledProcessError as error:
+                reason = 'Command failed: ' + ' '.join(str(arg) for arg in error.cmd[:2]) + ' (exit ' + str(error.returncode) + ')'
+            except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+                reason = 'Source unavailable or unrecognized response'
+            return {'name': name, 'kind': 'error', 'status': 'unknown', 'detail': reason}
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+            items = list(pool.map(safely, jobs))
+        now = time.time()
+        try:
+            previous = json.loads(path.read_text())
+        except (OSError, ValueError):
+            previous = {}
+        items = hold_ai_apps(merge_previous(items, previous, now), now)
+        value = {'checkedAt': now, 'host': socket.gethostname(), 'system': checked_system, 'items': items,
+                 'assessment': assess(items, nodes.get('nixpkgs', {}).get('locked', {}).get('lastModified'), now)}
+        tmp = path.with_suffix('.tmp')
+        tmp.write_text(json.dumps(value))
+        tmp.replace(path)
+        return value
+
+
+def quiet_modes():
+    try:
+        return subprocess.check_output(['makoctl', 'mode'], timeout=6, text=True).split()
+    except (OSError, subprocess.SubprocessError):
+        return []
+
+
+def preferred_agent():
+    """The agent chosen in Appearance > Panels when it can run updates."""
+    conf = Path(os.environ.get('XDG_STATE_HOME', Path.home() / '.local/state')) / 'theme/desktop.conf'
+    try:
+        values = dict(line.split('=', 1) for line in conf.read_text().splitlines() if '=' in line)
+    except OSError:
+        values = {}
+    agent = values.get('agent', '').strip()
+    return agent if agent in AGENTS else 'claude'
+
+
+def daily():
+    """Hourly timer: refresh a day-old (or pre-update) result, then notify once when due."""
+    path = STATE.with_name('updates-check.json')
+    try:
+        cached = json.loads(path.read_text())
+    except (OSError, ValueError):
+        cached = {}
+    current = status()
+    if current['sessionOpen'] or current['checkRunning']:
+        return {'skipped': 'busy'}
+    stale = time.time() - cached.get('checkedAt', 0) >= CHECK_INTERVAL \
+        or cached.get('system') != os.path.realpath('/run/current-system')
+    if stale:
+        # The candidate evaluation is CPU-heavy; never run it under a game.
+        if 'gaming' in quiet_modes():
+            return {'skipped': 'gaming'}
+        cached = availability_check()
+    return notify_if_due(cached)
+
+
+def notify_if_due(cached):
+    path = STATE.with_name('maintenance-reminder.json')
+    assessment = cached.get('assessment') or {}
+    with path.with_suffix('.lock').open('a') as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return {'skipped': 'notification open'}
+        try:
+            value = json.loads(path.read_text())
+        except (OSError, ValueError):
+            value = {}
+        now = time.time()
+        if assessment.get('level') != 'due' or now - value.get('notifiedAt', 0) < RENOTIFY:
+            return value
+        modes = quiet_modes()
+        if 'gaming' in modes or 'do-not-disturb' in modes or status()['sessionOpen']:
+            return value
+        agent = preferred_agent()
+        save = lambda data: (path.with_suffix('.tmp').write_text(json.dumps(data)), path.with_suffix('.tmp').replace(path))
+        save({**value, 'notifiedAt': now})
+        # Blocks until the toast is answered or dismissed; the flock prevents a duplicate.
+        result = subprocess.run(['notify-send', '--app-name=Station Updates', '--icon=system-software-update',
+                                 '--urgency=normal', '--expire-time=0',
+                                 '--action=update=Update with ' + agent.capitalize(),
+                                 'Time to update the workstation', assessment.get('summary', '')],
+                                capture_output=True, text=True)
+        if result.returncode != 0:
+            save(value)  # Not delivered; the next timer run retries.
+            return value
+        if result.stdout.strip() == 'update':
+            launch(agent)
+        return {**value, 'notifiedAt': now}
+
+
+def launch(agent):
+    if status().get('sessionOpen'):
+        raise ValueError('An update session is already open')
+    agent_command(agent, 'preview')  # Validate before opening a window.
+    subprocess.Popen(['uwsm', 'app', '-t', 'service', '--', 'kitty',
+                      '--title', 'System updates', '--directory', str(ROOT),
+                      str(Path(__file__).resolve()), 'run', agent],
+                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                     stderr=subprocess.DEVNULL, start_new_session=True)
+
+
+def read():
+    try:
+        return json.loads(STATE.read_text())
+    except (OSError, ValueError):
+        return {'status': 'idle', 'summary': 'Ready to update'}
+
+
+def write(value):
+    STATE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = STATE.with_suffix('.tmp')
+    tmp.write_text(json.dumps(value))
+    tmp.replace(STATE)
+
+
+def prompt(run_id):
+    return f'''Обнови эту NixOS-машину и все управляемые компоненты из репозитория {ROOT}.
+Это задача обслуживания, запущенная владельцем через виджет System updates.
+Сначала прочитай AGENTS.md/CLAUDE.md и актуальную общую память. Подтверди hostname:
+vika-main -> station, vika-elitebook -> elitebook; на другой машине остановись.
+Сохрани чужие незакоммиченные изменения. Не делай reset, stash, commit или push автоматически.
+Проверь активный Gaming mode, игры, запись аудио и текущие сборки. При активной игре
+или записи можно подготовить изменения, но отложи ресурсоемкую сборку и активацию,
+объяснив причину. Не выключай игровой режим и не запускай AI самостоятельно.
+Проверь доступные стабильные обновления всех flake inputs, NixOS, ядра, NVIDIA,
+Hyprland/Quickshell, приложений, Codex/Claude, GE-Proton, закрепленного DLSS Updater,
+локального AI-стека и других вручную закрепленных пакетов. Для каждого custom pin
+сверь официальный upstream, совместимость, URL и hash; не ограничивайся nix flake update.
+Меняй declarative источники, без самовольного self-update Nix-пакетов.
+Владелец требует обновлять ВСЕ, а не только nixpkgs: каждый пункт со статусом
+available в {STATE.with_name('updates-check.json')} (app pins в app-updates.nix,
+.deb в ai-clients.nix, omacom, uv tools, Flatpak) обнови или явно объясни, почему
+нельзя. Пункты со статусом held (Claude/Codex, решение владельца 2026-11-20:
+копить и обновлять раз в две недели) не обновляй. Overlay, который отстал от nixpkgs, удали. В конце запусти
+{Path(__file__).resolve()} check: complete только если ничего не осталось available.
+Не меняй версии вслепую, не переходи на prerelease и не заменяй игровой DLSS вручную.
+Если requireFile требует vendor installer, сначала проверь существующий архив
+/mnt/archive/images (например, citrix), сверь ожидаемый hash и добавь точный файл
+через nix-store --add-fixed. Не обходи авторизацию/EULA и не подменяй hash.
+Обнови системные и пользовательские Flatpak, сохраняя осознанные маски; Steam-клиент
+и игры обновляются Steam, не редактируй живые манифесты или префиксы.
+Источники без автоматической проверки тоже твои: vendor-установщики (MT Power
+Drum Kit, ASUS Bluetooth firmware, Cortex Control), пользовательские расширения
+VS Code и user Nix profile - проверь и перечисли, что для них доступно.
+Проверь fwupd/UEFI/SSD/периферию и перечисли доступные обновления прошивок, но их
+установка требует отдельного решения владельца. Не скачивай и не обновляй модели AI.
+Проверки и сборку выполняй локально на целевой машине: vika-main -> station,
+vika-elitebook -> elitebook. Сначала evaluation и подходящие тесты, затем
+nixos-rebuild build с flake этого репозитория и правильным host, без активации.
+Для обновления станции доступ к EliteBook не требуется: не подключайся к нему и
+не копируй туда репозиторий по умолчанию. Отдельная машина нужна только по явному
+запросу владельца. Не запускай тяжелые сборки в Proxmox или параллельно другой сборке.
+Согласуй новое ядро, NVIDIA и Scarlett backport; проверь сборку модулей для нового
+ядра. После успешной сборки установи проверенное поколение отдельным шагом:
+при замене ядра/NVIDIA на работающей станции используй nixos-rebuild boot,
+не меняя драйвер под живой графической сессией; для остальных изменений допустим
+switch. Штатный запрос sudo допустим. Сохрани предыдущее поколение для отката. Нужный reboot
+и реальную загрузку нового ядра/модулей отмечай отдельно: сборка не доказывает runtime.
+Не перезагружай машину, не делай GC, не удаляй поколения и не перезапускай рабочие
+приложения без необходимости. Отдельно сообщи, что требует reboot/relogin.
+В конце проверь сервисы, графическую сессию и ошибки. Сохрани подтвержденные находки
+в существующих заметках. Дай отчет: что обновлено, что отложено, проверки, проблемы,
+требуется ли перезагрузка. Не выдавай завершение сессии за успешное обновление.
+Запиши итог для виджета командой (summary - короткий English текст для UI):
+{Path(__file__).resolve()} report {run_id} STATUS "summary"
+Выбери один status: complete только после проверенного обновления; partial для
+отложенной активации/неполного охвата; failed при ошибке. Отвечай владельцу по-русски.
+'''
+
+
+def agent_command(agent, run_id):
+    if agent not in AGENTS:
+        raise ValueError('Choose Codex or Claude')
+    if not shutil.which(agent):
+        raise ValueError(agent + ' is not installed')
+    # No permission bypass flags; the interactive CLI retains its configured policy.
+    return [agent, prompt(run_id)]
+
+
+def run(agent):
+    STATE.parent.mkdir(parents=True, exist_ok=True)
+    with STATE.with_suffix('.lock').open('w') as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise ValueError('An update session is already open')
+        run_id = uuid.uuid4().hex
+        command = agent_command(agent, run_id)
+        value = {'status': 'running', 'agent': agent, 'run_id': run_id,
+                 'startedAt': time.time(), 'host': socket.gethostname(),
+                 'summary': 'Update session open', 'pid': os.getpid()}
+        write(value)
+        try:
+            code = subprocess.call(command, cwd=ROOT)
+        except BaseException:
+            current = read()
+            if current.get('run_id') == run_id:
+                write({**current, 'status': 'failed', 'summary': 'Update session interrupted', 'finishedAt': time.time()})
+            raise
+        current = read()
+        if current.get('run_id') == run_id and current.get('status') == 'running':
+            write({**current, 'status': 'review' if code == 0 else 'failed',
+                   'summary': 'Session closed; check its report' if code == 0 else 'Update session failed',
+                   'finishedAt': time.time()})
+        return code
+
+
+def main(args):
+    if args == ['check']:
+        print(json.dumps(availability_check()))
+        return 0
+    if len(args) == 2 and args[0] == 'run':
+        return run(args[1])
+    if len(args) == 2 and args[0] == 'launch':
+        launch(preferred_agent() if args[1] == 'auto' else args[1])
+        print(json.dumps({'opened': True}))
+        return 0
+    if len(args) == 4 and args[0] == 'report':
+        current = read()
+        if current.get('run_id') != args[1] or args[2] not in {'complete', 'partial', 'failed'}:
+            raise ValueError('Invalid update session or result')
+        write({**current, 'status': args[2], 'summary': args[3][:240], 'finishedAt': time.time()})
+        return 0
+    if args == ['status']:
+        # Read-only: no network check and no notification from the panel poll.
+        print(json.dumps({**status(), 'agent': preferred_agent()}))
+        return 0
+    if args in (['daily'], ['remind']):  # `remind`: the timer's pre-2026-11-08 command
+        print(json.dumps(daily()))
+        return 0
+    raise ValueError('Usage: oninix-maintenance check / daily / launch codex|claude|auto / run codex|claude / status / report RUN_ID STATUS SUMMARY')
+
+
+def status():
+    current = read()
+    STATE.parent.mkdir(parents=True, exist_ok=True)
+    with STATE.with_suffix('.lock').open('a') as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            opened = False
+            # Check/write while holding the lock; a new session cannot race this repair.
+            current = read()
+            if current.get('status') == 'running':
+                current = {**current, 'status': 'review', 'summary': 'Session interrupted; check its report'}
+                write(current)
+        except BlockingIOError:
+            opened = True
+    with STATE.with_name('updates-check.lock').open('a') as check_lock:
+        try:
+            fcntl.flock(check_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            checking = False
+        except BlockingIOError:
+            checking = True
+    return {**current, 'sessionOpen': opened, 'checkRunning': checking,
+            'currentSystem': os.path.realpath('/run/current-system')}
+
+
+if __name__ == '__main__':
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except Exception as error:
+        print(json.dumps({'error': str(error) if isinstance(error, ValueError) else 'Update operation failed'}))
+        sys.exit(1)

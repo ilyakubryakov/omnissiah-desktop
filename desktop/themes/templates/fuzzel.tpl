@@ -1,0 +1,13 @@
+# theme:out=fuzzel-colors.ini
+# theme:comment=#
+[colors]
+background={{background:hex}}f2
+text={{foreground:hex}}ff
+prompt={{muted:hex}}ff
+placeholder={{dim_foreground:hex}}ff
+input={{bright_foreground:hex}}ff
+match={{accent:hex}}ff
+selection={{selection:hex}}ff
+selection-text={{bright_foreground:hex}}ff
+selection-match={{accent:hex}}ff
+border={{accent:hex}}ff

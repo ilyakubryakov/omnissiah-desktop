@@ -72,6 +72,18 @@ lib.mkIf cfg.enable {
     RestartSec = "1s";
   };
 
+  systemd.user.services.oninix-panel = {
+    description = "OniNix panels, Control Station and desktop overlays";
+    partOf = [ "graphical-session.target" ];
+    after = [ "graphical-session.target" ];
+    path = [ "/run/wrappers" "/run/current-system/sw" ];
+    serviceConfig = {
+      ExecStart = "${share}/bin/oninix-shell -n";
+      Restart = "on-failure";
+      RestartSec = 2;
+    };
+  };
+
   security.rtkit.enable = true;
   services.pipewire = {
     enable = true;
@@ -114,5 +126,11 @@ lib.mkIf cfg.enable {
     kdePackages.breeze-icons
     papirus-icon-theme
     qt6Packages.qt6ct
+    rofi
+    libnotify
+    glib
+    cava
+    swappy
+    jq
   ];
 }

@@ -1,0 +1,17 @@
+# theme:out=omacom-colors.toml
+# theme:comment=#
+mode = "{{mode}}"
+background = "{{background}}"
+foreground = "{{foreground}}"
+accent = "{{accent}}"
+selection = "{{selection}}"
+muted = "{{muted}}"
+lighter_background = "{{light_background}}"
+dark_background = "{{dark_background}}"
+darker_background = "{{faint_background}}"
+red = "{{red}}"
+green = "{{green}}"
+yellow = "{{yellow}}"
+blue = "{{blue}}"
+magenta = "{{magenta}}"
+cyan = "{{cyan}}"
