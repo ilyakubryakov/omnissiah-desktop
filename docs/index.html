@@ -24,7 +24,7 @@ body {
 a { color: var(--glow); }
 .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
 header { text-align: center; padding: 72px 0 40px; }
-header img { width: 132px; height: 132px; filter: drop-shadow(0 0 32px rgba(224,169,90,.35)); }
+header .mark { width: 132px; height: 132px; filter: drop-shadow(0 0 32px rgba(224,169,90,.35)); }
 h1 { font-size: clamp(44px, 9vw, 84px); letter-spacing: .08em; margin: 12px 0 0; color: var(--bright); font-weight: 800; }
 .kicker { letter-spacing: .35em; text-transform: uppercase; color: var(--brass); font-size: 13px; margin-top: 6px; }
 .lead { font-size: clamp(18px, 2.4vw, 22px); max-width: 760px; margin: 22px auto 0; color: var(--fg); }
@@ -62,7 +62,7 @@ footer { padding: 64px 0 48px; color: var(--dim); font-size: 14px; text-align: c
 <body>
 <div class="wrap">
   <header>
-    <img src="assets/mechanicus.png" alt="OniNix mark">
+    <img class="mark" src="assets/mechanicus.png" alt="OniNix mark">
     <h1>ONINIX</h1>
     <div class="kicker">OmnissiaNix</div>
     <p class="lead">NixOS with a Hyprland desktop people actually want to use, local voice, and a machine spirit that changes the system when you ask. You see the diff. You can always undo.</p>
