@@ -42,7 +42,8 @@ def resume(units):
 PERFORMANCE_UNIT = 'oninix-game-performance.service'
 
 def scheduler_available():
-    return Path('/etc/systemd/system', PERFORMANCE_UNIT).exists()
+    return (Path('/sys/kernel/sched_ext/state').exists()
+            and Path('/etc/systemd/system', PERFORMANCE_UNIT).exists())
 
 def scheduler_service(verb):
     command(['systemctl', '--no-ask-password', verb, PERFORMANCE_UNIT])

@@ -42,11 +42,15 @@ lib.mkIf cfg.enable (lib.mkMerge [
         };
       };
     };
+    systemd.services.scx_loader.unitConfig.ConditionPathExists = "/sys/kernel/sched_ext/state";
     systemd.services.oninix-game-performance = {
       description = "LAVD performance profile while Game mode is on";
       after = [ "scx_loader.service" ];
       path = [ pkgs.systemd scx.package ];
-      unitConfig.StartLimitIntervalSec = 0;
+      unitConfig = {
+        ConditionPathExists = "/sys/kernel/sched_ext/state";
+        StartLimitIntervalSec = 0;
+      };
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
