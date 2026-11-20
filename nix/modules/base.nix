@@ -29,6 +29,7 @@ lib.mkIf cfg.enable {
   zramSwap.enable = true;
 
   environment.systemPackages = with pkgs; [
+    google-chrome
     git curl wget jq ripgrep fd btop fastfetch unzip
   ];
 }

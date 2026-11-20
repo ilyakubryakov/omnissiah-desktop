@@ -15,6 +15,7 @@ local function bind(keys, action, description, opts)
 	hl.bind(keys, action, opts)
 end
 
+local home = os.getenv("HOME")
 local scripts = (os.getenv("ONINIX_SHARE") or "/run/current-system/sw/share/oninix") .. "/hypr/scripts/"
 
 
@@ -55,13 +56,22 @@ end
 local function focus_or_start(class, cmd)
 	return hl.dsp.exec_cmd(scripts .. "launch-or-focus.sh '" .. class .. "' " .. cmd)
 end
-bind("SUPER + ALT + B", focus_or_start("google-chrome", "google-chrome-stable"), "Chrome (focus or start)")
-bind("SUPER + ALT + S", focus_or_start("slack", "slack"), "Slack")
-bind("SUPER + ALT + T", focus_or_start("telegram", "Telegram"), "Telegram")
-bind("SUPER + ALT + M", focus_or_start("thunderbird", "thunderbird"), "Thunderbird")
-bind("SUPER + ALT + O", focus_or_start("obsidian", "obsidian"), "Obsidian")
-bind("SUPER + ALT + C", focus_or_start("claude", "claude-desktop"), "Claude")
-bind("SUPER + ALT + G", focus_or_start("chatgpt|codex", "chatgpt"), "ChatGPT / Codex")
+local function installed(cmd)
+	for _, dir in ipairs({ "/run/current-system/sw/bin/", home .. "/.nix-profile/bin/", "/etc/profiles/per-user/" .. (os.getenv("USER") or "") .. "/bin/" }) do
+		local f = io.open(dir .. cmd, "r")
+		if f then f:close(); return true end
+	end
+	return false
+end
+for _, app in ipairs({
+	{ "SUPER + ALT + B", "google-chrome", "google-chrome-stable", "Chrome (focus or start)" },
+	{ "SUPER + ALT + S", "slack", "slack", "Slack" },
+	{ "SUPER + ALT + T", "telegram", "Telegram", "Telegram" },
+	{ "SUPER + ALT + M", "thunderbird", "thunderbird", "Thunderbird" },
+	{ "SUPER + ALT + O", "obsidian", "obsidian", "Obsidian" },
+}) do
+	if installed(app[3]) then bind(app[1], focus_or_start(app[2], app[3]), app[4]) end
+end
 bind("SUPER + SHIFT + H", hl.dsp.exec_cmd("oninix-shell ipc call cheat toggle"),
 	"this cheatsheet")
 
