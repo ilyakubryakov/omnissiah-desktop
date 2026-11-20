@@ -44,6 +44,7 @@ PanelWindow {
         function close(): void { root.opened = false }
         // Meta+Shift+N: the primary selection goes into the open note (or a new one).
         function capture(): void { selection.running = true }
+        function meetings(): void { NotebookData.save(false); root.page = "meetings"; root.settings = false; if (!root.opened) root.toggle() }
     }
     Timer { id: conceal; interval: Shared.DesktopStyle.slow }
     property string captureNote: ""
@@ -88,7 +89,7 @@ PanelWindow {
                 RowLayout {
                     Layout.fillWidth: true; spacing: 6
                     Repeater {
-                        model: [{id:"notes",name:"Notes",icon:"\u{F249}"},{id:"calculate",name:"Calc",icon:"\u{F1EC}"},{id:"time",name:"Time",icon:"\u{F017}"}]
+                        model: [{id:"notes",name:"Notes",icon:"\u{F249}"},{id:"calculate",name:"Calc",icon:"\u{F1EC}"},{id:"time",name:"Time",icon:"\u{F017}"},{id:"meetings",name:"Meet",icon:"\u{F130}"}]
                         UiButton {
                             required property var modelData
                             Layout.fillWidth: true
@@ -101,7 +102,7 @@ PanelWindow {
                 UiLabel { visible: NotebookData.error !== ""; text: NotebookData.error; color: Colors.red; wrapMode: Text.Wrap; Layout.fillWidth: true; font.pixelSize: Shared.DesktopStyle.px(12) }
                 Loader {
                     Layout.fillHeight: true; Layout.fillWidth: true; Layout.minimumHeight: 0
-                    sourceComponent: root.settings ? settingsPage : root.page === "notes" ? notesPage : root.page === "calculate" ? calculatorPage : timePage
+                    sourceComponent: root.settings ? settingsPage : root.page === "notes" ? notesPage : root.page === "calculate" ? calculatorPage : root.page === "meetings" ? meetingsPage : timePage
                 }
                 RowLayout {
                     Layout.fillWidth: true
@@ -110,6 +111,10 @@ PanelWindow {
                 }
             }
         }
+    }
+    Component {
+        id: meetingsPage
+        NotebookMeetings { visibleNow: root.opened && root.page === "meetings" }
     }
     Component {
         id: settingsPage

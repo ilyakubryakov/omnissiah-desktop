@@ -24,6 +24,7 @@ ShellRoot {
     Binding { target: Shared.DesktopStyle; property: "fullscreen"; value: (Hypr.active.fullscreen || 0) >= 2 }
 
     AudioOsd {}
+    DictationOsd {}
     WindowSwitcher {}
     MonthCalendar { id: calendar; cal: agenda; onAccountsRequested: desktop.show("calendars") }
     CalData { id: agenda }

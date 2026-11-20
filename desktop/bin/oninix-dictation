@@ -1,0 +1,47 @@
+#!/usr/bin/env python3
+import json
+import os
+from pathlib import Path
+import sys
+import subprocess
+import time
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
+import oninix_dictation as dictation
+os.umask(0o077)
+if '--serve' in sys.argv:
+    dictation.serve()
+else:
+    try:
+        dictation.rpc({'op':'status'})
+    except (OSError, ValueError):
+        started = subprocess.run(['systemctl', '--user', 'start', 'oninix-dictation.service'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
+        if started.returncode:
+            subprocess.run(['systemd-run', '--user', '--unit=oninix-dictation', '--property=Restart=on-failure', '--property=PartOf=graphical-session.target', '--property=After=pipewire.service', '--property=UMask=0077', '--property=Nice=10', '--property=KillMode=mixed', '--setenv=PATH=' + os.environ.get('PATH', '/run/current-system/sw/bin'), str(Path(__file__).resolve()), '--serve'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
+        for _ in range(30):
+            try:
+                dictation.rpc({'op':'status'})
+                break
+            except (OSError, ValueError):
+                time.sleep(.1)
+    if len(sys.argv) > 1:
+        request = dict(op=sys.argv[1], token=sys.argv[2] if len(sys.argv) > 2 else '')
+        if request['op'] == 'press' and '--assistant' in sys.argv[3:]:
+            request['mode'] = 'assistant'
+        elif request['op'] == 'press' and len(sys.argv) > 4:
+            request['target'] = dict(address=sys.argv[3], pid=int(sys.argv[4]))
+        if request['op'] == 'release' and '--keys-up' in sys.argv[3:]:
+            request['keys_up'] = True
+        result = dictation.rpc(request)
+        if not result['ok']:
+            print(result.get('message','Dictation failed'), file=sys.stderr)
+        raise SystemExit(0 if result['ok'] else 1)
+    for line in sys.stdin:
+        request = {}
+        try:
+            if len(line) > 65536:
+                raise ValueError('Request too large.')
+            request = json.loads(line)
+            result = dictation.rpc(request)
+        except Exception:
+            result = dict(ok=False, requestId=request.get('requestId'), message='Dictation service is unavailable. Start oninix-dictation.service, then reopen this tab.')
+        print(json.dumps(result, ensure_ascii=False), flush=True)

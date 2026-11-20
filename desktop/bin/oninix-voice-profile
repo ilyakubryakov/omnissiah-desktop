@@ -1,0 +1,158 @@
+#!/usr/bin/env python3
+import hashlib
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import time
+from pathlib import Path
+from urllib.request import urlopen
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
+import oninix_meetings as speech
+
+ORDER = ['tiny', 'base', 'small', 'medium', 'turbo']
+BUDGET_MS = 3000
+TOO_SLOW_MS = 8000
+DECODE_TOKENS = 40
+
+
+def detect_virt():
+    result = subprocess.run(['systemd-detect-virt'], capture_output=True, text=True)
+    return result.stdout.strip() if result.returncode == 0 else ''
+
+
+def detect_gpu():
+    try:
+        out = subprocess.run(['lspci', '-nn'], capture_output=True, text=True).stdout
+    except OSError:
+        return 'none'
+    lines = '\n'.join(l for l in out.splitlines() if re.search(r'VGA|3D|Display', l))
+    for vendor, name in (('10de', 'nvidia'), ('1002', 'amd'), ('8086', 'intel')):
+        if '[' + vendor + ':' in lines:
+            return name
+    return 'none'
+
+
+def vram_mb(gpu):
+    if gpu == 'nvidia' and shutil.which('nvidia-smi'):
+        out = subprocess.run(['nvidia-smi', '--query-gpu=memory.total', '--format=csv,noheader,nounits'],
+                             capture_output=True, text=True).stdout.split()
+        return max((int(v) for v in out if v.isdigit()), default=0)
+    best = 0
+    for path in Path('/sys/class/drm').glob('card*/device/mem_info_vram_total'):
+        try:
+            best = max(best, int(path.read_text()) // (1024 * 1024))
+        except (OSError, ValueError):
+            pass
+    return best
+
+
+def memory_mb():
+    for line in Path('/proc/meminfo').read_text().splitlines():
+        if line.startswith('MemTotal:'):
+            return int(line.split()[1]) // 1024
+    return 0
+
+
+def backend():
+    out = subprocess.run([speech.binary('whisper-cli'), '--help'], capture_output=True, text=True)
+    text = (out.stdout + out.stderr).lower()
+    probe = subprocess.run(['ldd', os.path.realpath(speech.binary('whisper-cli'))], capture_output=True, text=True).stdout
+    if 'libcuda' in probe or 'libcublas' in probe or 'cuda' in text:
+        return 'cuda'
+    if 'vulkan' in probe:
+        return 'vulkan'
+    return 'cpu'
+
+
+def start_model(gpu, accel, vram, cores, ram):
+    if accel != 'cpu':
+        if vram >= 6000:
+            return 'turbo'
+        if vram >= 3000:
+            return 'medium'
+        if vram >= 1500 or gpu == 'intel':
+            return 'small'
+        return 'base'
+    if cores >= 12 and ram >= 16000:
+        return 'small'
+    if cores >= 6:
+        return 'base'
+    return 'tiny'
+
+
+def download(key):
+    name, size, checksum = speech.MODELS[key]
+    path = speech.model_path(key)
+    if speech.model_ready(key):
+        return path
+    speech.CACHE.mkdir(parents=True, exist_ok=True)
+    partial = path.with_suffix('.partial')
+    digest = hashlib.sha256()
+    print(f'Downloading Whisper {key} ({size // 1_000_000} MB)', flush=True)
+    with urlopen('https://huggingface.co/ggerganov/whisper.cpp/resolve/main/' + name, timeout=30) as response, partial.open('wb') as out:
+        count = 0
+        while chunk := response.read(1024 * 1024):
+            count += len(chunk)
+            out.write(chunk)
+            digest.update(chunk)
+    if count != size or digest.hexdigest() != checksum:
+        partial.unlink(missing_ok=True)
+        raise ValueError('Whisper ' + key + ' failed verification')
+    os.replace(partial, path)
+    speech.write(path.with_suffix('.verified'), checksum)
+    return path
+
+
+def bench(key, threads):
+    out = subprocess.run([speech.binary('whisper-bench'), '-m', str(download(key)), '-t', str(threads)],
+                         capture_output=True, text=True, timeout=600)
+    text = out.stdout + out.stderr
+    encode = re.search(r'encode time =\s*([\d.]+) ms', text)
+    decode = re.search(r'decode time =.*\(\s*([\d.]+) ms per run\)', text)
+    if not encode:
+        raise ValueError('whisper-bench gave no timing for ' + key)
+    return float(encode.group(1)) + (float(decode.group(1)) if decode else 0.0) * DECODE_TOKENS
+
+
+def profile(force=False):
+    virt, gpu = detect_virt(), detect_gpu()
+    accel = backend()
+    cores, ram = os.cpu_count() or 1, memory_mb()
+    vram = vram_mb(gpu)
+    result = {'checkedAt': time.time(), 'virt': virt, 'gpu': gpu, 'backend': accel, 'vramMB': vram,
+              'cores': cores, 'memoryMB': ram, 'enabled': False, 'model': 'tiny', 'estimateMs': None, 'reason': ''}
+    if virt and accel == 'cpu' and not force:
+        result['reason'] = 'Running in a virtual machine without GPU acceleration; voice stays off. Enable it by hand if you accept the lag.'
+        return result
+    threads = max(1, min(cores - 1, 8))
+    candidate = ORDER.index(start_model(gpu, accel, vram, cores, ram))
+    for key in reversed(ORDER[:candidate + 1]):
+        estimate = bench(key, threads)
+        print(f'Whisper {key}: about {estimate / 1000:.1f} s per phrase', flush=True)
+        result.update(model=key, estimateMs=round(estimate))
+        if estimate <= BUDGET_MS:
+            result.update(enabled=True, reason='Whisper ' + key + ' on ' + accel.upper() + f' answers in about {estimate / 1000:.1f} s.')
+            return result
+    if result['estimateMs'] is not None and result['estimateMs'] <= TOO_SLOW_MS:
+        result.update(enabled=True, reason='Only Whisper tiny keeps up here, and slowly; small models also understand non-English speech worse.')
+    else:
+        result.update(enabled=force, reason='This machine is too slow for live dictation; voice stays off unless you enable it by hand.')
+    return result
+
+
+def main(args):
+    force = '--force' in args
+    value = profile(force)
+    speech.write(speech.PROFILE, value)
+    if '--json' in args:
+        print(json.dumps(value))
+    else:
+        print(('Voice on: ' if value['enabled'] else 'Voice off: ') + value['reason'])
+
+
+if __name__ == '__main__':
+    main(sys.argv[1:])
