@@ -160,8 +160,10 @@ nix_cmd=(nix --extra-experimental-features 'nix-command flakes')
 mkdir -p "$flake" "$unit_dir"
 if [[ ! -e $flake/flake.nix ]]; then
     if [[ -z $source_ref ]]; then
-        repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
-        if [[ -f $repo/nix/layer/package.nix ]]; then
+        script=${BASH_SOURCE[0]:-}
+        if [[ -n $script ]] &&
+            repo=$(cd -- "$(dirname -- "$script")" && pwd -P) &&
+            [[ -f $repo/nix/layer/package.nix ]]; then
             if [[ -e $repo/.git ]]; then
                 source_ref=$(file_url "$repo")
             else
