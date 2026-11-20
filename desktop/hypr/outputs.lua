@@ -78,7 +78,11 @@ local function live_monitors()
     local by_desc, desc_of = {}, {}
     local ok, list = pcall(hl.get_monitors)
     for _, m in ipairs(ok and list or {}) do
-        if m.description then by_desc[m.description] = m.name; desc_of[m.name] = m.description end
+        local desc = m.description and m.description:match("^%s*(.-)%s*$")
+        if desc and desc ~= "" then
+            by_desc[desc] = by_desc[desc] == nil and m.name or false
+            desc_of[m.name] = desc
+        end
     end
     return by_desc, desc_of
 end
@@ -87,7 +91,7 @@ local function resolve(key, by_desc, desc_of)
     local desc = key:sub(6)
     if by_desc[desc] then return by_desc[desc] end
     local last = saved[key] and saved[key].output
-    if last and desc_of[last] == nil then return last end
+    if last and (desc_of[last] == nil or desc_of[last] == desc) then return last end
     return nil
 end
 local SETTINGS = { "mode", "position", "scale", "transform", "vrr", "disabled", "sdrbrightness" }
@@ -96,7 +100,7 @@ local function custom_rules()
     local rules = {}
     for key, entry in pairs(saved) do
         local name = key ~= "primary" and resolve(key, by_desc, desc_of)
-        if name then
+        if name and (key == name or not saved[name]) then
             local rule = {}
             for k, v in pairs(by_output[name] or {}) do rule[k] = v end
             for _, k in ipairs(SETTINGS) do if entry[k] ~= nil then rule[k] = entry[k] end end
