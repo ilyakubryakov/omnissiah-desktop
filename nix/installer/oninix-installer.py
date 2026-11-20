@@ -7,6 +7,20 @@ import sys
 import tempfile
 from pathlib import Path
 
+BRASS, GLOW, BONE, CRIMSON, MUTED = '#c1893e', '#e0a95a', '#d9c4a3', '#b8473a', '#a68a6f'
+for key, value in {
+    'GUM_CHOOSE_CURSOR_FOREGROUND': GLOW, 'GUM_CHOOSE_SELECTED_FOREGROUND': BRASS,
+    'GUM_CHOOSE_HEADER_FOREGROUND': GLOW, 'GUM_CHOOSE_ITEM_FOREGROUND': BONE,
+    'GUM_INPUT_CURSOR_FOREGROUND': GLOW, 'GUM_INPUT_PROMPT_FOREGROUND': BRASS,
+    'GUM_INPUT_HEADER_FOREGROUND': GLOW, 'GUM_FILTER_INDICATOR_FOREGROUND': GLOW,
+    'GUM_FILTER_MATCH_FOREGROUND': BRASS, 'GUM_FILTER_HEADER_FOREGROUND': GLOW,
+    'GUM_FILTER_PROMPT_FOREGROUND': BRASS, 'GUM_CONFIRM_PROMPT_FOREGROUND': GLOW,
+    'GUM_CONFIRM_SELECTED_BACKGROUND': BRASS, 'GUM_CONFIRM_SELECTED_FOREGROUND': '#121010',
+    'GUM_CONFIRM_UNSELECTED_BACKGROUND': '#3a2418', 'GUM_CONFIRM_UNSELECTED_FOREGROUND': BONE,
+    'GUM_WRITE_HEADER_FOREGROUND': GLOW, 'GUM_WRITE_CURSOR_FOREGROUND': GLOW,
+}.items():
+    os.environ.setdefault(key, value)
+
 TEMPLATE = Path(os.environ['ONINIX_TEMPLATE'])
 SOURCE = os.environ.get('ONINIX_SOURCE', '')
 TARGET = Path('/mnt')
@@ -26,7 +40,7 @@ def gum(*args, stdin=None):
     return result
 
 
-def say(text, color='212'):
+def say(text, color=GLOW):
     subprocess.run(['gum', 'style', '--foreground', color, '--bold', text])
 
 
@@ -173,11 +187,11 @@ def ask_password(label):
     while True:
         first = ask(label, password=True)
         if len(first) < 4:
-            say('Use at least 4 characters.', '196')
+            say('Use at least 4 characters.', CRIMSON)
             continue
         if first == ask('Repeat ' + label.lower(), password=True):
             return first
-        say('The passwords do not match.', '196')
+        say('The passwords do not match.', CRIMSON)
 
 
 def collect():
@@ -185,7 +199,7 @@ def collect():
     if not Path('/sys/firmware/efi').exists():
         raise SystemExit('OniNix needs a UEFI boot. Switch the firmware to UEFI and start again.')
     if subprocess.run(['ping', '-c', '1', '-W', '3', 'cache.nixos.org'], capture_output=True).returncode != 0:
-        say('No network. Connect with the panel or `nmtui`, then press Enter.', '214')
+        say('No network. Connect with the panel or `nmtui`, then press Enter.', BRASS)
         input()
     targets = disks()
     if not targets:
@@ -198,7 +212,7 @@ def collect():
     default_user = re.sub(r'[^a-z0-9_-]', '', fullname.lower().split(' ')[0]) or 'user'
     user = ask('Login name', value=default_user)
     while not re.fullmatch(r'[a-z_][a-z0-9_-]{0,31}', user):
-        say('Use lowercase letters, digits, - or _.', '196')
+        say('Use lowercase letters, digits, - or _.', CRIMSON)
         user = ask('Login name', value=default_user)
     password = ask_password('Password for ' + user)
     hostname = ask('Computer name', value='oninix')
@@ -252,7 +266,7 @@ def main():
     if os.geteuid() != 0:
         os.execvp('sudo', ['sudo', '--preserve-env=ONINIX_TEMPLATE,ONINIX_SOURCE,PATH', sys.executable, *sys.argv])
     answers = collect()
-    say('Summary', '214')
+    say('Summary', BRASS)
     print(f"  Disk        {answers['device']} (erased{', encrypted' if answers['encrypt'] else ''})")
     print(f"  User        {answers['user']} ({answers['fullname']})")
     print(f"  Computer    {answers['hostname']} · {answers['timezone']} · {answers['layout']}")
