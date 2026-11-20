@@ -101,11 +101,23 @@ lib.mkIf cfg.enable (lib.mkMerge [
   })
 
   (lib.mkIf cfg.features.music {
-    services.pipewire.extraConfig.pipewire."92-oninix-low-latency".context.properties = {
-      "default.clock.min-quantum" = 64;
+    services.pipewire.extraConfig.pipewire."92-oninix-low-latency" = {
+      "context.properties"."default.clock.min-quantum" = 64;
+      "context.properties.rules" = [
+        {
+          matches = [ { "cpu.vm.name" = "!null"; } ];
+          actions.update-props."default.clock.min-quantum" = 64;
+        }
+      ];
     };
     users.users.${cfg.user.name}.extraGroups = [ "audio" ];
-    environment.systemPackages = with pkgs; [ reaper qpwgraph pwvucontrol alsa-utils alsa-scarlett-gui ];
+    environment.systemPackages = with pkgs; [
+      (reaper.override { jackLibrary = config.services.pipewire.package.jack; })
+      qpwgraph
+      pwvucontrol
+      alsa-utils
+      alsa-scarlett-gui
+    ];
   })
 
   (lib.mkIf cfg.features.ai {
