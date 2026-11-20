@@ -33,7 +33,7 @@ PanelWindow {
     function toggle() {
         if (opened) { opened = false; return }
         const focused = Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : ""
-        targetScreen = Quickshell.screens.find(s => s.name === focused && s.name !== Shared.Screens.output("edge")) || Shared.Screens.main
+        targetScreen = Quickshell.screens.find(s => s.name === focused) || Shared.Screens.main
         PopupState.close(); opened = true
         if (NotebookData.dirty) editing = true
         Qt.callLater(() => content.forceActiveFocus())
@@ -120,7 +120,7 @@ PanelWindow {
             spacing: 12
             UiLabel { text: "Obsidian vault"; font.bold: true }
             UiLabel { Layout.fillWidth: true; text: "Notes are saved as Markdown in Quick Notes. Obsidian Sync handles the other devices."; wrapMode: Text.Wrap; color: Colors.dim }
-            CalendarField { id: vaultPath; Layout.fillWidth: true; text: NotebookData.vault; placeholderText: "~/Projects/k3lmiir-vault-sync" }
+            CalendarField { id: vaultPath; Layout.fillWidth: true; text: NotebookData.vault; placeholderText: "~/Documents/Obsidian" }
             UiButton { text: "Use this vault"; enabled: !NotebookData.dirty && !NotebookData.saving; onClicked: NotebookData.call({op:"vault", path:vaultPath.text}) }
             UiLabel { Layout.fillWidth: true; wrapMode: Text.Wrap; text: "Reminders and timers run even with this panel closed. Missed alerts appear after you wake the laptop or sign in again."; color: Colors.dim }
             Item { Layout.fillHeight: true }

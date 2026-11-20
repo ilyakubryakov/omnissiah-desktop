@@ -12,7 +12,7 @@ local function tagged(window)
 end
 
 local function eligible(window)
-    return window and window.mapped and window.workspace and window.workspace.name ~= "edge"
+    return window and window.mapped and window.workspace
 end
 
 local function workarea(window)
@@ -60,7 +60,6 @@ end
 
 local function opened(window)
     if not window or not window.mapped or not window.workspace then return end
-    if window.workspace.name == "edge" then return end
     if not window.floating then return float(window) end
     hl.dispatch(hl.dsp.window.tag({ window = window, tag = "+" .. tag }))
     if window.fullscreen == 1 then

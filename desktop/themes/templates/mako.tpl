@@ -39,7 +39,7 @@ invisible=0
 on-button-left=invoke-default-action
 
 # A timer is urgent so it remains visible, but it is not an application failure.
-[app-name="Station Notebook"]
+[app-name="OniNix Notebook"]
 on-button-left=dismiss
 border-color={{accent}}
 

@@ -17,7 +17,7 @@ import uuid
 
 HOME = Path.home()
 STATE = Path(os.environ.get('ONINIX_NOTEBOOK_STATE', str(Path(os.environ.get('XDG_STATE_HOME', HOME / '.local/state')) / 'oninix/notebook')))
-DEFAULT_VAULT = HOME / 'Projects/k3lmiir-vault-sync'
+DEFAULT_VAULT = HOME / 'Documents/Obsidian'
 MAX_NOTE = 512 * 1024
 
 class NotebookError(ValueError):
@@ -293,7 +293,7 @@ def tick(notify=None, now=None):
     now = time.time() if now is None else now
     if notify is None:
         def notify(job):
-            subprocess.run(['notify-send', '-a', 'Station Notebook', '-u', 'critical',
+            subprocess.run(['notify-send', '-a', 'OniNix Notebook', '-u', 'critical',
                             'Timer finished' if job['kind'] == 'timer' else 'Reminder',
                             job['label'].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')],
                            check=True, timeout=5, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

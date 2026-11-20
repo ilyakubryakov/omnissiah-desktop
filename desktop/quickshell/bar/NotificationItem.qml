@@ -20,7 +20,7 @@ Rectangle {
     signal actionInvoked()
     readonly property string summary: notification.summary || "Notification"
     readonly property var actions: notification.actions || ({})
-    readonly property bool canDiagnose: notification.app_name !== "Station Notebook"
+    readonly property bool canDiagnose: notification.app_name !== "OniNix Notebook"
         && (notification.urgency === "critical" || /error|failed|failure|exception|ошибк|сбой/i.test(summary))
     Layout.fillWidth: true
     implicitHeight: contents.implicitHeight + 24

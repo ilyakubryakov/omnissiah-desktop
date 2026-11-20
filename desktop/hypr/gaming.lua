@@ -9,7 +9,7 @@ local function restore_tag(w)
 end
 
 local function is_game(w)
-    if not w or not w.mapped or not w.workspace or w.workspace.special or w.workspace.name == "edge" then return false end
+    if not w or not w.mapped or not w.workspace or w.workspace.special then return false end
     local class = (w.class or ""):lower()
     if class == "steam" or class:find("steamwebhelper", 1, true) then return false end
     if class:match("^steam_app_%d+$") or w.content_type == "game" then return true end

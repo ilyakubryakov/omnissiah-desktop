@@ -3,7 +3,7 @@
 // A VS Code colour theme from the palette. Kanagawa has a real extension, so
 // only palettes without one are registered - see configs/vscode/station-themes.
 {
-    "name": "Station palette",
+    "name": "OniNix palette",
     "type": "{{mode}}",
     "semanticHighlighting": true,
     "colors": {

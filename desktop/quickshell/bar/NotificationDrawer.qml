@@ -21,7 +21,7 @@ PanelWindow {
     WlrLayershell.keyboardFocus: opened ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     function show() {
         const focused = Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : ""
-        targetScreen = Quickshell.screens.find(s => s.name === focused && s.name !== Shared.Screens.output("edge")) || Shared.Screens.main
+        targetScreen = Quickshell.screens.find(s => s.name === focused) || Shared.Screens.main
         PopupState.close(); DesktopData.error = ""; opened = true
         DesktopData.refresh(); acknowledge.restart()
         Qt.callLater(() => content.forceActiveFocus())

@@ -20,11 +20,11 @@ end
 local function current_workspace()
     local monitor = hl.get_active_monitor()
     local ws = monitor and monitor.active_workspace
-    if not ws or ws.special or ws.name == "edge" then
+    if not ws or ws.special then
         local main = require("outputs").main_monitor()
         ws = main and main.active_workspace
     end
-    if ws and not ws.special and ws.name ~= "edge" then return ws end
+    if ws and not ws.special then return ws end
     return nil
 end
 
@@ -44,7 +44,7 @@ end
 
 local function park(window)
     if not window or not window.mapped or window.pinned or is_minimized(window) then return false end
-    if window.workspace and (window.workspace.special or window.workspace.name == "edge") then return false end
+    if window.workspace and window.workspace.special then return false end
     if (window.fullscreen or 0) >= 2 then
         hl.dispatch(hl.dsp.window.fullscreen({ window = window, mode = "fullscreen", action = "unset" }))
     end

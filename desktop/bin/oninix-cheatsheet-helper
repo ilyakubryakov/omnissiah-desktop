@@ -113,7 +113,6 @@ HYPR_LABELS = {
     'TV on / off': ('Session & displays', 'Turn TV on / off', 'tv Включить / выключить телевизор Сеанс и экраны'),
     'TV workspace': ('Session & displays', 'Switch to the TV workspace', 'tv Перейти на стол телевизора Сеанс и экраны'),
     'send window to TV workspace': ('Session & displays', 'Move window to the TV', 'tv Перенести окно на телевизор Сеанс и экраны'),
-    'Xeneon: Station / Studio': ('Session & displays', 'Switch Xeneon: Station / Studio', 'studio dashboard Сменить страницу виджетов Xeneon Сеанс и экраны'),
     'brightness up': ('Session & displays', 'Increase brightness', 'brightness Увеличить яркость Сеанс и экраны'),
     'brightness down': ('Session & displays', 'Decrease brightness', 'brightness Уменьшить яркость Сеанс и экраны'),
     'capture: area / screen / video (bar menu), to clipboard': ('Capture & recording', 'Capture using the camera menu mode', 'screenshot capture скриншот снимок область видео Захват в буфер по режиму камеры Снимки и запись'),

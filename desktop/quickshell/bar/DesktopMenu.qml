@@ -100,7 +100,7 @@ Scope {
                     DropdownRow { glyph: "\u{F018D}"; label: "Terminal"; detail: "Win+Enter"; onClicked: root.run(() => root.exec(["kitty"])) }
                     DropdownRow { glyph: "\u{F024B}"; label: "Files"; detail: "Win+E"; onClicked: root.run(() => root.exec(["dolphin"])) }
 
-                    DropdownRow { header: true; label: "Station" }
+                    DropdownRow { header: true; label: "OniNix" }
                     DropdownRow { glyph: "\u{F1DE}"; label: "Control Station"; detail: "Win+,"; onClicked: root.run(() => root.openPanel("settings")) }
                     DropdownRow { glyph: "\u{F0100}"; label: "Capture"; onClicked: root.run(() => root.exec(["sh", "-c", "sleep 0.3; exec \"$0\"", root.scripts + "shot.sh"])) }
                     DropdownRow { glyph: "\u{F033E}"; label: "Lock"; detail: "Win+L"; onClicked: root.run(() => root.exec(["loginctl", "lock-session"])) }

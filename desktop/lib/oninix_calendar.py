@@ -339,7 +339,7 @@ class CallbackHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'")
         self.end_headers()
         message = "Sign-in response received. You can close this tab and return to the application." if valid else "This sign-in response could not be verified. Return to the original sign-in tab."
-        title = "Station Mail" if getattr(self.server, "page_title", "") == "Station Mail" else "Station Calendar"
+        title = "OniNix Calendar"
         self.wfile.write(("<!doctype html><meta name=viewport content='width=device-width'><title>" + title + "</title>"
             "<style>body{font:18px system-ui;max-width:38em;margin:12vh auto;padding:2em;color:CanvasText;background:Canvas;color-scheme:light dark}h1{font-size:26px}</style>"
             "<h1>" + title + "</h1><p>" + message + "</p>").encode())

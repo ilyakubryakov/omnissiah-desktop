@@ -1,5 +1,3 @@
-# Adapted from omacom/omarchy, commit d5b32d2 (MIT).
-# Station semantic roles; secondary text adjusted for readable contrast.
 mode = "dark"
 background = "#0c0b0c"
 window_background = "#121112"
@@ -14,7 +12,6 @@ faint_foreground = "#d6d8d7"
 bright_foreground = "#e2dddc"
 cursor = "#b59790"
 accent = "#b59790"
-# Status indicators need recognizable hues independent of the ANSI palette.
 status_warning = "#d7ae6f"
 status_available = "#8eaa83"
 red = "#c38b7b"

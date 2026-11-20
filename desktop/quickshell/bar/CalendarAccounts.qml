@@ -67,7 +67,7 @@ Singleton {
                     root.message = root.operation === "connect" ? "Account connected. Choose which calendars to show below."
                         : root.operation === "setup" ? "App setup saved. You can now sign in."
                         : root.operation === "sync" ? "Sync requested. Status will update when it finishes."
-                        : root.operation === "remove" ? "Account removed from Station. Provider permissions can be revoked in your account settings."
+                        : root.operation === "remove" ? "Account removed from OniNix. Provider permissions can be revoked in your account settings."
                         : "Calendar settings saved."
                     root.operationFinished(root.operation)
                 } else if (result.type === "error") root.error = result.message

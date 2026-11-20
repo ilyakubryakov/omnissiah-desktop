@@ -20,8 +20,7 @@ Singleton {
     }
     readonly property var main: docked || (primaryOutput ? Quickshell.screens.find(s => s.name === primaryOutput) || null : null)
         || screen("main") || screen("vm")
-        || Quickshell.screens.find(s => s.name !== output("edge") && s.name !== output("tv")) || null
-    readonly property var edge: screen("edge")
+        || Quickshell.screens.find(s => s.name !== output("tv")) || null
     readonly property var tv: screen("tv")
     FileView {
         id: file

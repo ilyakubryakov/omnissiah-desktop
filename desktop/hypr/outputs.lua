@@ -156,9 +156,7 @@ local function main_monitor()
     local main = (primary and hl.get_monitor(primary)) or (by_name.main and hl.get_monitor(by_name.main.output))
     if main then return main end
     local ok, list = pcall(hl.get_monitors)
-    for _, m in ipairs(ok and list or {}) do
-        if not (by_name.edge and m.name == by_name.edge.output) then return m end
-    end
+    return ok and list[1] or nil
 end
 local bound_main, tv_geometry = nil, nil
 local function reconcile(main)
@@ -190,40 +188,16 @@ local function reconcile(main)
         end
     else tv_geometry = nil end
 end
-if by_name.edge then
-    hl.workspace_rule({ workspace = "name:edge", monitor = by_name.edge.output, default = true, persistent = true })
-end
 if by_name.tv then
     hl.workspace_rule({ workspace = "11", monitor = by_name.tv.output, default = true })
 end
 hl.config({ misc = { mouse_move_focuses_monitor = false } })
 
-local protecting = false
-local function protect_edge()
-    if protecting then return end
+local function reconcile_displays()
     local main = main_monitor()
     if not main then return end
-    protecting = true
-    local ok, err = pcall(function()
-        reconcile(main)
-        if not by_name.edge then return end
-        for _, ws in ipairs(hl.get_workspaces()) do
-            if not ws.special and ws.name ~= "edge" and ws.monitor and ws.monitor.name == by_name.edge.output then
-                hl.dispatch(hl.dsp.workspace.move({ workspace = ws, monitor = main }))
-            end
-        end
-        for _, win in ipairs(hl.get_windows()) do
-            local minimized = win.workspace and win.workspace.name == "special:minimized"
-            if not minimized and win.monitor and win.monitor.name == by_name.edge.output then
-                hl.dispatch(hl.dsp.window.move({ window = win, workspace = "1", follow = false }))
-                if win.floating then
-                    hl.dispatch(hl.dsp.window.move({ window = win, x = main.x + 80, y = main.y + 80 }))
-                end
-            end
-        end
-    end)
-    protecting = false
-    if not ok then print("Edge protection will retry: " .. tostring(err)) end
+    local ok, err = pcall(reconcile, main)
+    if not ok then print("Display configuration will retry: " .. tostring(err)) end
 end
 local function apply_lid()
     if not internal then return end
@@ -233,23 +207,21 @@ hl.on("monitor.added", function()
     local ok, err = pcall(refresh_custom)
     if not ok then print("Display settings will retry: " .. tostring(err)) end
     apply_lid()
-    protect_edge()
+    reconcile_displays()
 end)
 if internal then
-    hl.on("monitor.removed", function() apply_lid(); protect_edge() end)
+    hl.on("monitor.removed", function() apply_lid(); reconcile_displays() end)
     hl.timer(function()
         local closed = read_lid()
         if closed ~= nil then lid_closed = closed end
         apply_lid()
     end, { timeout = 1000, type = "repeat" })
-    hl.bind("switch:on:Lid Switch", function() lid_closed = true; apply_lid(); protect_edge() end, { locked = true })
-    hl.bind("switch:off:Lid Switch", function() lid_closed = false; apply_lid(); protect_edge() end, { locked = true })
+    hl.bind("switch:on:Lid Switch", function() lid_closed = true; apply_lid(); reconcile_displays() end, { locked = true })
+    hl.bind("switch:off:Lid Switch", function() lid_closed = false; apply_lid(); reconcile_displays() end, { locked = true })
 end
-for _, event in ipairs({ "window.open", "window.move_to_workspace", "workspace.move_to_monitor", "config.reloaded" }) do
-    hl.on(event, protect_edge)
-end
-hl.timer(protect_edge, { timeout = 500, type = "repeat" })
-protect_edge()
+hl.on("config.reloaded", reconcile_displays)
+hl.on("monitor.removed", reconcile_displays)
+reconcile_displays()
 
 return {
     tv_monitor = function() return by_name.tv and hl.get_monitor(by_name.tv.output) end,

@@ -59,7 +59,6 @@ Singleton {
         if (c === "code" || c.includes("vscode")) return "\u{F0A1E}"
         if (c.includes("spotify")) return "\u{F04C7}"
         if ((c.includes("1password") || c.includes("onepassword"))) return "\u{F0881}"
-        if (c.includes("wfica") || c.includes("citrix")) return "\u{F0379}"
         if (c.includes("okular")) return "\u{F0219}"
         if (c.includes("claude")) return "\u{EC82}"
         if (c.includes("chatgpt") || c.includes("codex")) return "\u{EC81}"

@@ -14,7 +14,7 @@ REVERT = STATE / 'oninix/monitors.revert.json'
 PROFILE = STATE / 'theme/displays.conf'
 REVERT_SECONDS = 20
 REVERT_UNIT = 'oninix-display-revert'
-APPLIANCES = {'edge', 'tv'}
+APPLIANCES = {'tv'}
 OVERLAY_KEYS = {'output', 'mode', 'position', 'scale', 'transform', 'vrr', 'hdr', 'sdrbrightness', 'mirror', 'disabled'}
 
 def roles(path=None):

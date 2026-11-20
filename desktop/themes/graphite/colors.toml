@@ -1,5 +1,3 @@
-# Graphite: neutral charcoal surfaces with a restrained bronze accent.
-# Shared by every theme template, including GTK, Qt and the shell.
 mode = "dark"
 background        = "#242424"
 window_background = "#292929"

@@ -1,7 +1,3 @@
-# Tesla Model 3 inspired desktop palette, not an official Tesla asset.
-# Neutral surfaces, clear hierarchy and a restrained active-control accent.
-# Reference: https://www.tesla.com/ownersmanual/model3/en_us/GUID-518C51C1-E9AC-4A68-AE12-07F4FF8C881E.html
-
 mode = "dark"
 background = "#161719"
 window_background = "#1c1d20"

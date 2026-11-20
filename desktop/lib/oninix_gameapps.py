@@ -160,7 +160,7 @@ def plan(windows, closing_pids):
             names.append(name)
     for name in names:
         here = [w for w in windows if w['workspace']['name'] == name]
-        if name.startswith('special:') or name == 'edge':
+        if name.startswith('special:'):
             special.extend({'slot': slot(w), 'workspace': name, 'floating': w['floating'],
                             'group': [slot(lookup[a]) for a in (w.get('grouped') or []) if a in lookup]}
                            for w in here if w['pid'] in closing_pids)

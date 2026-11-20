@@ -40,7 +40,7 @@ ColumnLayout {
         dirty = true
     }
     function title(d) { return d.model ? (d.make + " " + d.model).trim() : d.description }
-    function appliance(d) { return d.role === "edge" || d.role === "tv" }
+    function appliance(d) { return d.role === "tv" }
     function logical(d) {
         const w = d.transform % 2 ? d.height : d.width
         const h = d.transform % 2 ? d.width : d.height

@@ -28,7 +28,7 @@ ColumnLayout {
     }
     SettingsGroup {
         title: root.adding ? "Connect a calendar account" : "Your calendars"
-        footer: "Google and Microsoft sign-in opens in your browser. Station reads calendars; it cannot create, change or delete meetings."
+        footer: "Google and Microsoft sign-in opens in your browser. OniNix reads calendars; it cannot create, change or delete meetings."
         SettingsRow {
             title: root.adding ? "Choose a provider below" : "One agenda, all your accounts"
             subtitle: CalendarAccounts.busy && CalendarAccounts.authUrl === "" ? (CalendarAccounts.signingIn ? "Preparing secure sign-in…" : "Updating calendars…") : ""
@@ -102,7 +102,7 @@ ColumnLayout {
     SettingsGroup {
         visible: root.adding
         title: "New account"
-        footer: root.provider === "microsoft" ? "EPAM may require administrator consent or an approved device. Station will show the actual Microsoft result. No work password is stored here."
+        footer: root.provider === "microsoft" ? "Your organization may require administrator consent or an approved device."
             : root.provider === "google" ? "The configured Google app must allow this account. An Internal Workspace app only accepts accounts in that organization."
             : "Use a subscription link supplied by your calendar provider. Anyone with a private link can read that feed; it is stored only on this machine."
         SettingsRow {
@@ -121,7 +121,7 @@ ColumnLayout {
             CalendarField {
                 id: email
                 Layout.preferredWidth: Shared.DesktopStyle.px(320)
-                placeholderText: root.provider === "microsoft" ? "Work email, for example name@epam.com" : "Google or Google Workspace email"
+                placeholderText: root.provider === "microsoft" ? "Work or school email" : "Google or Google Workspace email"
                 enabled: !CalendarAccounts.busy
                 Accessible.name: "Calendar account email"
                 onAccepted: if (text.trim() && CalendarAccounts.providers[root.provider] && !CalendarAccounts.busy) CalendarAccounts.request({op: "connect", provider: root.provider, email: text.trim()})

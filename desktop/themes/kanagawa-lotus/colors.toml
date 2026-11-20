@@ -1,19 +1,5 @@
-# Kanagawa Lotus - the light half of the pair, and the official light variant of
-# the same theme as Dragon, by the same author. Values read from the installed
-# kanagawa.nvim palette rather than transcribed, so nvim, the terminals and the
-# shell agree by construction.
-#
-# The roles are the same names Dragon uses, so every template renders unchanged.
-# What flips is their meaning: backgrounds become the paper tones and the
-# foregrounds become ink.
-
 mode = "light"
 
-# Lotus's own paper tones (lotusWhite*, #f2ecbc and friends) are a warm cream
-# by design. On a 40" panel that reads as yellow rather than as paper, so the
-# background family is neutralised - a hint of warmth left in, no hue. The ink
-# and the accent colours below are Lotus's own and untouched, which is what
-# keeps this matching kanagawa in nvim.
 background        = "#f6f5f1"
 window_background = "#f6f5f1"
 dark_background   = "#e9e8e4"
@@ -46,10 +32,7 @@ bright_magenta = "#b35b79"
 bright_cyan    = "#5e857a"
 bright_white   = "#43436c"
 
-# Not a terminal colour: only nvim and VS Code use it, for constants.
 orange = "#cc6d00"
 
-# See the note in kanagawa-dragon/colors.toml: the macOS menu bar's own ink,
-# which is black on a light desktop and white on a dark one.
 chrome_ink  = "#000000"
 chrome_tint = "#ffffff"

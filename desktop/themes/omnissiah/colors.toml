@@ -1,12 +1,3 @@
-# Omnissiah - the Adeptus Mechanicus wallpaper turned into a palette: soot
-# black, bone, brass, crimson and copper, sampled from the picture itself.
-#
-# The picture has no cool colours at all, so blue, cyan and green are not from
-# it: they are steel, verdigris and oxidised olive, kept dusty so they sit with
-# the brass instead of fighting it. A terminal still needs all eight hues.
-#
-# Qt/KDE applications consume the generated Station.colors scheme.
-
 mode = "dark"
 
 background        = "#121010"
@@ -41,8 +32,6 @@ bright_magenta = "#c68a86"
 bright_cyan    = "#96b4a5"
 bright_white   = "#f3cba2"
 
-# Not a terminal colour: the copper of the pads on the board. Only nvim and
-# VS Code use it, for constants.
 orange = "#b8703a"
 
 chrome_ink  = "#ffffff"

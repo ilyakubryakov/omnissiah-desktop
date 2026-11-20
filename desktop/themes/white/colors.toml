@@ -1,5 +1,3 @@
-# Adapted from omacom/omarchy, commit d5b32d2 (MIT).
-# Station semantic roles; secondary text adjusted for readable contrast.
 mode = "light"
 background = "#ffffff"
 window_background = "#f9f9f9"

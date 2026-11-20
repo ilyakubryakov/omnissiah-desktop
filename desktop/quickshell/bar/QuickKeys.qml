@@ -14,8 +14,8 @@ ToolOverlay {
     readonly property var groups: [
         {title: "Apps", items: ["terminal", "launcher: apps, projects, files", "files", "Chrome (focus or start)", "Telegram", "Slack", "Claude", "1Password quick access"]},
         {title: "Windows", items: ["close window", "maximize", "fullscreen", "float / tile window", "minimize window to the panel", "group into tabs / ungroup", "switch between all application windows", "window and workspace overview"]},
-        {title: "Desktops", items: ["go to workspace (1..0)", "send window to workspace (1..0)", "show desktop / bring windows back", "go to the Citrix desk (12)", "send terminal/Kate/VS Code to the Citrix desk (12)"]},
-        {title: "System", items: ["control center: quick toggles and sliders", "settings (Control Station)", "clipboard with previews", "notification history", "screenshot to clipboard", "capture: area / screen / video (bar menu), to clipboard", "lock", "dictation: hold Right Alt to speak, release to insert", "Vika: type a message (clipboard picture can be attached)", "this cheatsheet"]}
+        {title: "Desktops", items: ["go to workspace (1..0)", "send window to workspace (1..0)", "show desktop / bring windows back"]},
+        {title: "System", items: ["control center: quick toggles and sliders", "settings (Control Station)", "clipboard with previews", "notification history", "screenshot to clipboard", "capture: area / screen / video (bar menu), to clipboard", "lock", "dictation: hold Right Alt to speak, release to insert", "machine spirit: ask the system to change itself", "this cheatsheet"]}
     ]
     function find(description) { return binds.find(b => b.description === description) || null }
     function keys(bind) {

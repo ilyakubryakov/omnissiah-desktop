@@ -10,7 +10,7 @@ PanelWindow {
     id: root
     readonly property var stateData: DictationData.data
     readonly property var monitor: Hypr.monitors.find(m => m.id === stateData.monitor)
-    readonly property var targetScreen: Quickshell.screens.find(s => root.monitor && s.name === root.monitor.name && s.name !== Shared.Screens.output("edge")) || Shared.Screens.main
+    readonly property var targetScreen: Quickshell.screens.find(s => root.monitor && s.name === root.monitor.name) || Shared.Screens.main
     screen: targetScreen
     visible: targetScreen !== null && stateData.phase !== "idle"
     anchors.bottom: true
