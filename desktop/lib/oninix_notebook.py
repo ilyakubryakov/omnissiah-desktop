@@ -293,7 +293,7 @@ def tick(notify=None, now=None):
     now = time.time() if now is None else now
     if notify is None:
         def notify(job):
-            subprocess.run(['notify-send', '-a', 'OniNix Notebook', '-u', 'critical',
+            subprocess.run(['notify-send', '-a', 'OniNix Notebook', '-u', 'critical', '--',
                             'Timer finished' if job['kind'] == 'timer' else 'Reminder',
                             job['label'].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')],
                            check=True, timeout=5, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -326,7 +326,8 @@ def handle(request):
         if op == 'calculate': return calculate(request.get('expression', ''))
         if op in ('add', 'done', 'snooze', 'pause', 'resume'): return change_job(request)
         if op == 'copy':
-            subprocess.run(['wl-copy', '--', str(request.get('text', ''))[:8192]],
+            text = str(request.get('text', ''))[:8192]
+            subprocess.run(['wl-copy'], input=text.encode(),
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3, check=True)
             return True
         raise NotebookError('request', 'Unknown notebook action.')
