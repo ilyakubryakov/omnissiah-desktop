@@ -1,8 +1,8 @@
-{ lib, runCommand, nodejs, python3, lua5_4, nix, bash, qt6 }:
+{ lib, runCommand, nodejs, python3, lua5_4, nix, bash, qt6, ruff, shellcheck }:
 let
   src = lib.cleanSource ../.;
 in
-runCommand "oninix-checks" { nativeBuildInputs = [ nodejs python3 lua5_4 nix bash qt6.qtdeclarative ]; } ''
+runCommand "oninix-checks" { nativeBuildInputs = [ nodejs python3 lua5_4 nix bash qt6.qtdeclarative ruff shellcheck ]; } ''
   cp -r ${src} repo
   chmod -R u+w repo
   cd repo
@@ -17,6 +17,18 @@ runCommand "oninix-checks" { nativeBuildInputs = [ nodejs python3 lua5_4 nix bas
     esac
   done
   python3 -I -m py_compile desktop/lib/*.py desktop/themes/*.py nix/installer/oninix-installer.py
+  python_tools=(desktop/lib/*.py)
+  shell_tools=(oninix-install)
+  for tool in desktop/bin/*; do
+    [ -f "$tool" ] || continue
+    case "$tool" in desktop/bin/oninix-spirit) continue ;; esac
+    case "$(head -1 "$tool")" in
+      *python*) python_tools+=("$tool") ;;
+      *bash*|*sh) shell_tools+=("$tool") ;;
+    esac
+  done
+  ruff check --isolated --select E9,F --no-cache "''${python_tools[@]}"
+  shellcheck --severity=warning "''${shell_tools[@]}"
   find desktop/quickshell -name '*.qml' -print0 | xargs -0 -n1 qmlformat > /dev/null
   for file in desktop/hypr/*.lua; do
     luac -p "$file"

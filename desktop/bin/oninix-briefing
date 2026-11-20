@@ -15,7 +15,6 @@ import time
 import urllib.request
 import urllib.error
 import urllib.parse
-import re
 
 CACHE = Path(os.environ.get('XDG_CACHE_HOME', Path.home() / '.cache')) / 'oninix-briefing'
 CLUSTERS = []
