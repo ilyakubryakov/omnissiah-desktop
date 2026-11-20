@@ -20,7 +20,7 @@ let
   };
   greeter = config.services.displayManager.regreet;
   greeterDataDirs = lib.makeSearchPath "share" (
-    [ session greeter.iconTheme.package greeter.cursorTheme.package ]
+    [ session greeter.iconTheme.package greeter.cursorTheme.package pkgs.glycin-loaders pkgs.shared-mime-info ]
     ++ lib.optional (greeter.theme.package != null) greeter.theme.package
   );
   palette = builtins.fromTOML (builtins.readFile ../../desktop/themes/omnissiah/colors.toml);
@@ -75,6 +75,7 @@ lib.mkIf cfg.enable {
   };
   services.greetd.settings.default_session.command = lib.concatStringsSep " " [
     "${lib.getExe' pkgs.coreutils "env"} XDG_DATA_DIRS=${greeterDataDirs}"
+    "PATH=${lib.makeBinPath [ pkgs.bubblewrap ]}:$PATH"
     "GTK_USE_PORTAL=0 GDK_DEBUG=no-portals GSK_RENDERER=cairo LIBSEAT_BACKEND=logind XKB_DEFAULT_OPTIONS=grp:caps_toggle"
     "XKB_DEFAULT_LAYOUT=${lib.escapeShellArg keyboardLayout}"
     "${lib.getExe' pkgs.dbus "dbus-run-session"} ${lib.getExe cage}"
