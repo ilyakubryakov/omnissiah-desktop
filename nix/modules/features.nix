@@ -70,7 +70,8 @@ lib.mkIf cfg.enable (lib.mkMerge [
       polkit.addRule(function (action, subject) {
         if (subject.user != ${builtins.toJSON cfg.user.name} || !subject.local || !subject.active) return;
         if (action.id != "org.freedesktop.systemd1.manage-units") return;
-        if (action.lookup("unit") != "oninix-game-performance.service") return;
+        const allowed = ${builtins.toJSON ([ "oninix-game-performance.service" ] ++ lib.optional cfg.features.ai "ollama.service")};
+        if (allowed.indexOf(action.lookup("unit")) < 0) return;
         if (["start", "stop"].indexOf(action.lookup("verb")) >= 0) return polkit.Result.YES;
       });
     '';
@@ -104,7 +105,7 @@ lib.mkIf cfg.enable (lib.mkMerge [
       "default.clock.min-quantum" = 64;
     };
     users.users.${cfg.user.name}.extraGroups = [ "audio" ];
-    environment.systemPackages = with pkgs; [ reaper qpwgraph pwvucontrol ];
+    environment.systemPackages = with pkgs; [ reaper qpwgraph pwvucontrol alsa-utils alsa-scarlett-gui ];
   })
 
   (lib.mkIf cfg.features.ai {

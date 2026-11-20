@@ -24,7 +24,7 @@ def services(verb, units):
         if any(unit not in UNITS for unit in units):
             raise ValueError('Invalid saved AI service')
         for unit in units:
-            command(['/run/current-system/sw/bin/systemctl', '--no-ask-password', verb, unit])
+            command(['systemctl', '--no-ask-password', verb, unit])
 
 def windows(on):
     if os.environ.get('HYPRLAND_INSTANCE_SIGNATURE'):
@@ -45,7 +45,7 @@ def scheduler_available():
     return Path('/etc/systemd/system', PERFORMANCE_UNIT).exists()
 
 def scheduler_service(verb):
-    command(['/run/current-system/sw/bin/systemctl', '--no-ask-password', verb, PERFORMANCE_UNIT])
+    command(['systemctl', '--no-ask-password', verb, PERFORMANCE_UNIT])
 
 def loader_property(name):
     return command(['busctl', '--system', 'get-property', 'org.scx.Loader', '/org/scx/Loader',
@@ -64,7 +64,7 @@ def scheduler_enter():
         return False
     state = command(['systemctl', 'show', PERFORMANCE_UNIT, '--property=ActiveState', '--value']).decode().strip()
     if state == 'active':
-        return False  # Do not own a profile the user already enabled.
+        return False
     if not lavd_baseline():
         return False
     scheduler_service('start')
