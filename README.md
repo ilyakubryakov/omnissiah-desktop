@@ -75,7 +75,7 @@ The installer asks for the disk, encryption, your name, login, password, compute
 - **Gaming:** Steam, Proton, Game mode, launchers
 - **Coding:** editors, toolchains, developer tools
 - **Music:** low-latency audio and a DAW
-- **AI:** Claude Code and Codex, needed for the machine spirit
+- **AI:** Claude Code and Codex (the machine spirit needs one of them) and local models through Ollama
 
 It erases the disk you picked. It asks twice. Read the summary.
 
