@@ -119,7 +119,7 @@ Item {
                         mipmap: true
                         // Every remaining tray icon as a flat silhouette in the bar's text colour:
                         // brightness pushes the pixels to white, colorization tints them.
-                        layer.enabled: true
+                        layer.enabled: GraphicsInfo.api !== GraphicsInfo.Software
                         layer.effect: MultiEffect {
                             brightness: 1.0
                             colorization: 1.0

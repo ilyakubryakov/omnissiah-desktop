@@ -11,7 +11,13 @@ case "$choice" in
 lock) loginctl lock-session ;;
 logout)
     confirmation=$(printf '%s\n' Cancel 'Log out' | fuzzel --dmenu --prompt 'Log out? > ' --lines 2) || exit 0
-    [[ "$confirmation" == 'Log out' ]] && uwsm stop
+    if [[ "$confirmation" == 'Log out' ]]; then
+        if [[ ${ONINIX_LAYER_DIRECT:-0} == 1 ]]; then
+            hyprctl dispatch 'hl.dsp.exit()'
+        else
+            uwsm stop
+        fi
+    fi
     ;;
 suspend) systemctl suspend ;;
 reboot) systemctl reboot ;;

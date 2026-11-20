@@ -9,7 +9,7 @@ runCommand "oninix-checks" { nativeBuildInputs = [ nodejs python3 lua5_4 nix bas
   for test in desktop/quickshell/tests/*.cjs; do
     TZ=Europe/Vilnius node "$test"
   done
-  for tool in desktop/bin/* desktop/hypr/scripts/*; do
+  for tool in oninix-install nix/layer/oninix-layer-* desktop/bin/* desktop/hypr/scripts/*; do
     case "$(head -1 "$tool")" in
       *python*) python3 -I -m py_compile "$tool" ;;
       *bash*|*sh) bash -n "$tool" ;;

@@ -63,7 +63,7 @@ def list_files() -> None:
 def launch(command: list[str]) -> None:
     # Manage the chosen application, not the short-lived menu, through UWSM.
     if "HYPRLAND_INSTANCE_SIGNATURE" in os.environ:
-        command = ["uwsm", "app", "--", *command]
+        command = ["oninix-app", *command]
     subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                      stderr=subprocess.DEVNULL, start_new_session=True)
 
@@ -219,8 +219,8 @@ def main() -> None:
                "-kb-row-tab", "", "-kb-element-next", "", "-kb-element-prev", "",
                "-kb-mode-next", "Tab,Control+Tab",
                "-kb-mode-previous", "ISO_Left_Tab,Control+ISO_Left_Tab"]
-    command.extend(["-run-command", "uwsm app -- {cmd}",
-                    "-run-shell-command", "uwsm app -- {terminal} -e {cmd}",
+    command.extend(["-run-command", "oninix-app {cmd}",
+                    "-run-shell-command", "oninix-app {terminal} -e {cmd}",
                     "-terminal", "kitty"])
     os.execvp(command[0], command)
 

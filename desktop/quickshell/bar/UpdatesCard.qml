@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import Quickshell
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../shared" as Shared
@@ -11,6 +12,7 @@ ColumnLayout {
     id: root
     property real maxHeight: 600
     property bool details: false
+    readonly property bool layer: Quickshell.env("ONINIX_LAYER") === "1"
     readonly property var updates: Shared.UpdatesData
     readonly property string level: updates.level
     readonly property int count: updates.count
@@ -28,7 +30,7 @@ ColumnLayout {
         : "Everything is up to date"
     readonly property string subline: updates.sessionOpen ? "An update session is open."
         : level === "error" ? updates.error
-        : level === "checking" ? "Evaluating the newer NixOS configuration and upstream releases."
+        : level === "checking" ? (layer ? "Checking the OniNix layer." : "Evaluating the newer NixOS configuration and upstream releases.")
         : level === "stale" ? "The daily check runs in the background."
         : level === "due" ? (updates.reasons || []).map(r => r.charAt(0).toUpperCase() + r.slice(1)).join(" · ")
         : level === "available" ? "No rush. You will be told when it is time to update."
@@ -51,7 +53,7 @@ ColumnLayout {
     }
 
     CardHeader {
-        glyph: "\u{F06B0}"; title: "System updates"
+        glyph: "\u{F06B0}"; title: root.layer ? "OniNix layer updates" : "System updates"
         note: root.updates.result.checkedAt ? "Checked " + root.updates.stamp : ""
     }
 
@@ -95,7 +97,7 @@ ColumnLayout {
         visible: root.level === "due" || root.level === "available"
         selected: root.level === "due"
         glyph: "\u{F06B0}"
-        text: root.updates.sessionOpen ? "Update session open" : "Update with " + root.updates.agentLabel
+        text: root.updates.sessionOpen ? "Update session open" : root.layer ? "Update OniNix layer" : "Update with " + root.updates.agentLabel
         enabled: !root.busy
         onClicked: root.updates.launch()
     }

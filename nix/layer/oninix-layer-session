@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+profile="${XDG_STATE_HOME:-$HOME/.local/state}/oninix/layer/profile"
+if [ -x /usr/bin/uwsm ] && [ "${ONINIX_LAYER_DIRECT:-0}" != 1 ]; then
+    exec /usr/bin/uwsm start -F -e -D Hyprland -- "$profile/bin/oninix-layer-compositor"
+fi
+export ONINIX_LAYER_DIRECT=1
+exec "$profile/bin/oninix-layer-compositor"

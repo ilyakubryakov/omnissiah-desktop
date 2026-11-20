@@ -1,4 +1,4 @@
-{ lib, stdenvNoCC, python3, bash, makeWrapper, quickshell }:
+{ lib, stdenvNoCC, python3, bash, makeWrapper, quickshell, softwareRendering ? false }:
 let
   python = python3.withPackages (ps: with ps; [
     babel
@@ -35,7 +35,8 @@ stdenvNoCC.mkDerivation {
       ln -s $tool $out/bin/$(basename $tool)
     done
     makeWrapper ${quickshell}/bin/quickshell $out/bin/oninix-shell \
-      --add-flags "-p $share/quickshell/shell.qml"
+      --add-flags "-p $share/quickshell/shell.qml" \
+      ${lib.optionalString softwareRendering "--set-default QT_QUICK_BACKEND software"}
     runHook postInstall
   '';
 }

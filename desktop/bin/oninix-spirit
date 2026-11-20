@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import difflib
+import fcntl
 import json
 import os
 import shutil
@@ -27,8 +28,10 @@ STATE = Path(os.environ.get('XDG_STATE_HOME', Path.home() / '.local/state')) / '
 CONFIG = Path(os.environ.get('XDG_CONFIG_HOME', Path.home() / '.config')) / 'oninix/spirit.json'
 WORK = STATE / 'work'
 HISTORY = STATE / 'history.jsonl'
+LAYER_PROFILE = os.environ.get('ONINIX_LAYER_PROFILE')
+NIX = ['nix', '--extra-experimental-features', 'nix-command flakes']
 PREVIOUS = STATE / 'previous-settings.nix'
-EDITABLE = 'settings.nix'
+EDITABLE = 'flake.nix' if LAYER_PROFILE else 'settings.nix'
 PROMPT = """You are the machine spirit of an OniNix computer (NixOS with the OniNix Hyprland desktop).
 The owner asks: {request}
 
@@ -40,6 +43,15 @@ environment.systemPackages = with pkgs; [ ... ] (add `pkgs` to the function argu
 file needs it). Keep the file valid Nix and keep every existing setting unless the request
 changes it. Do not touch any other file, do not run commands that change the system.
 Finish with one short sentence describing the change, in the owner's language."""
+
+
+LAYER_PROMPT = """You are the machine spirit of the OniNix desktop layer on Linux.
+The owner asks: {request}
+
+Edit only flake.nix in the current directory, and only its extraPackages list. The flake
+already imports the rest of the OniNix desktop. Packages must come from the existing pkgs.
+Keep existing packages unless the request changes them. You cannot change the host system
+or its package manager. Do not apply the change. Finish with a short summary in the owner's language."""
 
 
 def say(text, color=GLOW):
@@ -55,7 +67,7 @@ def agent():
 
 
 def run_agent(name, request):
-    prompt = PROMPT.format(request=request)
+    prompt = (LAYER_PROMPT if LAYER_PROFILE else PROMPT).format(request=request)
     if name == 'claude':
         command = ['claude', '-p', prompt, '--permission-mode', 'acceptEdits', '--allowedTools', 'Read,Edit,Write']
     else:
@@ -79,9 +91,10 @@ def prepare():
 def build():
     out = STATE / 'result'
     out.unlink(missing_ok=True)
-    say('Building the new system (nothing is applied yet)…', MUTED)
-    subprocess.run(['nix', '--extra-experimental-features', 'nix-command flakes', 'build', '--out-link', str(out),
-                    f'path:{WORK}#nixosConfigurations.oninix.config.system.build.toplevel'], check=True)
+    target = 'layer' if LAYER_PROFILE else 'nixosConfigurations.oninix.config.system.build.toplevel'
+    say('Building the proposed configuration…', MUTED)
+    lock_flags = ['--no-update-lock-file'] if LAYER_PROFILE else []
+    subprocess.run([*NIX, 'build', *lock_flags, '--out-link', str(out), f'path:{WORK}#{target}'], check=True)
     return out
 
 
@@ -122,21 +135,70 @@ def ask(args):
         return 0
     say(summary, BRASS)
     print(''.join(difflib.unified_diff(before.splitlines(True), after.splitlines(True),
-                                       'settings.nix (now)', 'settings.nix (proposed)')))
+                                       f'{EDITABLE} (now)', f'{EDITABLE} (proposed)')))
     try:
         result = build()
     except subprocess.CalledProcessError:
         say('The proposed configuration does not build; nothing was changed.', CRIMSON)
         return 1
-    subprocess.run(['nvd', 'diff', '/run/current-system', str(result)])
+    subprocess.run(['nvd', 'diff', LAYER_PROFILE or '/run/current-system', str(result)])
     if subprocess.run(['gum', 'confirm', 'Apply this change?', '--default=false']).returncode != 0:
         say('Kept as it was.', MUTED)
+        return 0
+    if LAYER_PROFILE:
+        apply_layer(before, after)
+        record({'request': request, 'summary': summary, 'agent': name})
+        say('Applied to the OniNix profile. Log out and in to reload the desktop. Undo with oninix-spirit undo.')
         return 0
     shutil.copyfile(FLAKE / EDITABLE, PREVIOUS)
     subprocess.run(['sudo', 'install', '-m', '644', str(WORK / EDITABLE), str(FLAKE / EDITABLE)], check=True)
     subprocess.run(['sudo', 'nixos-rebuild', 'switch', '--flake', f'{FLAKE}#oninix'], check=True)
     record({'request': request, 'summary': summary, 'agent': name})
     say('Applied. `oninix-spirit undo` brings back the previous system.')
+    return 0
+
+
+def write_flake(text):
+    dest = FLAKE / EDITABLE
+    temp = dest.with_suffix('.nix.tmp')
+    temp.write_text(text)
+    temp.replace(dest)
+
+
+def apply_layer(before, after):
+    if (FLAKE / EDITABLE).read_text() != before:
+        raise RuntimeError('The layer flake changed during the preview. Run the request again.')
+    profile = Path(LAYER_PROFILE)
+    previous = os.readlink(profile)
+    write_flake(after)
+    try:
+        subprocess.run([*NIX, 'profile', 'upgrade', '--profile', LAYER_PROFILE, 'layer'], check=True)
+    except (OSError, subprocess.CalledProcessError):
+        write_flake(before)
+        raise
+    current = os.readlink(profile)
+    if previous != current:
+        (STATE / 'layer-undo.json').write_text(json.dumps({
+            'previous': previous, 'current': current, 'before': before, 'after': after,
+        }))
+
+
+def undo_layer():
+    profile = Path(LAYER_PROFILE)
+    saved = STATE / 'layer-undo.json'
+    entry = json.loads(saved.read_text()) if saved.exists() else {}
+    rollback = [*NIX, 'profile', 'rollback', '--profile', LAYER_PROFILE]
+    if entry.get('current') == os.readlink(profile):
+        if (FLAKE / EDITABLE).read_text() != entry['after']:
+            raise RuntimeError('The layer flake has edits since the last spirit change. Save them before undoing.')
+        rollback += ['--to', entry['previous'].rsplit('-', 2)[-2]]
+        subprocess.run(rollback, check=True)
+        write_flake(entry['before'])
+        saved.unlink()
+    else:
+        subprocess.run(rollback, check=True)
+    record({'request': 'undo', 'summary': 'OniNix profile rolled back', 'agent': ''})
+    say('Previous OniNix profile restored. Log out and in to reload the desktop.')
     return 0
 
 
@@ -152,18 +214,27 @@ def undo():
 
 
 def main(args):
-    if args[:1] == ['undo']:
-        return undo()
     if args[:1] == ['ask'] and len(args) == 1 and not sys.stdin.isatty():
         text = sys.stdin.read().strip()
         subprocess.Popen(['kitty', '--class', 'oninix-spirit', '--title', 'Machine spirit',
                           'bash', '-c', 'oninix-spirit "$1"; read -r -p "Press Enter to close" _', '_', text],
                          start_new_session=True)
         return 0
+    undo_requested = args == ['undo']
     if args[:1] == ['ask']:
         args = args[1:]
-    code = ask(args)
-    return code
+    action = undo if undo_requested else lambda: ask(args)
+    if LAYER_PROFILE:
+        if undo_requested:
+            action = undo_layer
+        with Path(LAYER_PROFILE).with_name('lock').open('a') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            try:
+                return action()
+            except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as error:
+                say(str(error), CRIMSON)
+                return 1
+    return action()
 
 
 if __name__ == '__main__':

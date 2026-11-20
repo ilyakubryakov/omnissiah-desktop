@@ -23,5 +23,5 @@ ColumnLayout {
         visible: models.length > 0
         text: "Ollama: " + models.map(m => m.name).join(", ")
     }
-    UiButton { text: "Open system monitor"; Layout.fillWidth: true; onClicked: { PopupState.close(); Quickshell.execDetached(["uwsm", "app", "--", "kitty", "-e", "btop"]) } }
+    UiButton { text: "Open system monitor"; Layout.fillWidth: true; onClicked: { PopupState.close(); Quickshell.execDetached(["oninix-app", "kitty", "-e", "btop"]) } }
 }

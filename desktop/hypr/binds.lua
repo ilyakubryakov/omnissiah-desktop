@@ -6,7 +6,7 @@
 -- one row, with only the keys actually registered in this session.
 
 local function app(cmd)
-	return hl.dsp.exec_cmd("uwsm app -- " .. cmd)
+	return hl.dsp.exec_cmd("oninix-app " .. cmd)
 end
 
 local function bind(keys, action, description, opts)

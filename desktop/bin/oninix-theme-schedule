@@ -240,7 +240,7 @@ def nightlight(cfg, now):
     if subprocess.run(["pgrep", "-x", "hyprsunset"], stdout=subprocess.DEVNULL).returncode != 0:
         if not night:
             return
-        subprocess.Popen(["uwsm", "app", "--", "hyprsunset"], stdout=subprocess.DEVNULL,
+        subprocess.Popen(["oninix-app", "hyprsunset"], stdout=subprocess.DEVNULL,
                          stderr=subprocess.DEVNULL, start_new_session=True)
         # A fresh daemon takes a moment before it listens.
         for _ in range(20):

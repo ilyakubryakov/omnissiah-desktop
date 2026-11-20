@@ -44,7 +44,10 @@
         ];
       };
 
-      packages.${system}.iso = self.nixosConfigurations.iso.config.system.build.isoImage;
+      packages.${system} = {
+        iso = self.nixosConfigurations.iso.config.system.build.isoImage;
+        layer = nixpkgs.legacyPackages.${system}.callPackage ./nix/layer/package.nix { };
+      };
       checks.${system} = {
         demo = self.nixosConfigurations.demo.config.system.build.toplevel;
         tests = nixpkgs.legacyPackages.${system}.callPackage ./nix/checks.nix { };

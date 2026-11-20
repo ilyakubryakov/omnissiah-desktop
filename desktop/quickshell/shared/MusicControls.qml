@@ -54,9 +54,9 @@ ColumnLayout {
     Bar.UiLabel { Layout.fillWidth: true; font.pixelSize: 12; color: Bar.Colors.muted; text: "ERR is PipeWire's cumulative node error counter; it can reset when a node restarts. No running nodes means no live latency test." }
     Flow {
         Layout.fillWidth: true; spacing: 8
-        Bar.UiButton { text: "REAPER"; onClicked: Quickshell.execDetached(["uwsm", "app", "--", "reaper"]) }
-        Bar.UiButton { text: "Routing"; onClicked: Quickshell.execDetached(["uwsm", "app", "--", "qpwgraph"]) }
-        Bar.UiButton { text: "Scarlett mixer"; onClicked: Quickshell.execDetached(["uwsm", "app", "--", "alsa-scarlett-gui"]) }
-        Bar.UiButton { text: "Live audio stats"; onClicked: Quickshell.execDetached(["uwsm", "app", "--", "kitty", "--title", "PipeWire monitor", "pw-top"]) }
+        Bar.UiButton { text: "REAPER"; onClicked: Quickshell.execDetached(["oninix-app", "reaper"]) }
+        Bar.UiButton { text: "Routing"; onClicked: Quickshell.execDetached(["oninix-app", "qpwgraph"]) }
+        Bar.UiButton { text: "Scarlett mixer"; onClicked: Quickshell.execDetached(["oninix-app", "alsa-scarlett-gui"]) }
+        Bar.UiButton { text: "Live audio stats"; onClicked: Quickshell.execDetached(["oninix-app", "kitty", "--title", "PipeWire monitor", "pw-top"]) }
     }
 }

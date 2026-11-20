@@ -14,5 +14,5 @@ if [ -n "$address" ]; then
     hyprctl eval "require(\"minimize\").show(\"address:$address\")" >/dev/null
 else
     shift
-    exec uwsm app -- "$@"
+    exec oninix-app "$@"
 fi

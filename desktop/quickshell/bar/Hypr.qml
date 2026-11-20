@@ -18,7 +18,7 @@ Singleton {
     // With a Lua config `dispatch` takes a Lua expression, not the old
     // dispatcher names: Hyprland.dispatch('hl.dsp.focus({ workspace = "2" })').
     function exec(cmd) {
-        Hyprland.dispatch("hl.dsp.exec_cmd(" + JSON.stringify("uwsm app -- " + cmd) + ")")
+        Hyprland.dispatch("hl.dsp.exec_cmd(" + JSON.stringify("oninix-app " + cmd) + ")")
     }
 
     // Events come in bursts; coalesce them, and never drop a refresh that

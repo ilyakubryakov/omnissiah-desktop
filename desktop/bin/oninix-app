@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+if [ "${ONINIX_LAYER_DIRECT:-0}" = 1 ] || ! command -v uwsm >/dev/null 2>&1; then
+    exec "$@"
+fi
+exec uwsm app -- "$@"

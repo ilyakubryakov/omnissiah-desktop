@@ -1,0 +1,24 @@
+#!/bin/sh
+set -eu
+. "${XDG_STATE_HOME:-$HOME/.local/state}/oninix/layer/profile/share/oninix-layer/environment"
+export XDG_CURRENT_DESKTOP=Hyprland XDG_SESSION_DESKTOP=Hyprland XDG_SESSION_TYPE=wayland
+export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}"
+cleanup() {
+    systemctl --user stop oninix-layer.target || :
+    if [ "${ONINIX_LAYER_DIRECT:-0}" = 1 ]; then
+        systemctl --user stop xdg-desktop-portal.service xdg-desktop-portal-hyprland.service || :
+        systemctl --user unset-environment WAYLAND_DISPLAY DISPLAY HYPRLAND_INSTANCE_SIGNATURE XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP XDG_SESSION_TYPE ONINIX_LAYER_DIRECT || :
+    fi
+}
+trap cleanup EXIT
+trap 'kill -TERM "$compositor" 2>/dev/null || :' HUP INT TERM
+config=$(realpath "$ONINIX_SHARE/hypr/hyprland.lua")
+if [ -x /usr/bin/start-hyprland ]; then
+    /usr/bin/start-hyprland -- --config "$config" &
+elif [ -x /usr/bin/Hyprland ]; then
+    /usr/bin/Hyprland --config "$config" &
+else
+    /usr/bin/hyprland --config "$config" &
+fi
+compositor=$!
+wait "$compositor"

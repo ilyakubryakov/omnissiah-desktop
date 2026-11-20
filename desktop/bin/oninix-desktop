@@ -1474,7 +1474,7 @@ def appearance_action(args):
             raise ValueError('The login screen has not been rendered yet')
         # Demo mode never talks to greetd: the same look, without a real login.
         log = Path(os.environ.get('XDG_RUNTIME_DIR', '/tmp')) / 'regreet-preview.log'
-        subprocess.Popen(['uwsm', 'app', '--', 'regreet', '--demo', '--logs', str(log),
+        subprocess.Popen(['oninix-app', 'regreet', '--demo', '--logs', str(log),
                           '--config', str(out / 'regreet.toml'), '--style', str(out / 'regreet.css')],
                          env={**os.environ, 'GSK_RENDERER': 'cairo'}, start_new_session=True,
                          stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -1542,7 +1542,7 @@ def action(command, args):
         if not shutil.which(agent):
             raise RuntimeError(f'{agent} is not installed or unavailable in PATH')
         repo = Path.home()
-        subprocess.Popen(['uwsm', 'app', '--', 'kitty', '--title', 'System management',
+        subprocess.Popen(['oninix-app', 'kitty', '--title', 'System management',
                           '--directory', str(repo), '--hold', agent],
                          start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     elif command == 'agent-launch' and len(args) == 1:
@@ -1550,7 +1550,7 @@ def action(command, args):
         if not agent or not shutil.which(agent):
             raise ValueError('Agent is not installed')
         repo = Path.home()
-        subprocess.Popen(['uwsm', 'app', '--', 'kitty', '--directory', str(repo), '--hold', agent],
+        subprocess.Popen(['oninix-app', 'kitty', '--directory', str(repo), '--hold', agent],
                          start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     elif command == 'window-mode' and len(args) == 1 and args[0] in {'toggle', 'floating', 'tiling'}:
         ONINIX_STATE.mkdir(parents=True, exist_ok=True)

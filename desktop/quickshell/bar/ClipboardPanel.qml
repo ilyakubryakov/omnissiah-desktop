@@ -116,7 +116,7 @@ ColumnLayout {
                     UiButton {
                         visible: entry.picture; text: "Edit"; enabled: !DesktopData.busy
                         Accessible.name: "Edit in Swappy"
-                        onClicked: Quickshell.execDetached(["uwsm", "app", "--", "swappy", "-f", decodeURIComponent(entry.modelData.image.replace(/^file:\/\//, ""))])
+                        onClicked: Quickshell.execDetached(["oninix-app", "swappy", "-f", decodeURIComponent(entry.modelData.image.replace(/^file:\/\//, ""))])
                     }
                     UiButton { visible: !entry.pinned; text: "Delete"; danger: true; enabled: !DesktopData.busy; onClicked: DesktopData.act("delete", [entry.modelData.id]) }
                 }
