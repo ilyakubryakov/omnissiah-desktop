@@ -334,7 +334,26 @@ def undo():
     say('Done. The previous system and its settings are back.')
     return 0
 
+def login_state():
+    home = Path.home()
+    claude = Path(os.environ.get('CLAUDE_CONFIG_DIR', home / '.claude')) / '.credentials.json'
+    codex = Path(os.environ.get('CODEX_HOME', home / '.codex')) / 'auth.json'
+    return {'agent': agent(), 'claude': {'installed': bool(shutil.which('claude')), 'signedIn': claude.is_file()},
+            'codex': {'installed': bool(shutil.which('codex')), 'signedIn': codex.is_file()}}
+
+def use(name):
+    if name not in ('claude', 'codex'):
+        raise SystemExit('Usage: oninix-spirit use claude|codex')
+    CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    CONFIG.write_text(json.dumps({'agent': name}) + '\n')
+    return 0
+
 def main(args):
+    if args == ['status']:
+        print(json.dumps(login_state()))
+        return 0
+    if args[:1] == ['use'] and len(args) == 2:
+        return use(args[1])
     if args[:1] == ['ask'] and len(args) == 1 and not sys.stdin.isatty():
         text = sys.stdin.read().strip()
         subprocess.Popen(['kitty', '--class', 'oninix-spirit', '--title', 'Machine spirit',

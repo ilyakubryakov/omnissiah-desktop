@@ -213,6 +213,37 @@ ColumnLayout {
                 onClicked: root.launch(["kitty", "--class", "oninix-spirit", "--title", "Machine spirit", "sh", "-c", "oninix-spirit undo; read -r -p 'Press Enter to close ' _"])
             }
         }
+        Process {
+            id: agentStatus
+            property var state: ({})
+            command: ["oninix-spirit", "status"]
+            running: root.tab === "software"
+            stdout: StdioCollector { onStreamFinished: { try { agentStatus.state = JSON.parse(text) } catch (_) {} } }
+        }
+        Timer { interval: 5000; repeat: true; running: root.tab === "software"; onTriggered: if (!agentStatus.running) agentStatus.running = true }
+        Repeater {
+            model: [{id: "claude", title: "Claude Code", login: "claude auth login"}, {id: "codex", title: "Codex", login: "codex login"}]
+            SettingsRow {
+                id: agentRow
+                required property var modelData
+                readonly property var info: agentStatus.state[modelData.id] || ({})
+                title: modelData.title
+                subtitle: !info.installed ? "Not installed. Tick the AI set or ask for it."
+                    : info.signedIn ? "Signed in" + (agentStatus.state.agent === modelData.id ? " · the machine spirit uses it" : "")
+                    : "Not signed in. Your own account, your own subscription."
+                UiButton {
+                    visible: !!agentRow.info.installed
+                    text: agentRow.info.signedIn ? "Sign in again" : "Sign in…"
+                    onClicked: root.launch(["kitty", "--title", agentRow.modelData.title + " sign in", "sh", "-c", agentRow.modelData.login + "; read -r -p 'Press Enter to close ' _"])
+                }
+                UiButton {
+                    visible: !!agentRow.info.installed && !!agentRow.info.signedIn
+                    text: agentStatus.state.agent === agentRow.modelData.id ? "In use" : "Use for the spirit"
+                    selected: agentStatus.state.agent === agentRow.modelData.id
+                    onClicked: { Quickshell.execDetached(["oninix-spirit", "use", agentRow.modelData.id]); agentStatus.running = true }
+                }
+            }
+        }
     }
 
     Loader {
