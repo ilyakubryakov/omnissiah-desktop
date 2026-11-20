@@ -3,6 +3,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Io
 import "../shared" as Shared
 
 // Time zone and night light (General), NixOS and AI / GPU (Software).
@@ -19,7 +20,7 @@ ColumnLayout {
         return (bytes / 1073741824).toFixed(0);
     }
     // Search targets on the second tab: switch first (see AppearancePanel.reveal).
-    readonly property var targetTabs: ({ "NixOS": "software", "AI / GPU": "software" })
+    readonly property var targetTabs: ({ "NixOS": "software", "AI / GPU": "software", "Voice and machine spirit": "software" })
     function reveal(target) {
         const next = targetTabs[target]
         if (!next || root.tab === next) return false
@@ -171,6 +172,49 @@ ColumnLayout {
                     color: Colors.muted
                     text: root.gib(disk.modelData.used) + " / " + root.gib(disk.modelData.size) + " GiB"
                 }
+            }
+        }
+    }
+
+    SettingsGroup {
+        id: voiceGroup
+        property var voice: ({})
+        visible: root.tab === "software"
+        title: "Voice and machine spirit"
+        footer: "Hold Right Alt to dictate, hold Right Ctrl or press Super+A to ask the machine spirit. Whisper runs on this computer; requests to the spirit go to the agent you signed in to."
+        FileView {
+            path: (Quickshell.env("XDG_STATE_HOME") || Quickshell.env("HOME") + "/.local/state") + "/oninix/voice.json"
+            watchChanges: true; printErrors: false
+            onFileChanged: reload()
+            onLoaded: { try { voiceGroup.voice = JSON.parse(text()) } catch (_) { voiceGroup.voice = {} } }
+            onLoadFailed: voiceGroup.voice = {}
+        }
+        SettingsRow {
+            title: voiceGroup.voice.checkedAt ? (voiceGroup.voice.enabled ? "Voice is on" : "Voice is off") : "Voice not checked yet"
+            subtitle: voiceGroup.voice.checkedAt
+                ? "Whisper " + voiceGroup.voice.model + " on " + String(voiceGroup.voice.backend || "cpu").toUpperCase() + " · " + (voiceGroup.voice.reason || "")
+                : "The first login measures what this computer can run."
+            UiButton {
+                text: "Check again"
+                onClicked: root.launch(["kitty", "--title", "Voice check", "sh", "-c", "oninix-voice-profile; read -r -p 'Press Enter to close ' _"])
+            }
+            UiButton {
+                visible: voiceGroup.voice.checkedAt !== undefined && !voiceGroup.voice.enabled
+                text: "Turn on anyway"
+                onClicked: root.launch(["kitty", "--title", "Voice check", "sh", "-c", "oninix-voice-profile --force; read -r -p 'Press Enter to close ' _"])
+            }
+        }
+        SettingsRow {
+            title: "Machine spirit"
+            subtitle: "Ask for a change, see the diff, apply or undo."
+            UiButton {
+                glyph: "\u{F0A8D}"
+                text: "Ask…"
+                onClicked: root.launch(["kitty", "--class", "oninix-spirit", "--title", "Machine spirit", "oninix-spirit"])
+            }
+            UiButton {
+                text: "Undo last change"
+                onClicked: root.launch(["kitty", "--class", "oninix-spirit", "--title", "Machine spirit", "sh", "-c", "oninix-spirit undo; read -r -p 'Press Enter to close ' _"])
             }
         }
     }

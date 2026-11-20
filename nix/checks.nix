@@ -1,8 +1,8 @@
-{ lib, runCommand, nodejs, python3, lua5_4, nix, bash }:
+{ lib, runCommand, nodejs, python3, lua5_4, nix, bash, qt6 }:
 let
   src = lib.cleanSource ../.;
 in
-runCommand "oninix-checks" { nativeBuildInputs = [ nodejs python3 lua5_4 nix bash ]; } ''
+runCommand "oninix-checks" { nativeBuildInputs = [ nodejs python3 lua5_4 nix bash qt6.qtdeclarative ]; } ''
   cp -r ${src} repo
   chmod -R u+w repo
   cd repo
@@ -16,6 +16,7 @@ runCommand "oninix-checks" { nativeBuildInputs = [ nodejs python3 lua5_4 nix bas
     esac
   done
   python3 -I -m py_compile desktop/lib/*.py desktop/themes/*.py nix/installer/oninix-installer.py
+  find desktop/quickshell -name '*.qml' -print0 | xargs -0 -n1 qmlformat > /dev/null
   for file in desktop/hypr/*.lua; do
     luac -p "$file"
   done

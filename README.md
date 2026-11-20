@@ -35,7 +35,7 @@ NixOS makes letting an AI touch your system safe. The AI makes NixOS usable for 
 
 Hold **Right Alt** in any text field, speak, let go. The text lands where your cursor is. It runs locally with Whisper, nothing leaves the machine.
 
-On the first login `oninix-voice-profile` checks your hardware and benchmarks Whisper: NVIDIA, AMD and Intel GPUs through Vulkan, or the CPU. It takes the biggest model that still answers in about three seconds, from tiny to large-v3-turbo. In a virtual machine without GPU, or on a potato, voice stays off and tells you why when you hold the key. `oninix-voice-profile --force` turns it on anyway. Small models are worse with languages other than English. Just so you know.
+On the first login `oninix-voice-profile` checks your hardware and benchmarks Whisper: NVIDIA, AMD and Intel GPUs through Vulkan, or the CPU. It takes the biggest model that still answers in about three seconds, from tiny to large-v3-turbo. In a virtual machine without GPU, or on a potato, voice stays off. Control Station (System, Software) tells you why and has a button to turn it on anyway. Small models are worse with languages other than English. Just so you know.
 
 ## What is inside
 

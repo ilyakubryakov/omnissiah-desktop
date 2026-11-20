@@ -39,7 +39,7 @@ var items = {
     apps: [["Icon theme", "icons значки иконки"], ["Pinned applications", "pin launchers закрепить"]],
     session: [["Capture shortcuts", "screenshot record скриншот запись"], ["Autostart", "startup автозапуск"],
               ["Apps on workspaces", "workspace rules рабочие столы"], ["Default apps", "browser mail default по умолчанию браузер"]],
-    system: [["NixOS", "generation rebuild update поколение обновление"], ["AI / GPU", "ollama cuda nvidia нейросети видеокарта"],
+    system: [["NixOS", "generation rebuild update поколение обновление"], ["AI / GPU", "ollama cuda nvidia нейросети видеокарта"], ["Voice and machine spirit", "voice whisper dictation spirit agent claude codex голос диктовка дух"],
              ["Time zone", "timezone clock часовой пояс время"], ["Night light", "warm blue light ночной"]],
     modes: [["Recording", "music studio daw музыка студия запись"], ["Restore Normal", "normal reset обычный"]]
 }
