@@ -29,7 +29,7 @@ def clients():
     return json.loads(out)
 
 def main_processes():
-    exes, parents = {}, {}
+    processes = {}
     uid = os.getuid()
     for entry in Path('/proc').iterdir():
         if not entry.name.isdigit():
@@ -37,13 +37,14 @@ def main_processes():
         try:
             if entry.stat().st_uid != uid:
                 continue
-            exes[int(entry.name)] = os.readlink(entry / 'exe')
-            parents[int(entry.name)] = int((entry / 'stat').read_text().rsplit(')', 1)[1].split()[1])
+            exe = os.readlink(entry / 'exe')
+            parent = int((entry / 'stat').read_text().rsplit(')', 1)[1].split()[1])
+            processes[int(entry.name)] = (exe, parent)
         except (OSError, ValueError, IndexError):
             continue
     found = {}
-    for pid, exe in exes.items():
-        if exes.get(parents[pid]) == exe:
+    for pid, (exe, parent) in processes.items():
+        if parent in processes and processes[parent][0] == exe:
             continue
         for key, app in APPS.items():
             if re.search(app['exe'] + '$', exe):
