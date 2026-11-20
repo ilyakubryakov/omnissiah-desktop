@@ -141,7 +141,12 @@ def ask(args):
     except subprocess.CalledProcessError:
         say('The proposed configuration does not build; nothing was changed.', CRIMSON)
         return 1
-    subprocess.run(['nvd', 'diff', LAYER_PROFILE or '/run/current-system', str(result)])
+    current = '/run/current-system'
+    if LAYER_PROFILE:
+        profile = json.loads(subprocess.check_output([*NIX, 'profile', 'list', '--json',
+                                                     '--profile', LAYER_PROFILE], text=True))
+        current, = profile['elements']['layer']['storePaths']
+    subprocess.run(['nvd', 'diff', current, str(result)])
     if subprocess.run(['gum', 'confirm', 'Apply this change?', '--default=false']).returncode != 0:
         say('Kept as it was.', MUTED)
         return 0
