@@ -45,6 +45,9 @@
       };
 
       packages.${system}.iso = self.nixosConfigurations.iso.config.system.build.isoImage;
-      checks.${system}.demo = self.nixosConfigurations.demo.config.system.build.toplevel;
+      checks.${system} = {
+        demo = self.nixosConfigurations.demo.config.system.build.toplevel;
+        tests = nixpkgs.legacyPackages.${system}.callPackage ./nix/checks.nix { };
+      };
     };
 }
