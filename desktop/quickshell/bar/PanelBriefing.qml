@@ -11,7 +11,6 @@ Singleton {
         return ps.find(p => p.playbackState === MprisPlaybackState.Playing)
             || ps.find(p => p.playbackState === MprisPlaybackState.Paused) || null
     }
-    // The briefing is the default; right-click on the lower-left group shows the player.
     property bool preferBriefing: true
     onPlayerChanged: if (!player) preferBriefing = true
     function toggleView() { if (player) preferBriefing = !preferBriefing }
@@ -55,7 +54,6 @@ Singleton {
     onActiveChanged: if (active) refresh()
     Component.onCompleted: if (active) refresh()
     Timer { interval: 30000; running: true; repeat: true; onTriggered: root.clock = Date.now() / 1000 }
-    // One collector shared by both monitors. The helper caches and rate-limits requests.
     Timer { interval: 120000; running: root.active; repeat: true; onTriggered: if (!usageFetch.running) usageFetch.running = true }
     Process {
         id: usageFetch

@@ -1,6 +1,5 @@
 import QtQuick
 
-// Mono Nerd Font glyphs can overhang their cell; center the visible ink instead.
 Item {
     id: glyphBox
     property alias text: glyphText.text

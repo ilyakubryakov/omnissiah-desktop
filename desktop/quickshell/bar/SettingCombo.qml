@@ -3,7 +3,6 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "../shared" as Shared
 
-// A Control Center drop-down in the panel palette.
 ComboBox {
     id: control
     Layout.fillWidth: true

@@ -4,8 +4,6 @@ import Quickshell
 import Quickshell.Wayland
 import "../shared" as Shared
 
-// Hover previews never grab keyboard focus. Click pins the same card, allowing
-// keyboard navigation; an outside click or Escape dismisses the pinned card.
 PanelWindow {
     id: root
     required property Item anchorItem
@@ -16,15 +14,11 @@ PanelWindow {
     property bool opened: false
     property bool pinned: false
     property bool suppressed: false
-    // Set while the card is the source of a drag: keeps a hover card open after the
-    // pointer leaves it. Drops from a pinned card do not reach other windows (Hyprland
-    // 0.57, 2026-11-17), so drag sources open unpinned.
     property bool holding: false
     onHoldingChanged: if (!holding && !engaged && !pinned) leave.restart()
     property color tone: Colors.accent
     default property alias content: column.data
     readonly property bool engaged: triggerHovered || hover.hovered
-    // mapToItem does not track ancestor moves, so the position is taken again on reveal.
     property real anchorX: 0
     function place() {
         if (!anchorItem || !barWindow || !barWindow.contentItem) return false
@@ -90,11 +84,8 @@ PanelWindow {
     Timer { id: enter; interval: 180; onTriggered: if (root.engaged && !root.opened && !root.suppressed) root.reveal(false) }
     Timer { id: leave; interval: 260; onTriggered: if (!root.engaged && !root.pinned && !root.holding) root.dismiss() }
     Timer { id: conceal; interval: Shared.DesktopStyle.slow }
-    // The shared catcher handles outside clicks. Mixing it with compositor
-    // focus grabs closes a newly opened destination when the old card releases.
     Shared.ClickCatcher {
         active: root.pinned && !root.holding
-        // Keep the bars interactive: another applet replaces this card in one click.
         topInset: PanelStyle.barHeight + PanelStyle.outerGap
         bottomInset: PanelStyle.barHeight + PanelStyle.outerGap
         onClicked: root.dismiss()

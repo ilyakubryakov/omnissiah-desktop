@@ -1,30 +1,4 @@
 #!/usr/bin/env python3
-"""Decide which theme variant should be current, and apply it.
-
-The applet is a face on this; the logic lives here so the schedule keeps
-working when plasmashell restarts, and so it can be tested from a terminal.
-
-  theme-schedule            apply whatever the schedule says now
-  theme-schedule --status   print JSON for the applet
-  theme-schedule --toggle   flip now, and hold until the next transition
-  theme-schedule --set MODE manual | sun | fixed
-  theme-schedule --palette light|dark NAME  select a scheduled palette
-  theme-schedule --time light|dark HH:MM   edit a fixed-mode boundary
-  theme-schedule --offset MINUTES          shift both sun boundaries
-  theme-schedule --light | --dark   force one, holding until the next transition
-  theme-schedule --nightlight on|off|toggle   warm screen between sunset and sunrise
-
-Config: ~/.config/theme-schedule.conf, plain key=value.
-
-  light_palette=kanagawa-lotus
-  dark_palette=omnissiah
-  mode=sun            manual | fixed | sun
-  light_at=07:30      fixed mode only
-  dark_at=19:30       fixed mode only
-  lat=54.6876         sun mode; defaults are Vilnius, from the weather widget
-  lon=25.2806
-  offset_min=0        shift both sun transitions, + = later
-"""
 
 import datetime as dt
 import json
@@ -43,11 +17,8 @@ CURRENT = STATE_DIR / "name"
 OVERRIDE = STATE_DIR / "override"
 NIGHTLIGHT = STATE_DIR / "nightlight"     # exists = on
 NIGHT_KELVIN = 4000
-# Control Center: {"kelvin": 2500..6000, "from": "HH:MM", "to": "HH:MM"};
-# without both hours the night follows the sun.
 NIGHT_SETTINGS = STATE_DIR / "nightlight.json"
 
-# Defaults for existing profiles. Palette names are validated against the repo.
 THEMES = Path(__file__).resolve().parents[1] / "themes"
 LIGHT = "kanagawa-lotus"
 DARK = "omnissiah"
@@ -63,7 +34,6 @@ DEFAULTS = {
     "offset_min": "0",
 }
 
-
 def palette_mode(name):
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", name):
         return None
@@ -71,7 +41,6 @@ def palette_mode(name):
         return tomllib.loads((THEMES / name / "colors.toml").read_text())["mode"]
     except (OSError, ValueError, KeyError):
         return None
-
 
 def load():
     cfg = dict(DEFAULTS)
@@ -88,12 +57,10 @@ def load():
             cfg[key] = DEFAULTS[key]
     return cfg
 
-
 def save(cfg):
     CONFIG.parent.mkdir(parents=True, exist_ok=True)
     body = "\n".join(f"{k}={v}" for k, v in sorted(cfg.items()))
     CONFIG.write_text("# Written by theme-schedule / the panel applet.\n" + body + "\n")
-
 
 def parse_hm(text, fallback):
     try:
@@ -102,17 +69,7 @@ def parse_hm(text, fallback):
     except (ValueError, AttributeError):
         return fallback
 
-
 def sun_times(day, lat, lon):
-    """Sunrise and sunset as local datetimes, or (None, None) above the circle.
-
-    NOAA's solar position equations. Worth having in full rather than reaching
-    for a dependency: thirty lines that never need updating.
-
-    Accurate to the minute at the solstices and within about ten around the
-    equinoxes, where the simplified equation of time drifts. That is far below
-    anything that matters for deciding when a desktop turns dark.
-    """
     n = day.toordinal() - dt.date(2000, 1, 1).toordinal() + 0.0008
     j_star = n - lon / 360.0
     m = math.radians((357.5291 + 0.98560028 * j_star) % 360)
@@ -122,7 +79,6 @@ def sun_times(day, lat, lon):
     decl = math.asin(math.sin(lam) * math.sin(math.radians(23.4397)))
 
     phi = math.radians(lat)
-    # -0.833 deg accounts for refraction and the sun's radius.
     cos_w = (math.sin(math.radians(-0.833)) - math.sin(phi) * math.sin(decl)) / (
         math.cos(phi) * math.cos(decl)
     )
@@ -139,9 +95,7 @@ def sun_times(day, lat, lon):
 
     return to_local(j_rise), to_local(j_set)
 
-
 def boundaries(cfg, now):
-    """The two moments today that separate light from dark."""
     mode = cfg["mode"]
     if mode == "fixed":
         light = dt.datetime.combine(now.date(), parse_hm(cfg["light_at"], dt.time(7, 30))).astimezone()
@@ -158,13 +112,11 @@ def boundaries(cfg, now):
         return rise + shift, set_ + shift
     return None, None
 
-
 def scheduled_variant(cfg, now):
     light, dark = boundaries(cfg, now)
     if light is None:
         return None
     return cfg["light_palette"] if light <= now < dark else cfg["dark_palette"]
-
 
 def next_transition(cfg, now):
     light, dark = boundaries(cfg, now)
@@ -173,10 +125,8 @@ def next_transition(cfg, now):
     upcoming = sorted(t for t in (light, dark) if t > now)
     if upcoming:
         return upcoming[0]
-    # Both are behind us, so the next one is tomorrow's first.
     tomorrow = boundaries(cfg, now + dt.timedelta(days=1))
     return min(t for t in tomorrow if t) if tomorrow[0] else None
-
 
 def current_variant():
     try:
@@ -184,10 +134,7 @@ def current_variant():
     except OSError:
         return ""
 
-
 def read_override(cfg, now):
-    """A manual choice holds only until the next transition, so flipping the
-    theme by hand never means silently leaving the schedule for good."""
     try:
         until = dt.datetime.fromisoformat(OVERRIDE.read_text().strip())
     except (OSError, ValueError):
@@ -197,7 +144,6 @@ def read_override(cfg, now):
         return None
     return until
 
-
 def set_override(cfg, now):
     nxt = next_transition(cfg, now)
     STATE_DIR.mkdir(parents=True, exist_ok=True)
@@ -206,7 +152,6 @@ def set_override(cfg, now):
     else:
         OVERRIDE.unlink(missing_ok=True)
 
-
 def apply(variant):
     if variant == current_variant():
         return False
@@ -214,10 +159,7 @@ def apply(variant):
                    stdout=subprocess.DEVNULL)
     return True
 
-
 def nightlight(cfg, now):
-    """Hyprland only: hyprsunset warm after sunset, neutral after sunrise. Follows
-    the real sun whatever the theme mode is, so a manual theme does not stop it."""
     if not os.environ.get("HYPRLAND_INSTANCE_SIGNATURE"):
         return
     try:
@@ -242,7 +184,6 @@ def nightlight(cfg, now):
             return
         subprocess.Popen(["oninix-app", "hyprsunset"], stdout=subprocess.DEVNULL,
                          stderr=subprocess.DEVNULL, start_new_session=True)
-        # A fresh daemon takes a moment before it listens.
         for _ in range(20):
             if subprocess.run(["hyprctl", "hyprsunset", "identity"], capture_output=True).returncode == 0:
                 break
@@ -250,7 +191,6 @@ def nightlight(cfg, now):
     cmd = ["temperature", str(kelvin)] if night else ["identity"]
     subprocess.run(["hyprctl", "hyprsunset", *cmd], check=False,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
 
 def status(cfg, now):
     cur = current_variant()
@@ -271,7 +211,6 @@ def status(cfg, now):
         "override_until": override.isoformat() if override else None,
         "nightlight": NIGHTLIGHT.exists(),
     }
-
 
 def main():
     cfg = load()
@@ -353,7 +292,6 @@ def main():
         print(palette_mode(want))
         return
 
-    # No arguments: the timer's path. Do nothing while a manual choice holds.
     nightlight(cfg, now)
     if cfg["mode"] == "manual":
         return
@@ -362,7 +300,6 @@ def main():
     want = scheduled_variant(cfg, now)
     if want and apply(want):
         print(palette_mode(want))
-
 
 if __name__ == "__main__":
     main()

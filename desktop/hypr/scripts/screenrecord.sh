@@ -1,9 +1,4 @@
 #!/bin/sh
-# Start or stop a screen recording with the GPU encoder (gpu-screen-recorder).
-#   screenrecord.sh          the focused monitor
-#   screenrecord.sh region   a region picked with slurp
-# Running again stops it. Audio is whatever plays on the default output.
-# Files land in ~/Videos/Screencasts; the bar shows a dot while it runs.
 
 if pkill -INT -f '(^|/)gpu-screen-recorder( |$)'; then
     notify-send -a Screencast "Recording saved" "~/Videos/Screencasts"

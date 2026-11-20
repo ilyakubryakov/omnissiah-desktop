@@ -1,8 +1,6 @@
 import QtQuick
 import "../shared" as Shared
 
-// One Launchpad cell: an app icon or a folder with a preview of its apps.
-// Dragging hands the item to the Launchpad, which decides where it lands.
 Item {
     id: tile
 
@@ -28,7 +26,6 @@ Item {
         opacity: tile.selected ? 0.16 : mouse.containsMouse && pad.drag === "" ? 0.07 : 0
     }
 
-    // Where a reordered item will go: before or after this one.
     Rectangle {
         visible: tile.hovered && !tile.dropInto
         x: pad.hover && pad.hover.after ? parent.width - 3 : 0
@@ -86,7 +83,6 @@ Item {
                 }
             }
         }
-        // Dropping onto an app makes a folder of the two.
         Rectangle {
             visible: !tile.isFolder && tile.dropInto
             anchors.fill: parent
@@ -140,7 +136,6 @@ Item {
         }
         onClicked: if (!moved) pad.activate(tile.key)
     }
-    // Explicit pin control does not interfere with folder/reorder dragging.
     Rectangle {
         visible: !tile.isFolder && (tile.selected || mouse.containsMouse || pinMouse.containsMouse || PinnedApps.contains(tile.itemId))
         anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 7

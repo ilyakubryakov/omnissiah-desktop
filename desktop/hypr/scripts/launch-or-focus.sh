@@ -1,8 +1,4 @@
 #!/bin/sh
-# Focus the first window whose class matches $1 (a case-insensitive regex), or
-# start the rest of the arguments (a .desktop id or a command) when nothing
-# matches. Used by the Meta+Alt keys, the bar launchers and the Xeneon pills.
-# A visible window wins; a minimized one is restored to the current desktop.
 
 address=$(hyprctl clients -j | jq -r --arg re "$1" '
     [.[] | select(.class | test($re; "i"))]

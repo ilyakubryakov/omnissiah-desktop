@@ -1,4 +1,3 @@
-"""Local AI and libvirt controls for the Xeneon Compute page."""
 import ipaddress
 import json
 import os
@@ -12,22 +11,18 @@ import xml.etree.ElementTree as ET
 SERVICES = {'ollama': 'Ollama', 'open-webui': 'Open WebUI', 'comfyui': 'ComfyUI'}
 URI = 'qemu:///system'
 
-
 def run(args, timeout=15):
     return subprocess.run(args, check=True, capture_output=True, timeout=timeout,
                           env={**os.environ, 'LC_ALL': 'C'}).stdout.decode()
-
 
 def virsh(*args):
     return run(['virsh', '--connect', URI, *args],
                timeout=60 if args and args[0] in {'shutdown', 'reboot'} else 15)
 
-
 def guest(identifier):
     if not re.fullmatch(r'[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}', identifier):
         raise ValueError('Invalid virtual machine identifier')
     return ET.fromstring(virsh('dumpxml', identifier, '--inactive'))
-
 
 def status():
     result = {'ts': time.time(), 'services': [], 'vms': [], 'errors': []}
@@ -50,7 +45,6 @@ def status():
     disk = shutil.disk_usage('/var/lib/libvirt/images')
     result['diskFreeGiB'] = round(disk.free / 1073741824)
     return result
-
 
 def action(kind, identifier, verb):
     if kind == 'ai':

@@ -1,4 +1,3 @@
-"""Local notebook, bounded arithmetic and durable reminders for the shell."""
 import ast
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -21,12 +20,10 @@ STATE = Path(os.environ.get('ONINIX_NOTEBOOK_STATE', str(Path(os.environ.get('XD
 DEFAULT_VAULT = HOME / 'Projects/k3lmiir-vault-sync'
 MAX_NOTE = 512 * 1024
 
-
 class NotebookError(ValueError):
     def __init__(self, code, message):
         super().__init__(message)
         self.code = code
-
 
 def atomic(path, data):
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -45,15 +42,12 @@ def atomic(path, data):
     finally:
         Path(tmp).unlink(missing_ok=True)
 
-
 def read_json(name, fallback):
     path = STATE / name
     return json.loads(path.read_text()) if path.exists() else fallback
 
-
 def write_json(name, value):
     atomic(STATE / name, json.dumps(value, ensure_ascii=False) + '\n')
-
 
 @contextmanager
 def locked():
@@ -62,10 +56,8 @@ def locked():
         fcntl.flock(lock, fcntl.LOCK_EX)
         yield
 
-
 def vault():
     return Path(read_json('settings.json', {}).get('vault', str(DEFAULT_VAULT))).expanduser().resolve()
-
 
 def notes_dir():
     root = vault()
@@ -77,7 +69,6 @@ def notes_dir():
     folder.mkdir(exist_ok=True)
     return folder
 
-
 def note_path(name):
     if not isinstance(name, str) or Path(name).name != name or not name.endswith('.md') or name.startswith('.'):
         raise NotebookError('path', 'Invalid note name.')
@@ -86,16 +77,11 @@ def note_path(name):
         raise NotebookError('path', 'Linked notes must be edited in Obsidian.')
     return path
 
-
 def editor_text(raw):
     return raw.replace('\r\n', '\n').replace('\r', '\n')
 
-
 def note_revision(raw):
-    # Old editors stripped layout while reading. Require a fresh read rather
-    # than accepting an old draft against the new lossless representation.
     return 'markdown-v3:' + hashlib.sha256(raw.encode('utf-8')).hexdigest()
-
 
 @dataclass
 class NoteParts:
@@ -108,8 +94,6 @@ class NoteParts:
     newline: str
 
     def render(self, title, body):
-        # Qt edits LF text. Keep untouched body bytes, and retain the body's own
-        # line ending convention when an edit actually changes it.
         endings = re.findall(r'\r\n|\n|\r', self.body)
         if editor_text(body) == editor_text(self.body):
             body = self.body
@@ -125,7 +109,6 @@ class NoteParts:
             match = re.fullmatch(r'(#[ \t]+)([^\r\n]*)(\r\n|\n|\r|)', heading)
             heading = match[1] + title + match[3]
         elif not heading and title != self.title:
-            # An explicit rename inserts H1 after existing leading blank lines.
             leading = re.match(r'(?:[ \t]*(?:\r\n|\n|\r))*', body).group()
             body = body[len(leading):]
             heading = '# ' + title + self.newline
@@ -135,9 +118,7 @@ class NoteParts:
         separator = self.newline if self.front and not self.front.endswith(('\n', '\r')) and content else ''
         return self.bom + self.front + separator + content
 
-
 def split_note(raw, name):
-    """Retain exact Markdown scaffolding instead of rebuilding a note template."""
     bom = '\ufeff' if raw.startswith('\ufeff') else ''
     raw = raw[len(bom):]
     ending = re.search(r'\r\n|\n|\r', raw)
@@ -157,13 +138,10 @@ def split_note(raw, name):
     match = re.match(r'#[ \t]+([^\r\n]*)(?:\r\n|\n|\r|$)', raw)
     if match:
         heading, title, raw = match.group(), match[1].strip(), raw[match.end():]
-    # Blank lines inside the editable body stay in that body. Stripping them on
-    # each read would duplicate hidden separators across successive autosaves.
     raw = leading + raw
     if not heading:
         leading = ''
     return NoteParts(bom, front, leading, heading, title, raw, newline)
-
 
 def read_note(name):
     path = note_path(name)
@@ -175,7 +153,6 @@ def read_note(name):
                 revision=note_revision(raw), modified=path.stat().st_mtime,
                 url='obsidian://open?path=' + quote(str(path), safe=''))
 
-
 def list_notes(query=''):
     items = []
     paths = sorted(notes_dir().glob('*.md'), key=lambda p: p.lstat().st_mtime, reverse=True)
@@ -185,7 +162,6 @@ def list_notes(query=''):
         try:
             note = read_note(path.name)
         except (UnicodeDecodeError, NotebookError):
-            # One unreadable note must not hide the rest of the list.
             continue
         if query.casefold() not in (note['title'] + '\n' + note['body']).casefold():
             continue
@@ -195,13 +171,11 @@ def list_notes(query=''):
                           done=sum(c.lower() == 'x' for c in checks)))
     return items[:200]
 
-
 def save_note(request, new=False):
     title = str(request.get('title', '')).strip()
     body = str(request.get('body', ''))
     if '\n' in title or '\r' in title or len(title) > 180 or len(body.encode()) > MAX_NOTE - 2048:
         raise NotebookError('size', 'Use a single-line title and a note smaller than 512 KiB.')
-    # Retain the user's edit locally even when the vault disappears or Sync wins.
     write_json('draft.json', {k: request.get(k, '') for k in ('id', 'title', 'body', 'revision')})
     day = datetime.now().date().isoformat()
     if new:
@@ -220,7 +194,6 @@ def save_note(request, new=False):
         if note_revision(raw) != request.get('revision'):
             raise NotebookError('conflict', 'This note changed in Obsidian or Sync. Your draft is safe; save a copy or reload.')
         parts = split_note(raw, name)
-        # A no-op must not touch bytes, updated metadata, mtime or recovery copy.
         if title == parts.title and editor_text(body) == editor_text(parts.body):
             write_json('draft.json', {})
             return read_note(name)
@@ -229,13 +202,11 @@ def save_note(request, new=False):
         if parts.front:
             parts.front = re.sub(r'(?m)^updated:[^\r\n]*', 'updated: ' + day, parts.front)
         content = parts.render(title, body)
-        # One local recovery copy per note, outside the synced vault.
         atomic(STATE / 'previous' / name, raw)
     atomic(path, content)
     result = read_note(name)
     write_json('draft.json', {})
     return result
-
 
 def calculate(expression):
     if not isinstance(expression, str) or not expression.strip() or len(expression) > 256:
@@ -280,10 +251,8 @@ def calculate(expression):
     except Exception as exc:
         raise NotebookError('calc', 'Use numbers, + - * / % ^, parentheses, sqrt(), abs(), pi or e.') from exc
 
-
 def jobs():
     return read_json('reminders.json', [])
-
 
 def change_job(request):
     values = jobs()
@@ -318,7 +287,6 @@ def change_job(request):
     write_json('reminders.json', values)
     return values
 
-
 def tick(notify=None, now=None):
     if not (STATE / 'reminders.json').exists():
         return
@@ -336,7 +304,6 @@ def tick(notify=None, now=None):
                 notify(job)
                 job['state'] = 'fired'
                 write_json('reminders.json', values)
-
 
 def handle(request):
     with locked():

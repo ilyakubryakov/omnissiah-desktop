@@ -3,14 +3,11 @@ import QtQuick
 import QtQuick.Layouts
 import "../shared" as Shared
 
-// The settings pages hosted by the Control Station window, one file per page.
-// Quick toggles live in the Control Center card on the panel (ControlCenterCard).
 ColumnLayout {
     id: root
     property var cal: null
     property bool studioExpanded: false
     spacing: Shared.DesktopStyle.px(16)
-    // Search targets on a page tab: DesktopPanel asks the hosted page.
     function reveal(target) { return sectionLoader.item && sectionLoader.item.reveal ? sectionLoader.item.reveal(target) : false }
 
     Loader {

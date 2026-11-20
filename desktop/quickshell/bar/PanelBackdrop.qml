@@ -8,13 +8,11 @@ Item {
     readonly property real surfaceWidth: Math.max(0, width - 2 * sideInset)
     readonly property bool atScreenEdge: sideInset <= 0
     property real pixelScale: 1
-    // Repaint the whole transparent backdrop when segments move or shrink.
     layer.enabled: true
     readonly property var shownGroups: groups.filter(g => g.visible && g.width > 0)
     readonly property bool islands: PanelStyle.style === "islands"
     readonly property real join: islands ? context.progress : 1
     readonly property real radius: PanelStyle.cornerRadius
-    // Straighten the outer corners continuously as the surface reaches the edge.
     readonly property real outerRadius: Math.min(radius, sideInset)
     readonly property real alpha: ShellLayout.panelOpacity + (1 - ShellLayout.panelOpacity) * context.progress
     property color desktopBase: ShellLayout.panelSurface
@@ -36,8 +34,6 @@ Item {
         radius: root.outerRadius
     }
 
-    // Adjacent segments share exact pixel boundaries. There are no overlapping
-    // translucent layers, seams, or a moving exclusive zone while islands join.
     Repeater {
         model: root.shownGroups
         Rectangle {
@@ -55,7 +51,6 @@ Item {
             color: root.islands ? Qt.rgba(surface.r, surface.g, surface.b, root.alpha)
                 : Qt.rgba(modelData.tone.r, modelData.tone.g, modelData.tone.b,
                     (modelData.strength + modelData.hoverTint) * (1 - root.context.progress))
-            // Retain the selected outer corners; only the joining edges straighten.
             topLeftRadius: index === 0 ? root.outerRadius : root.radius * (1 - root.join)
             bottomLeftRadius: topLeftRadius
             topRightRadius: index === root.shownGroups.length - 1 ? root.outerRadius : root.radius * (1 - root.join)

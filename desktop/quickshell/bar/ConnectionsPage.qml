@@ -6,8 +6,6 @@ import Quickshell
 import Quickshell.Bluetooth
 import "../shared" as Shared
 
-// Connections page of the Control Station: Wi-Fi, wired networking and Bluetooth,
-// as System Settings style tabs of grouped rows.
 ColumnLayout {
     id: root
     spacing: Shared.DesktopStyle.px(20)
@@ -17,7 +15,6 @@ ColumnLayout {
     readonly property var wired: connections.filter(c => c.type === "802-3-ethernet" && c.active === "yes")
     readonly property var adapter: Bluetooth.defaultAdapter
     readonly property bool usable: !!adapter && adapter.enabled
-    // Devices paired from this page get trusted so they reconnect on their own.
     property var pairRequested: ({})
     property bool scanStarted: false
 
@@ -50,7 +47,6 @@ ColumnLayout {
     Timer { id: scanTimer; interval: 60000; onTriggered: root.setScan(false) }
     Component.onDestruction: if (scanStarted && adapter) adapter.discovering = false
 
-    // Search targets on a tab other than the current one: switch first.
     readonly property var targetTabs: ({
         "Wi-Fi": "network", "Wired": "network", "Advanced network settings": "network",
         "Bluetooth": "bluetooth"
@@ -69,8 +65,6 @@ ColumnLayout {
         Layout.preferredWidth: Shared.DesktopStyle.px(22)
         color: Colors.muted
     }
-    // A SettingsRow that is clickable as a whole (a network to join). It carries
-    // `stacked` so neighbouring SettingsRows count it for their hairlines.
     component ClickRow: Item {
         id: click
         property bool stacked: false
@@ -115,7 +109,6 @@ ColumnLayout {
         onChosen: id => root.tab = id
     }
 
-    // ---- Wi-Fi & wired -------------------------------------------------------
     SettingsGroup {
         visible: root.tab === "network" && !!DesktopData.wifi.device
         title: "Wi-Fi"
@@ -218,7 +211,6 @@ ColumnLayout {
         }
     }
 
-    // ---- Bluetooth -----------------------------------------------------------
     SettingsGroup {
         visible: root.tab === "bluetooth"
         title: "Bluetooth"

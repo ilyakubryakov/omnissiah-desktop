@@ -2,9 +2,6 @@ import QtQuick
 import QtQuick.Layouts
 import "../shared" as Shared
 
-// One row of a SettingsGroup: title (and an optional explanation) on the left,
-// its control on the right. `stacked` puts a wide control (grid, slider row,
-// editor) under the title instead. The hairline separates it from the row above.
 Item {
     id: row
     property string title: ""
@@ -15,7 +12,6 @@ Item {
     implicitHeight: Math.max(Shared.DesktopStyle.px(46), grid.implicitHeight + 2 * Shared.DesktopStyle.px(10))
     readonly property bool first: {
         const kids = parent ? parent.children : []
-        // Repeaters are children too: count only visible rows.
         for (let i = 0; i < kids.length; i++) if (kids[i].visible && ("stacked" in kids[i])) return kids[i] === row
         return true
     }

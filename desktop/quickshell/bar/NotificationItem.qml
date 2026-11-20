@@ -10,7 +10,6 @@ Rectangle {
     property bool compact: false
     property bool live: false
     property bool buttonsOnly: false
-    // A folded group of repeats: every id is dismissed together.
     property var ids: [String(notification.id)]
     property int count: 1
     property bool editing: false
@@ -29,7 +28,6 @@ Rectangle {
     color: mouse.containsMouse || activeFocus ? Colors.selection : Colors.lightBackground
     border.width: notification.urgency === "critical" || activeFocus ? 1 : 0
     border.color: notification.urgency === "critical" && canDiagnose ? Colors.red : Colors.accent
-    // Tiers: important carries an accent edge, quiet recedes.
     opacity: tier === "quiet" && !mouse.containsMouse && !activeFocus ? 0.72 : 1
     Rectangle {
         visible: root.tier === "important" || root.tier === "critical"
@@ -96,7 +94,6 @@ Rectangle {
                 onClicked: DesktopData.act("notification-copy-code", [String(root.notification.id)])
             }
         }
-        // Future notifications from this title (or the whole app) get the chosen tier.
         Flow {
             visible: root.editing && !root.compact
             Layout.fillWidth: true; spacing: 6

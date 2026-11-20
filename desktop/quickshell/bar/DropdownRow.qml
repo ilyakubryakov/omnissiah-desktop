@@ -1,8 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
 
-// One line of a Dropdown: a header when `header` is set, otherwise a
-// clickable row whose glyph and brighter text mark the current choice.
 Rectangle {
     id: row
 

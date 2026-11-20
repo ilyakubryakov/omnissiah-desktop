@@ -14,8 +14,6 @@ Singleton {
     readonly property int fontSize: metrics.text_px
     readonly property int buttonFontSize: metrics.button_text_px
     readonly property int comboFontSize: metrics.combo_text_px
-    // Scales a size designed for the default 11 pt text (text_px 15), so every
-    // card follows the chosen UI font size; default metrics return n unchanged.
     function px(n) { return Math.max(1, Math.round(n * metrics.text_px / 15)) }
     readonly property int controlHeight: comfortable ? metrics.control_height_comfortable : metrics.control_height
     readonly property int focusWidth: metrics.focus_width
@@ -25,7 +23,6 @@ Singleton {
     readonly property int cardSpacing: metrics.card_spacing
     property bool fullscreen: false
     readonly property bool motion: ["subtle", "smooth"].includes(preferences.motion) && !fullscreen
-    // Shared proportions and motion for every shell layout.
     readonly property int radiusSmall: metrics.radius_small
     readonly property int radiusControl: metrics.radius_control
     readonly property int radiusCard: metrics.radius_card

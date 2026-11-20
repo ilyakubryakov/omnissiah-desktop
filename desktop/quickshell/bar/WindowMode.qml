@@ -6,7 +6,6 @@ import Quickshell.Io
 Singleton {
     id: root
     property bool floating: false
-    // A file created after start is not watched yet; poll only while it is missing.
     property bool missing: false
     Timer { interval: 2000; running: root.missing; repeat: true; onTriggered: store.reload() }
     FileView {

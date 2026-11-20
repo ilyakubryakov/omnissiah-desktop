@@ -18,11 +18,9 @@ BUDGET_MS = 3000
 TOO_SLOW_MS = 8000
 DECODE_TOKENS = 40
 
-
 def detect_virt():
     result = subprocess.run(['systemd-detect-virt'], capture_output=True, text=True)
     return result.stdout.strip() if result.returncode == 0 else ''
-
 
 def detect_gpu():
     try:
@@ -34,7 +32,6 @@ def detect_gpu():
         if '[' + vendor + ':' in lines:
             return name
     return 'none'
-
 
 def vram_mb(gpu):
     if gpu == 'nvidia' and shutil.which('nvidia-smi'):
@@ -49,13 +46,11 @@ def vram_mb(gpu):
             pass
     return best
 
-
 def memory_mb():
     for line in Path('/proc/meminfo').read_text().splitlines():
         if line.startswith('MemTotal:'):
             return int(line.split()[1]) // 1024
     return 0
-
 
 def backend():
     cli = shutil.which('llama-cli')
@@ -69,7 +64,6 @@ def backend():
             if re.search(r'^\s*' + name + r'\d+:', devices, re.IGNORECASE | re.MULTILINE):
                 return name
     return 'cpu'
-
 
 def start_model(gpu, accel, vram, cores, ram):
     if accel != 'cpu':
@@ -85,7 +79,6 @@ def start_model(gpu, accel, vram, cores, ram):
     if cores >= 6:
         return 'base'
     return 'tiny'
-
 
 def download(key):
     name, size, checksum = speech.MODELS[key]
@@ -109,7 +102,6 @@ def download(key):
     speech.write(path.with_suffix('.verified'), checksum)
     return path
 
-
 def bench(key, threads):
     out = subprocess.run([speech.binary('whisper-bench'), '-m', str(download(key)), '-t', str(threads)],
                          capture_output=True, text=True, timeout=600)
@@ -119,7 +111,6 @@ def bench(key, threads):
     if not encode:
         raise ValueError('whisper-bench gave no timing for ' + key)
     return float(encode.group(1)) + (float(decode.group(1)) if decode else 0.0) * DECODE_TOKENS
-
 
 def profile(force=False):
     virt, gpu = detect_virt(), detect_gpu()
@@ -146,7 +137,6 @@ def profile(force=False):
         result.update(enabled=force, reason='This machine is too slow for live dictation; voice stays off unless you enable it by hand.')
     return result
 
-
 def main(args):
     force = '--force' in args
     value = profile(force)
@@ -155,7 +145,6 @@ def main(args):
         print(json.dumps(value))
     else:
         print(('Voice on: ' if value['enabled'] else 'Voice off: ') + value['reason'])
-
 
 if __name__ == '__main__':
     main(sys.argv[1:])

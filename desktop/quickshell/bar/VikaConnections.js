@@ -1,4 +1,3 @@
-// Keep endpoint URLs and diagnostics out of the UI; only display server names and health.
 function parseMcp(text) {
     return String(text).replace(/\x1b\[[0-9;]*m/g, "").split(/\r?\n/).flatMap(line => {
         const match = line.match(/^(.+?):\s+.*? - (.+)$/)

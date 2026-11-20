@@ -4,9 +4,6 @@ import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
 
-// What the bars need from Hyprland that Quickshell's model does not carry:
-// window classes per workspace, the focused window's state, the keymap.
-// Refreshed from hyprctl on every compositor event.
 Singleton {
     id: root
 
@@ -15,14 +12,10 @@ Singleton {
     property var active: ({})
     property string layout: ""
 
-    // With a Lua config `dispatch` takes a Lua expression, not the old
-    // dispatcher names: Hyprland.dispatch('hl.dsp.focus({ workspace = "2" })').
     function exec(cmd) {
         Hyprland.dispatch("hl.dsp.exec_cmd(" + JSON.stringify("oninix-app " + cmd) + ")")
     }
 
-    // Events come in bursts; coalesce them, and never drop a refresh that
-    // arrives while hyprctl from the previous one is still running.
     function refresh() {
         debounce.restart()
     }
@@ -42,12 +35,8 @@ Singleton {
         return clients.filter(c => c.workspace && c.workspace.id === wsId).map(c => c["class"])
     }
 
-    // Class -> Nerd Font glyph (Material Design range; the FontAwesome range
-    // renders some glyphs empty in this font).
     function icon(cls) {
         const c = (cls || "").toLowerCase()
-        // App-mode Chrome windows keep their application identity, using the
-        // same single-color Material Design glyphs as every other panel icon.
         const web = c.startsWith("chrome-") || c.startsWith("crx_")
         const entry = web ? AppIcons.windowEntry(cls) : null
         const identity = (c + " " + (entry ? entry.name : "")).toLowerCase()
@@ -75,7 +64,6 @@ Singleton {
         if (c.includes("claude")) return "\u{EC82}"
         if (c.includes("chatgpt") || c.includes("codex")) return "\u{EC81}"
         if (c.includes("steam")) return "\u{F04D3}"
-        // Their raster tray icons are solid shapes: as silhouettes they read as a dot.
         if (c.includes("battle.net")) return "\u{EF94}"
         if (c.includes("remmina")) return "\u{F08B9}"
         if (c.includes("thunderbird")) return "\u{F01EE}"

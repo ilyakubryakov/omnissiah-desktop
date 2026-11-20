@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""PipeWire quantum profiles and explicit Scarlett 2i2 hardware input gains."""
 import fcntl
 import json
 import os
@@ -8,26 +7,20 @@ import re
 import subprocess
 import sys
 
-
 def run(*args):
     return subprocess.check_output(args, text=True, timeout=6, env={**os.environ, 'LC_ALL': 'C'})
-
 
 def settings():
     return {k: int(v) for k, v in re.findall(r"key:'(clock\.[^']+)' value:'(\d+)'", run('pw-metadata', '-n', 'settings', '0'))}
 
-
 def quantum(value):
     run('pw-metadata', '-n', 'settings', '0', 'clock.force-quantum', str(value))
-
 
 def state_path():
     return Path(os.environ['XDG_RUNTIME_DIR']) / 'oninix-desktop/music.json'
 
-
 def server_cookie(devices):
     return next(item['info']['cookie'] for item in devices if item.get('type') == 'PipeWire:Interface:Core')
-
 
 def read_state():
     try:
@@ -35,14 +28,12 @@ def read_state():
     except FileNotFoundError:
         return {}
 
-
 def music_quantum():
     try:
         value = json.loads((Path.home()/'.local/state/oninix-studio/audio.json').read_text()).get('music_quantum',128)
         return value if type(value) is int and value in (32,64,128,256,512) else 128
     except (OSError,ValueError,AttributeError):
         return 128
-
 
 def music(enable):
     path = state_path()
@@ -55,7 +46,6 @@ def music(enable):
         same_server = old.get('cookie') == cookie
         desired = music_quantum()
         if enable and (not same_server or current != old.get('applied') or desired != old.get('applied')):
-            # Save before changing the graph so a failed command cannot lose the baseline.
             temp = path.with_suffix('.tmp')
             base = old['base'] if same_server else current
             temp.write_text(json.dumps({'base': base, 'applied': desired, 'cookie': cookie}))
@@ -74,7 +64,6 @@ def music(enable):
                 quantum(old['base'])
             path.unlink()
 
-
 def top_nodes(raw, devices):
     names = {str(item['id']): item.get('info', {}).get('props', {}).get('node.name')
              for item in devices if item.get('type') == 'PipeWire:Interface:Node'}
@@ -86,12 +75,10 @@ def top_nodes(raw, devices):
             continue
         fields = line.split(None, 9)
         if len(fields) >= 9 and fields[0] in {'R', 'S', 'I', 'E', 'C'} and fields[1].isdigit() and fields[8].isdigit():
-            # FORMAT can contain spaces or be empty. Node IDs are authoritative.
             name = names.get(fields[1]) or (line[name_column:].strip() if name_column is not None else 'Node ' + fields[1])
             rows[fields[1]] = {'id': int(fields[1]), 'name': name, 'state': fields[0], 'quantum': int(fields[2]),
                                'rate': int(fields[3]), 'errors': int(fields[8])}
     return list(rows.values())
-
 
 def status():
     values = settings()
@@ -101,7 +88,6 @@ def status():
                    for item in devices if 'Midi' in item.get('info', {}).get('props', {}).get('media.class', '')})
     drivers = []
     try:
-        # Parse the last batch; ERR is PipeWire's error counter, not measured latency.
         drivers = top_nodes(run('pw-top', '-b', '-n', '2'), devices)
     except (ValueError, subprocess.SubprocessError):
         pass
@@ -109,9 +95,7 @@ def status():
     active = bool(old) and old.get('cookie') == server_cookie(devices) and values.get('clock.force-quantum') == old.get('applied')
     return {'settings': values, 'nodes': drivers, 'midi': midi, 'music': active, 'music_requested': bool(old)}
 
-
 def scarlett(channel=None, value=None):
-    # Discover the card by its USB product name, never by its changing index.
     cards = Path('/proc/asound/cards').read_text()
     match = re.search(r'^\s*(\d+) \[[^\]]+\].*Scarlett 2i2 4th Gen', cards, re.M)
     if not match:
@@ -134,15 +118,12 @@ def scarlett(channel=None, value=None):
                       'safe': control(card, f'Line In {index} Safe Capture Switch') == 'on'})
     return {'gains': gains, 'phantom': control(card, 'Line In 1-2 Phantom Power Capture Switch') == 'on'}
 
-
 def control(card, name):
-    # Input modes are display-only; a missing control reads as off, never as an error.
     try:
         found = re.search(r': values=(\S+)', run('amixer', '-c', card, 'cget', f'name={name}'))
     except Exception:
         return None
     return found[1] if found else None
-
 
 def main():
     os.umask(0o077)
@@ -168,7 +149,6 @@ def main():
                    else 'PipeWire is unavailable or the action failed')
         print(json.dumps({'error': str(error) if isinstance(error, ValueError) else message}))
         raise SystemExit(1)
-
 
 if __name__ == '__main__':
     main()

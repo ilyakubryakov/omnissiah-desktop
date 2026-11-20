@@ -1,4 +1,3 @@
-"""Private calendar accounts shared by the collector and the desktop UI."""
 
 import contextlib
 import fcntl
@@ -24,25 +23,20 @@ GRAPH = "https://graph.microsoft.com/v1.0/"
 TIMEOUT = 20
 AUTH_TIMEOUT = 300
 
-
 class CalendarError(Exception):
     def __init__(self, code, message):
         super().__init__(message)
         self.code = code
 
-
 def with_place(event, location):
-    """Add "l", a physical place (for Vika's time-to-leave reminder); call links stay out."""
     place = " ".join(str(location or "").split())[:200]
     if place and not re.search(r"https?://|teams|zoom|meet\.google|webex", place, re.I):
         event["l"] = place
     return event
 
-
 def private_dir(path):
     path.mkdir(parents=True, exist_ok=True, mode=0o700)
     path.chmod(0o700)
-
 
 def write_json(path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -57,19 +51,16 @@ def write_json(path, value):
         if os.path.exists(temp):
             os.unlink(temp)
 
-
 def read_json(path, default=None):
     if not path.exists():
         return default
     return json.loads(path.read_text())
-
 
 def read_cache(path, default):
     try:
         return read_json(path, default)
     except (ValueError, OSError):
         return default
-
 
 @contextlib.contextmanager
 def lock(name, blocking=True):
@@ -81,21 +72,17 @@ def lock(name, blocking=True):
     finally:
         os.close(fd)
 
-
 def account_id(value):
     if not isinstance(value, str) or not re.fullmatch(r"[a-f0-9]{32}", value):
         raise CalendarError("invalid", "Invalid calendar account.")
     return value
 
-
 def credential_path(ident):
     return CONFIG / "credentials" / (account_id(ident) + ".json")
-
 
 def event_path(ident, calendar):
     digest = hashlib.sha256(calendar.encode()).hexdigest()[:24]
     return CACHE / ("caldash-" + account_id(ident) + "-" + digest + ".events.json")
-
 
 def load_accounts():
     with lock("accounts"):
@@ -129,14 +116,12 @@ def load_accounts():
         write_json(ACCOUNTS, result)
         return result
 
-
 def find_account(ident):
     account_id(ident)
     for item in load_accounts()["accounts"]:
         if item["id"] == ident:
             return item
     raise CalendarError("removed", "This account was removed. Refresh the calendar list.")
-
 
 def edit_account(ident, change):
     load_accounts()
@@ -149,11 +134,9 @@ def edit_account(ident, change):
                 return
     raise CalendarError("removed", "This account was removed.")
 
-
 def safe_error(exc):
     if isinstance(exc, CalendarError):
         return {"code": exc.code, "message": str(exc)}
-    # Provider exception strings may contain bearer URLs, codes or token bodies.
     name = type(exc).__name__
     if name in ("RefreshError", "InvalidGrantError", "TokenExpiredError"):
         return {"code": "signin", "message": "Sign in again to reconnect this account."}
@@ -161,18 +144,15 @@ def safe_error(exc):
         return {"code": "network", "message": "Cannot reach the calendar service. Saved events are still available."}
     return {"code": "failed", "message": "Calendar operation failed (" + name + "). Existing settings were kept."}
 
-
 def google_client(path=None):
     value = read_json(Path(path).expanduser() if path else CONFIG / "client.json", {})
     app = value.get("installed", {})
     if not app.get("client_id", "").endswith(".apps.googleusercontent.com") or not app.get("client_secret"):
         raise CalendarError("setup", "Choose a Google OAuth Desktop app JSON file in App setup.")
-    # Imported files supply an identity, never arbitrary authorization endpoints.
     return {"installed": {"client_id": app["client_id"], "client_secret": app["client_secret"],
                           "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                           "token_uri": "https://oauth2.googleapis.com/token",
                           "redirect_uris": ["http://localhost"]}}
-
 
 def microsoft_client(value=None):
     app = value if value is not None else read_json(CONFIG / "microsoft.json", {})
@@ -183,7 +163,6 @@ def microsoft_client(value=None):
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.-]{0,252}", tenant):
         raise CalendarError("invalid", "Use a tenant ID, verified domain or organizations.")
     return {"client_id": client, "tenant": tenant}
-
 
 def google_credentials(ident):
     from google.auth.transport.requests import Request
@@ -199,14 +178,12 @@ def google_credentials(ident):
         write_json(path, json.loads(creds.to_json()))
     return creds
 
-
 def microsoft_app(app_config, cache=None):
     import msal
     app_config = microsoft_client(app_config)
     return msal.PublicClientApplication(app_config["client_id"],
         authority="https://login.microsoftonline.com/" + app_config["tenant"],
         token_cache=cache, timeout=TIMEOUT)
-
 
 def microsoft_result(result):
     if result and result.get("access_token"):
@@ -228,7 +205,6 @@ def microsoft_result(result):
     suffix = " · AADSTS" + str(codes[0]) if codes and isinstance(codes[0], int) else ""
     raise CalendarError("signin", message + suffix)
 
-
 def microsoft_token(ident):
     import msal
     path = credential_path(ident)
@@ -245,7 +221,6 @@ def microsoft_token(ident):
         value["cache"] = cache.serialize()
         write_json(path, value)
     return microsoft_result(result)["access_token"]
-
 
 def api_json(url, token, params=None, graph=False):
     import requests
@@ -267,7 +242,6 @@ def api_json(url, token, params=None, graph=False):
         raise CalendarError("network", "Calendar service unavailable (HTTP " + str(response.status_code) + ").")
     return response.json()
 
-
 def pages(url, token, params=None, graph=False):
     for _ in range(100):
         data = api_json(url, token, params, graph)
@@ -284,7 +258,6 @@ def pages(url, token, params=None, graph=False):
             params = dict(params or {}, pageToken=page)
     raise CalendarError("limit", "Calendar response is too large. Saved events were kept.")
 
-
 def discover(item):
     ident, provider = item["id"], item["provider"]
     if provider == "ics":
@@ -300,7 +273,6 @@ def discover(item):
     return [dict(id=c["id"], name=str(c.get("name") or "Calendar")[:120], primary=c.get("isDefaultCalendar", False))
             for c in data], item.get("email", "")
 
-
 def refresh_calendars(ident):
     with lock("credential-" + account_id(ident)):
         item = find_account(ident)
@@ -313,7 +285,6 @@ def refresh_calendars(ident):
                     legacy_primary if choice.get("primary") and legacy_primary is not None else False)
             current.update(calendars=choices, email=email, error=None)
         edit_account(ident, change)
-
 
 class CallbackServer(HTTPServer):
     def __init__(self):
@@ -331,7 +302,6 @@ class CallbackServer(HTTPServer):
         if self.result is None:
             raise CalendarError("timeout", "Sign-in timed out after five minutes. You can try again.")
         return self.result
-
 
 class CallbackHandler(BaseHTTPRequestHandler):
     def setup(self):
@@ -373,7 +343,6 @@ class CallbackHandler(BaseHTTPRequestHandler):
         self.wfile.write(("<!doctype html><meta name=viewport content='width=device-width'><title>" + title + "</title>"
             "<style>body{font:18px system-ui;max-width:38em;margin:12vh auto;padding:2em;color:CanvasText;background:Canvas;color-scheme:light dark}h1{font-size:26px}</style>"
             "<h1>" + title + "</h1><p>" + message + "</p>").encode())
-
 
 def authorize(request, emit):
     old = find_account(request["id"]) if request.get("id") else None
@@ -447,15 +416,10 @@ def authorize(request, emit):
         raise
     return ident
 
-
 CALL_LINK = re.compile(r"https://\S*(teams\.microsoft\.com|teams\.live\.com|meet\.google\.com|zoom\.us|webex\.com)", re.I)
 
-
 def is_call(link, attendees, location):
-    # Only events with another participant or a call link count as meetings;
-    # Lunch/Focus blocks must not prompt for recording.
     return bool(link or attendees or CALL_LINK.search(location or ""))
-
 
 def normalized_google(events, key, tz):
     result = []
@@ -471,7 +435,6 @@ def normalized_google(events, key, tz):
         call = is_call(ev.get("hangoutLink") or ev.get("conferenceData"), others, ev.get("location"))
         result.append(with_place(dict(s=parse(start), e=parse(end or start), t=str(ev.get("summary") or "(no title)")[:160], c=key, a=allday, m=call), ev.get("location")))
     return result
-
 
 def normalized_microsoft(events, key, tz):
     result = []
@@ -490,15 +453,12 @@ def normalized_microsoft(events, key, tz):
                 from babel.core import get_global
                 zone = ev.get("originalStartTimeZone") or "UTC"
                 zone = get_global("windows_zone_mapping").get(zone, zone)
-                # Graph converts start/end to UTC. Recover the original calendar
-                # date before projecting all-day events onto the local date grid.
                 day = dt.astimezone(ZoneInfo(zone)).date()
                 return datetime.combine(day, datetime.min.time(), tz).isoformat()
             return dt.astimezone(tz).isoformat()
         call = is_call(ev.get("isOnlineMeeting"), ev.get("attendees"), (ev.get("location") or {}).get("displayName"))
         result.append(with_place(dict(s=parse(ev["start"]), e=parse(ev["end"]), t=str(ev.get("subject") or "(no title)")[:160], c=key, a=allday, m=call), (ev.get("location") or {}).get("displayName")))
     return result
-
 
 def collect_sources(start, end, tz, source_ics):
     events, status = [], {}
@@ -550,14 +510,10 @@ def collect_sources(start, end, tz, source_ics):
                 state.update(account=ident, calendar=cid, name=calendar["name"], provider=item["provider"], kind=item.get("legacy_key", item["provider"]))
                 status[key] = state
                 for ev in found:
-                    # Legacy caches carried a short calendar key.
                     events.append(dict(ev, c=key, cn=calendar["name"], kind=item.get("legacy_key", item["provider"]), account=ident))
     return events, status
 
-
 def publish(collected=None):
-    # UI removal/selection and a timer finishing its fetch share this short lock.
-    # Neither can restore a removed calendar from an in-flight snapshot.
     with lock("publish"):
         if collected is None:
             collected = read_cache(CACHE / "caldash.json", {})
@@ -573,7 +529,6 @@ def publish(collected=None):
                 value["e"] = [key for key in value["e"] if key in active]
         collected["configured"] = bool(data["accounts"])
         write_json(CACHE / "caldash.json", collected)
-
 
 def snapshot():
     data = load_accounts()
@@ -593,7 +548,6 @@ def snapshot():
         except (CalendarError, ValueError, OSError):
             providers[provider] = False
     return {"accounts": rows, "providers": providers, "ts": collected.get("ts", 0)}
-
 
 def handle(request, emit=lambda value: None):
     load_accounts()

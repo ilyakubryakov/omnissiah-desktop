@@ -2,8 +2,6 @@ import QtQuick
 import "../shared" as Shared
 import QtQuick.Layouts
 
-// Resting buttons share the group surface; only hover/press adds a local tint.
-// Content never scales during hover, keeping glyphs and text sharp.
 Item {
     id: root
 
@@ -13,10 +11,8 @@ Item {
     property string label: ""
     property real maximumLabelWidth: 10000
     property color tint: Colors.foreground
-    // Semantic roles can equal the accent in a palette; preserve their intent.
     property bool preserveTint: false
     property bool sep: false
-    // Optional dot on the glyph corner (e.g. unread notifications); transparent hides it.
     property color badge: "transparent"
     property bool framed: true
     function inheritedGroup() {
@@ -25,7 +21,6 @@ Item {
         return "status"
     }
     readonly property string accentGroup: inheritedGroup()
-    // Alert/disabled colors keep their meaning; only ordinary and active glyphs gain accents.
     readonly property bool accentable: !preserveTint && (tint == Colors.foreground || tint == Colors.accent)
     readonly property color buttonTint: accentable ? ShellLayout.buttonColor(accentGroup) : tint
     readonly property bool hovered: mouse.containsMouse

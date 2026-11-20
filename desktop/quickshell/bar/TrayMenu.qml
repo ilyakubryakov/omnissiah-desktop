@@ -3,9 +3,6 @@ import QtQuick.Layouts
 import Quickshell
 import "../shared" as Shared
 
-// The DBus menu of a tray item, drawn as a bar Dropdown. Platform (QMenu)
-// popups never appear from the layer-shell bar on Hyprland, hence our own.
-// Submenus open in place, with a back row on top.
 Dropdown {
     id: menu
 
@@ -21,7 +18,6 @@ Dropdown {
         open = true
     }
 
-    // DBus menu labels mark mnemonics with "_" and escape a literal one as "__".
     function plain(text) {
         return (text || "").replace(/__/g, "\u0000").replace(/_/g, "").replace(/\u0000/g, "_")
     }

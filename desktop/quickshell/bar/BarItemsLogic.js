@@ -1,7 +1,5 @@
 .pragma library
 
-// Panel icons of the launchers and status groups. Pinned apps are app:<desktop id>.
-// Keep in sync with ITEMS in dotfiles/.local/lib/station_shell.py.
 var GROUPS = ["launchers", "status"]
 var DEFAULTS = {
     launchers: ["applications", "notebook"],
@@ -12,9 +10,6 @@ var APPLETS = DEFAULTS.launchers.concat(DEFAULTS.status)
 
 function isApp(token) { return typeof token === "string" && token.indexOf("app:") === 0 }
 
-// Every applet exactly once and every pinned app exactly once. Unknown and unpinned
-// tokens drop out; missing applets return to their default neighbours; newly pinned
-// apps follow the last app of the launchers group.
 function resolve(items, pinned) {
     var pins = {}, seen = {}, out = { launchers: [], status: [] }
     ;(pinned || []).forEach(function (id) { pins["app:" + id] = true })
@@ -48,8 +43,6 @@ function resolve(items, pinned) {
     return out
 }
 
-// Moves a token before another one (or to the end when before is empty).
-// Control Station never leaves the status group, which cannot be hidden.
 function move(items, pinned, token, group, before) {
     var out = resolve(items, pinned)
     if (GROUPS.indexOf(group) < 0 || token === before) return out

@@ -4,8 +4,6 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "../shared" as Shared
 
-// Appearance pages of the Control Station: Themes, Panels & windows, Apps & icons
-// and Login screen. Long pages are split into tabs by meaning (macOS style).
 ColumnLayout {
     id: root
     spacing: Shared.DesktopStyle.px(20)
@@ -25,8 +23,6 @@ ColumnLayout {
         return ({"tesla-day":"Tesla Day", "tesla-night":"Tesla Night", "graphite":"Graphite", "omnissiah":"Omnissiah", "kanagawa-lotus":"Lotus · light", "kanagawa-dragon":"Dragon · dark"})[id] || id.split("-").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ")
     }
     function act(args) { DesktopData.act("appearance", args) }
-    // Search targets that live on a tab other than the first: switch to it first.
-    // Returns true when a tab changed, so the caller waits for the layout.
     readonly property var targetTabs: ({
         "Light & dark": ["themeTab", "schedule"], "Day palette": ["themeTab", "schedule"],
         "Wallpaper": ["themeTab", "wallpaper"], "Open wallpaper gallery": ["themeTab", "wallpaper"],
@@ -45,7 +41,6 @@ ColumnLayout {
         return true
     }
 
-    // ---- Themes --------------------------------------------------------------
     Segmented {
         visible: root.section === "themes"
         Layout.alignment: Qt.AlignHCenter
@@ -182,7 +177,6 @@ ColumnLayout {
 
     AppearancePresets { visible: root.section === "themes" && root.themeTab === "looks" }
 
-    // ---- Panels & windows ----------------------------------------------------
     Segmented {
         visible: root.section === "panels"
         Layout.alignment: Qt.AlignHCenter
@@ -375,11 +369,8 @@ ColumnLayout {
         }
     }
 
-    // ---- Apps & icons --------------------------------------------------------
     ApplicationSettings { visible: root.section === "apps"; Layout.fillWidth: true }
 
-    // ---- Login screen (ReGreet) ------------------------------------------------
-    // Applied by a system service; shown at the next login.
     ColumnLayout {
         id: login
         visible: root.section === "login"
@@ -390,7 +381,6 @@ ColumnLayout {
         readonly property var status: greeter.status || ({})
         readonly property string paletteId: prefs.palette === "desktop" ? root.appearance.schedule.palette : (prefs.palette || "omnissiah")
         readonly property var colors: root.appearance.palettes.find(p => p.id === paletteId) || ({ background: Colors.background, accent: Colors.accent, foreground: Colors.foreground })
-        // The system service renders asynchronously; re-read a few times to show its result.
         property int pendingReads: 0
         function set(key, value) { root.act(["greeter", key, String(value)]); pendingReads = 4 }
         Timer { interval: 1500; repeat: true; running: login.pendingReads > 0; onTriggered: { DesktopData.readAppearance(); login.pendingReads-- } }

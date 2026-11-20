@@ -3,18 +3,12 @@ import QtQuick.Layouts
 import "../shared" as Shared
 import "BarItemsLogic.js" as Items
 
-// The icons of one group (launchers or status) in the order ShellPrefs keeps.
-// Pulling an icon a few pixels drags it: drop it inside this group or into the
-// other icon group of the same panel. The move is written after release, so the
-// pressed delegate is never destroyed during a drag. Unpinned apps with minimized
-// windows follow the launchers after a separator and are not movable.
 Item {
     id: root
     required property var bar
     required property string group
     property var tokens: []
     readonly property var placed: ShellPrefs.placed[group] || []
-    // A fresh but equal list must not rebuild every applet and its cards.
     onPlacedChanged: if (!Items.same(placed, tokens)) tokens = placed
     Component.onCompleted: tokens = placed
     readonly property var extras: group === "launchers" ? Minimized.extraIds : []
@@ -25,7 +19,6 @@ Item {
     implicitHeight: PanelStyle.barHeight
     Layout.fillHeight: true
 
-    // Where the dragged icon would land, for a pointer in window coordinates.
     function insertion(scene) {
         if (!dragging) return null
         const p = row.mapFromItem(null, scene.x, scene.y)
@@ -66,7 +59,6 @@ Item {
                 readonly property bool app: Items.isApp(modelData)
                 readonly property Item content: app ? appLoader.item : appletLoader.item
                 readonly property real contentWidth: content ? content.implicitWidth : 0
-                // Pinned apps sit edge to edge, like the dock they replace.
                 readonly property bool tight: app && index + 1 < root.tokens.length && Items.isApp(root.tokens[index + 1])
                 visible: app || (appletLoader.item ? appletLoader.item.shown : false)
                 width: visible ? contentWidth + (tight || index === root.tokens.length - 1 ? 0 : root.gap) : 0
@@ -118,8 +110,6 @@ Item {
         color: Colors.accent
     }
 
-    // Hover over an app with minimized windows previews its windows; right-click
-    // pins the same card with the application options (the Dock menu).
     property string popupApp: ""
     property string popupName: ""
     property bool popupPinned: false

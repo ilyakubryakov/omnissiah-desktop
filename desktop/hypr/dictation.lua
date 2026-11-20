@@ -3,7 +3,6 @@ local sequence = 0
 local token = nil
 local command = "oninix-dictation "
 
--- Snapshot focus synchronously, before spawning a process or showing the OSD.
 hl.bind("Alt_R", function()
     if token then return end
     local window = hl.get_active_window()
@@ -18,7 +17,6 @@ end, { ignore_mods = true, description = "dictation: hold Right Alt to speak, re
 
 hl.bind("Alt_R", function()
     if not token then return end
-    -- One request avoids release/keys-up process scheduling races.
     hl.exec_cmd(command .. "release " .. token .. " --keys-up")
     token = nil
 end, { release = true, ignore_mods = true, transparent = true, locked = true })

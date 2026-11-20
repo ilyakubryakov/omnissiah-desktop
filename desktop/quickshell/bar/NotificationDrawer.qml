@@ -31,8 +31,6 @@ PanelWindow {
     Timer { id: conceal; interval: Shared.DesktopStyle.slow }
     Timer { id: acknowledge; interval: 100; onTriggered: { if (DesktopData.busy) restart(); else if (root.opened) DesktopData.act("mark-seen") } }
     IpcHandler { target: "notifications"; function toggle(): void { root.toggle() } function close(): void { root.opened = false } }
-    // One input surface owns both the drawer and its outside-click area. Separate
-    // transparent layer windows can steal pointer focus on a second monitor.
     MouseArea { anchors.fill: parent; onClicked: root.opened = false }
     Rectangle {
         id: surface

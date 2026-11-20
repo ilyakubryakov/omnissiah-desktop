@@ -1,5 +1,3 @@
--- Control Center preferences: key=value lines in $XDG_STATE_HOME/oninix/<name>.conf,
--- per machine. Read as data with a bounded character set, never executed.
 local M = {}
 local dir = (os.getenv("XDG_STATE_HOME") or (os.getenv("HOME") .. "/.local/state")) .. "/oninix/"
 

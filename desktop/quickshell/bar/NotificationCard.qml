@@ -8,7 +8,6 @@ ColumnLayout {
     id: root
     signal detailsRequested()
     spacing: 10
-    // The hover card stays a glance: quiet groups wait in the centre.
     readonly property var rows: Logic.groups(DesktopData.notifications.current, DesktopData.notifications.history)
         .filter(g => g.notification.tier !== "quiet").slice(0, 4)
     RowLayout {

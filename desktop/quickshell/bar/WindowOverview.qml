@@ -15,7 +15,6 @@ ColumnLayout {
     readonly property var minimized: Minimized.windows.filter(c => found(c))
     readonly property var workspaces: [...new Set(Hyprland.workspaces.values.filter(w => w.id > 0).map(w => w.id).concat(clients.map(c => c.workspace.id), [1,2,3,4,5,6,7,8,9,10], Shared.Screens.tv ? [11] : []))].sort((a,b) => a-b)
     property var draggedClient: null
-    // 12 is the Citrix desk: citrixspace.lua admits only its floating guests there.
     function moveWindow(client, workspace) {
         if (!client || !/^0x[0-9a-f]+$/i.test(client.address) || workspace < 1 || workspace > 12) return
         Hyprland.dispatch("hl.dsp.window.move({ window = " + JSON.stringify("address:" + client.address) + ", workspace = " + JSON.stringify(String(workspace)) + ", follow = false })")
@@ -96,7 +95,6 @@ ColumnLayout {
                             Keys.onReturnPressed: root.focusWindow(modelData)
                             Accessible.role: Accessible.Button; Accessible.name: modelData.title || modelData.class
                             Accessible.onPressAction: root.focusWindow(modelData)
-                            // Large app symbol when the box has room, the title below it.
                             readonly property bool roomy: height >= Shared.DesktopStyle.px(64) && width >= Shared.DesktopStyle.px(64)
                             ApplicationIcon {
                                 visible: window.roomy
@@ -118,7 +116,6 @@ ColumnLayout {
                                 id: hover
                                 anchors.fill: parent; hoverEnabled: true
                                 acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
-                                // Only the left button drags; middle closes, right selects.
                                 drag.target: pressedButtons & Qt.LeftButton ? window : null
                                 property bool moved: false
                                 onPressed: mouse => { moved = false; if (mouse.button === Qt.LeftButton) root.draggedClient = window.modelData }
@@ -161,7 +158,6 @@ ColumnLayout {
         UiButton { text: "Move"; enabled: !!root.draggedClient; onClicked: root.moveWindow(root.draggedClient, Number(destination.currentText)) }
         UiButton { glyph: "\uf00d"; Accessible.name: "Clear selection"; subtle: true; onClicked: root.draggedClient = null }
     }
-    // Minimized windows have no place on a workspace map: a compact dock, click restores.
     UiLabel { visible: root.minimized.length > 0; text: "Minimized"; color: Colors.muted; font.pixelSize: Shared.DesktopStyle.px(12) }
     Flow {
         visible: root.minimized.length > 0

@@ -1,8 +1,6 @@
 import QtQuick
 import Quickshell
 
-// A hover hint under a bar item. Controls' ToolTip draws inside the bar's own
-// window and gets clipped by its height, so this is a popup of its own.
 PopupWindow {
     id: tip
 

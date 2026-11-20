@@ -8,9 +8,7 @@ import "../shared" as Shared
 ColumnLayout {
     id: root
     property bool editing: false
-    // In the Control Center card: two columns always, no section title.
     property bool compact: false
-    // Tiles that lead to a settings page (Connections, Audio output, details).
     signal settingsRequested(string page)
     function openSettings(page) { DesktopData.controlTab = page; settingsRequested(page) }
     property string dragging: ""

@@ -13,7 +13,6 @@ FloatingWindow {
     property var cal: null
     signal calendarRequested()
     signal guideRequested()
-    // Windows and Clipboard are standalone tools now, not settings pages.
     signal toolRequested(string tool)
     property bool opened: false
     property bool presented: false
@@ -52,7 +51,6 @@ FloatingWindow {
         if (which === "guide") { openGuide(); return }
         if (which === "notifications") { DesktopData.notificationsRequested(); return }
         PopupState.close(); hideDelay.stop(); presented = true
-        // "controls" opens the page a caller asked for (controlTab), else the last one.
         let key = which === "controls" ? (DesktopData.controlTab || ShellPrefs.ui.last || "network") : which === "appearance" ? "themes" : which
         choose(key); opened = true; DesktopData.open = true; DesktopData.refresh(); DesktopData.error = ""
         Hypr.refresh(); body.forceActiveFocus()
@@ -79,7 +77,6 @@ FloatingWindow {
         id: restoreScroll; interval: 160
         onTriggered: {
             if (root.focusText) {
-                // A target on another tab: switch to it, then look again once laid out.
                 if (pageLoader.item && pageLoader.item.reveal && pageLoader.item.reveal(root.focusText)) { restart(); return }
                 const label = root.findLabel(pageLoader.item, root.focusText)
                 if (label) {
@@ -94,8 +91,6 @@ FloatingWindow {
     Timer { id: hideDelay; interval: Shared.DesktopStyle.fast; onTriggered: if (!root.opened) root.presented = false }
     IpcHandler {
         target: "desktop"
-        // "controls" is the Control Center card on the panel (macOS style); the
-        // settings window itself is "settings". Without the chip, settings open.
         function toggle(page: string): void {
             if (page === "controls" && ControlCenterState.toggle()) return
             if (page === "overview" || page === "clipboard") { root.close(); root.toolRequested(page); return }
@@ -117,8 +112,6 @@ FloatingWindow {
         opacity: root.opened ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: Shared.DesktopStyle.fast } }
         Keys.onEscapePressed: { if (search.text) search.clear(); else root.close() }
-        // Keys, not a Shortcut: destroying a QQuickShortcut on panel shutdown crashed
-        // Quickshell in QShortcutMap::removeShortcut (core dumps 2026-11-08, 2026-11-09).
         Keys.onPressed: event => {
             if (root.opened && event.key === Qt.Key_F && (event.modifiers & Qt.ControlModifier)) {
                 search.forceActiveFocus()
@@ -169,9 +162,7 @@ FloatingWindow {
                                 id: entry
                                 required property var modelData
                                 required property int index
-                                // A hairline before the first page of each group.
                                 readonly property bool groupStart: index > 0 && navRepeater.model[index - 1].group !== modelData.group
-                                // Settings on this page that match the query: why the page was found.
                                 readonly property var hits: Catalog.matches(search.text, modelData.id)
                                 Layout.fillWidth: true; spacing: 1
                                 Rectangle {
@@ -237,7 +228,6 @@ FloatingWindow {
             }
         }
     }
-    // Thin edge handles allow ordinary mouse resizing without a modifier key.
     Repeater {
         model: [Qt.TopEdge, Qt.BottomEdge, Qt.LeftEdge, Qt.RightEdge,
                 Qt.TopEdge | Qt.LeftEdge, Qt.TopEdge | Qt.RightEdge,

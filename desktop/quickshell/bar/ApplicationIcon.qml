@@ -1,7 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 
-// One font, size and solid color for all application symbols on panel surfaces.
 Text {
     property string appClass: ""
     property int iconSize: 17

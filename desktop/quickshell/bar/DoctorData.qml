@@ -3,8 +3,6 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// Reads the oninix-doctor cache written by its user timers. The panel never
-// runs the checks itself except on an explicit "Run full check".
 Singleton {
     id: root
     property var report: ({})
@@ -16,7 +14,6 @@ Singleton {
     readonly property var issues: (report.results || []).filter(r => r.level !== 'ok')
     readonly property var rows: (report.results || []).slice().sort((a, b) => rank(b.level) - rank(a.level))
     readonly property var rebuild: report.rebuild || null
-    // Last 24 h of background jobs, modes, boots and crashes, newest first.
     readonly property var events: report.events || []
 
     function rank(level) { return { fail: 2, warn: 1 }[level] || 0 }
@@ -28,8 +25,6 @@ Singleton {
     }
     function runFull() { if (!fullCheck.running) fullCheck.running = true }
 
-    // Fix it: oninix-doctor-fix runs a headless agent in a transient user unit;
-    // its state file drives the card (diagnosing -> proposed -> fixing -> done).
     property var fix: ({ status: 'idle' })
     readonly property string fixStatus: fix.status || 'idle'
     readonly property bool fixBusy: fixStatus === 'diagnosing' || fixStatus === 'fixing' || fixAction.running
@@ -49,7 +44,6 @@ Singleton {
         onFileChanged: reload()
         onLoaded: { try { const d = JSON.parse(text()); if (d && typeof d === 'object') root.fix = d } catch (_) {} }
     }
-    // Also notices a unit that died without writing its result.
     Process {
         id: fixStatusProcess
         running: true

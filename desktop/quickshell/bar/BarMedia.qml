@@ -23,7 +23,6 @@ RowLayout {
     property double now: Date.now()
     Timer { interval: 30000; running: true; repeat: true; onTriggered: bar.now = Date.now() }
 
-    // Only today's timed events: tomorrow's standup is not worth bar space tonight.
     readonly property var meeting: {
         if (!cal || !cal.ready || cal.stale) return null
         const today = Logic.onDay(cal.events, new Date(now)).filter(event => !event.a)
@@ -31,15 +30,12 @@ RowLayout {
     }
     readonly property int meetingIn: meeting ? Math.ceil((Date.parse(meeting.s) - now) / 60000) : 0
 
-
         spacing: 8
 
-        // Right-click anywhere in the group swaps the player and the briefing.
         TapHandler { acceptedButtons: Qt.RightButton; onTapped: PanelBriefing.toggleView() }
 
         BarSystem { barWindow: bar.barWindow }
 
-        // Two dots tell which view is shown while both exist.
         Item {
             visible: bar.playing
             implicitWidth: 14; implicitHeight: PanelStyle.barHeight
@@ -98,7 +94,6 @@ RowLayout {
             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: playerPopup.togglePinned() }
         }
 
-        // While music plays the meeting shrinks to its countdown; the full agenda stays in its hover card.
         Seg {
             id: meetingSegment
             readonly property string when: bar.meetingIn <= 0 ? "Now"

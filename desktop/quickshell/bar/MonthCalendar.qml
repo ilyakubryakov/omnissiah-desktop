@@ -3,7 +3,6 @@ import Quickshell
 import Quickshell.Wayland
 import "../shared" as Shared
 
-// Calendar opened from Control Station or the agenda on the lower bar.
 PanelWindow {
     id: root
     property bool opened: false

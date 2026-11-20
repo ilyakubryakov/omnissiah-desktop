@@ -3,7 +3,6 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// Machine load for the bottom bar: CPU, memory, CPU temperature, root disk.
 Singleton {
     id: root
 
@@ -71,7 +70,6 @@ Singleton {
         }
     }
 
-    // Only identified CPU sensors; never label an unrelated board sensor CPU.
     Process {
         id: hwmon
         command: ["sh", "-c", "for d in /sys/class/hwmon/hwmon*; do n=$(cat $d/name); case $n in k10temp|coretemp|cpu_thermal) cat $d/temp1_input; exit;; esac; done"]

@@ -1,6 +1,4 @@
 //@ pragma UseQApplication
-// Tray context menus are platform menus, which need QApplication.
-// Started by oninix-panel.service using the packaged shell configuration.
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
@@ -30,7 +28,6 @@ ShellRoot {
     CalData { id: agenda }
     DesktopPanel { id: desktop; cal: agenda; onCalendarRequested: calendar.toggle(); onGuideRequested: cheat.open(); onToolRequested: tool => (tool === "overview" ? windowsTool : clipboardTool).toggle() }
     CheatPanel { id: cheat; screenTarget: Shared.Screens.main }
-    // Tools outside the settings window (macOS: Mission Control, a clipboard manager).
     QuickKeys { id: quickKeys }
     IpcHandler {
         target: "keys"

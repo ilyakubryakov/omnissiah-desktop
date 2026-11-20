@@ -43,13 +43,11 @@ MODELS = {
 LANGUAGE = re.compile(r'auto|[a-z]{2,3}')
 PROFILE = Path(os.environ.get('XDG_STATE_HOME', str(Path.home() / '.local/state'))) / 'oninix/voice.json'
 
-
 def profile():
     return read(PROFILE, {}) or {}
 DEFAULTS = dict(model='turbo', language='auto', provider='claude', translate=False, autosave=True, folder='Quick Notes/Meetings')
 ACTIVE = {'recording', 'paused'}
 BUSY = {'queued', 'transcribing', 'summarizing'}
-
 
 def read(path, default=None):
     try:
@@ -57,10 +55,8 @@ def read(path, default=None):
     except FileNotFoundError:
         return default
 
-
 def write(path, value):
     atomic(path, json.dumps(value, ensure_ascii=False) + '\n')
-
 
 def preferences(values=None):
     result = dict(DEFAULTS, **read(CONFIG, {}))
@@ -77,7 +73,6 @@ def preferences(values=None):
         write(CONFIG, result)
     return result
 
-
 def binary(name):
     found = shutil.which(name)
     if not found and name == 'whisper-cli':
@@ -87,7 +82,6 @@ def binary(name):
     if not found:
         raise ValueError(name + ' is missing. Install the meeting tools first.')
     return found
-
 
 def devices():
     data = json.loads(subprocess.check_output(['pw-dump'], timeout=4))
@@ -110,24 +104,18 @@ def devices():
         node['default'] = node['name'] == defaults.get('default.audio.sink' if node['kind'] == 'output' else 'default.audio.source')
     return nodes
 
-
 def model_path(key):
     return CACHE / MODELS[key][0]
-
 
 def model_ready(key):
     p = model_path(key)
     return p.is_file() and p.stat().st_size == MODELS[key][1] and read(p.with_suffix('.verified'), '') == MODELS[key][2]
 
-
 def stamp(seconds):
     value = max(0, int(seconds))
     return f'{value // 3600:02}:{value // 60 % 60:02}:{value % 60:02}'
 
-
 def calendar_event(now):
-    # A recording belongs to the timed event that is running or starts within
-    # EVENT_LEAD; the closest start wins when several overlap.
     try:
         events = read(CALENDAR, {}).get('events', [])
     except (OSError, ValueError, AttributeError):
@@ -146,10 +134,7 @@ def calendar_event(now):
             best = (distance, dict(title=title, start=start.isoformat()))
     return best and best[1]
 
-
 def vocabulary(text):
-    # Whisper reads the initial prompt as preceding speech; a short term list
-    # biases spelling of names and jargon without changing language detection.
     terms = []
     for term in re.split(r'[,\n]+', text):
         term = ' '.join(term.split())[:60]
@@ -157,18 +142,15 @@ def vocabulary(text):
             terms.append(term)
     return ', '.join(terms)[:600]
 
-
 def prompt_args(text):
     text = vocabulary(text or '')
     return ['--prompt', text] if text else []
-
 
 def shared_vocabulary():
     try:
         return vocabulary(str(read(DICTATION, {}).get('vocabulary', '')))
     except (OSError, ValueError, AttributeError):
         return ''
-
 
 def upcoming_calls(now):
     try:
@@ -186,19 +168,15 @@ def upcoming_calls(now):
             found.append(dict(title=title, start=start.isoformat()))
     return found
 
-
 def long_date(moment):
     return f'{WEEKDAYS[moment.weekday()]}, {moment.day} {MONTHS[moment.month - 1]} {moment.year}, {moment:%H:%M}'
-
 
 def file_title(title):
     text = re.sub(r'[\x00-\x1f/\\:*?"<>|#^\[\]]+', ' ', title)
     return ' '.join(text.split()).strip(' .')[:100] or 'Meeting'
 
-
 def render_transcript(segments):
     return '\n'.join(f'[{stamp(s["start"])}] {s["source"]}: {s["text"].strip()}' for s in sorted(segments, key=lambda s: s['start']))
-
 
 def schema():
     return {'type': 'object', 'additionalProperties': False, 'required': ['summary', 'decisions', 'tasks', 'translation'], 'properties': {
@@ -206,7 +184,6 @@ def schema():
         'decisions': {'type': 'array', 'items': {'type': 'string'}},
         'tasks': {'type': 'array', 'items': {'type': 'object', 'additionalProperties': False, 'required': ['text', 'owner', 'due', 'evidence'], 'properties': {k: {'type': 'string'} for k in ('text', 'owner', 'due', 'evidence')}}},
     }}
-
 
 def validate_summary(value, transcript):
     if not isinstance(value, dict) or set(value) != {'summary', 'decisions', 'tasks', 'translation'}:
@@ -222,7 +199,6 @@ def validate_summary(value, transcript):
             raise ValueError('A suggested task has no exact transcript evidence. Review the original transcript.')
     return value
 
-
 def stop_process(process):
     if process.poll() is not None:
         return
@@ -235,7 +211,6 @@ def stop_process(process):
     except subprocess.TimeoutExpired:
         os.killpg(process.pid, signal.SIGKILL)
         process.wait()
-
 
 def run(command, cancel, *, input_text=None, timeout=3600, cwd=None):
     with tempfile.TemporaryFile() as source, tempfile.TemporaryFile() as output:
@@ -258,7 +233,6 @@ def run(command, cancel, *, input_text=None, timeout=3600, cwd=None):
             return output.read(8 * 1024 * 1024).decode(errors='replace')
         finally:
             stop_process(p)
-
 
 class Meetings:
     def __init__(self):
@@ -292,7 +266,6 @@ class Meetings:
             time.sleep(30)
 
     def previous_note(self, title):
-        # The newest exported note of an earlier recording with the same title.
         for job in self.jobs():
             path = Path(job.get('note') or '')
             if job.get('title') == title and job.get('note') and path.is_file():
@@ -717,7 +690,6 @@ class Meetings:
         self.patch(ident, **{key: str(path)})
         return dict(url='obsidian://open?path=' + quote(str(path), safe=''))
 
-
 def serve():
     os.umask(0o077)
     STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -749,7 +721,6 @@ def serve():
         signal.signal(signal.SIGTERM, close)
         signal.signal(signal.SIGINT, close)
         server.serve_forever()
-
 
 def rpc(request):
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:

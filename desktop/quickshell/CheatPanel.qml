@@ -80,7 +80,6 @@ PanelWindow {
         Behavior on opacity { NumberAnimation { duration: Shared.DesktopStyle.fast } }
         MouseArea { anchors.fill: parent }
         Keys.onEscapePressed: { if (search.text) search.clear(); else sheet.close() }
-        // Keys, not a Shortcut: a destroyed QQuickShortcut crashes Quickshell on shutdown.
         Keys.onPressed: event => {
             if (sheet.shown && event.key === Qt.Key_F && (event.modifiers & Qt.ControlModifier)) {
                 search.forceActiveFocus()

@@ -16,10 +16,7 @@ RowLayout {
     signal openCalendar()
         spacing: 6
 
-        // Shelf sits in the middle, right before the desktop mode (owner 2026-11-17).
         ShelfChip { visible: bar.barWindow !== null && items.length > 0; barWindow: bar.barWindow }
-        // Glyph only: overlapping windows for Floating, a tile mosaic for Tiling.
-        // Distinct from the per-window split and float buttons next to it.
         Seg {
             glyph: WindowMode.floating ? '\u{F0137}' : '\u{F0574}'
             Accessible.name: WindowMode.floating ? 'Desktop mode: Floating' : 'Desktop mode: Tiling'

@@ -1,7 +1,4 @@
 .pragma library
-// Markdown subset Vika uses, rendered to Qt rich text with explicit styling.
-// Qt's own MarkdownText gives no control over line height, code blocks or
-// heading sizes, which is what made longer answers hard to read.
 // theme: { text, bright, muted, accent, codeBg, rule, mono, size }
 
 function escape(text) {
@@ -9,8 +6,6 @@ function escape(text) {
 }
 
 function inline(text, theme) {
-    // Code spans and links become placeholders first, so emphasis rules never
-    // touch their contents (underscores in URLs, asterisks in code).
     const kept = []
     const keep = html => { kept.push(html); return "\u0000" + (kept.length - 1) + "\u0000" }
     const link = (label, url) => keep('<a href="' + url + '" style="color:' + theme.accent + '; text-decoration:none;">' + label + "</a>")
@@ -98,7 +93,6 @@ function toHtml(markdown, theme) {
             items.forEach((entry, n) => {
                 const bullet = /\d/.test(entry.marker) ? entry.marker.replace(")", ".") : entry.depth ? "◦" : "•"
                 const indent = theme.size * (0.4 + entry.depth * 1.3)
-                // A hanging indent: wrapped lines align with the text, not the bullet.
                 out.push('<p style="margin-top:0; margin-bottom:' + Math.round(theme.size * (n === items.length - 1 ? 0.6 : 0.25))
                     + 'px; margin-left:' + Math.round(indent + theme.size * 1.3) + 'px; text-indent:-' + Math.round(theme.size * 1.3)
                     + 'px; line-height:140%;"><span style="color:' + theme.accent + ';">' + bullet + "</span>&nbsp;&nbsp;"

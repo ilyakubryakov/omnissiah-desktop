@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Private JSON-line notebook RPC; the timer uses --tick independently of QML."""
 import json
 import os
 from pathlib import Path

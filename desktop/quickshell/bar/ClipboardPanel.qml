@@ -10,9 +10,7 @@ ColumnLayout {
     spacing: 12
     property string query: ""
     readonly property var rows: DesktopData.clips.filter(c => c.text.toLowerCase().includes(query.toLowerCase()))
-    // An image entry to hand to Vika once it is back on the clipboard.
 
-    // Content-type helpers for the per-entry quick actions.
     function colorOf(text) {
         const m = text.trim().match(/^#?([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i)
         if (m) return "#" + (m[1].length === 8 ? m[1].slice(6) + m[1].slice(0, 6) : m[1])

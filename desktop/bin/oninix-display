@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-"""Display control for the station and the laptop: TV profile, main wake, and the
-Control Center Displays tab (layout, modes, scale, HDR) with a timed revert."""
 import configparser
 import json
 import os
@@ -11,16 +9,13 @@ import sys
 import time
 
 STATE = Path(os.environ.get('XDG_STATE_HOME', str(Path.home() / '.local/state')))
-# Per-machine overrides on top of monitors.conf, read by outputs.lua as data.
 OVERLAY = STATE / 'oninix/monitors.conf'
 REVERT = STATE / 'oninix/monitors.revert.json'
 PROFILE = STATE / 'theme/displays.conf'
 REVERT_SECONDS = 20
 REVERT_UNIT = 'oninix-display-revert'
-# Roles that are appliances, not desktops: never primary, TV toggled by profile.
 APPLIANCES = {'edge', 'tv'}
 OVERLAY_KEYS = {'output', 'mode', 'position', 'scale', 'transform', 'vrr', 'hdr', 'sdrbrightness', 'mirror', 'disabled'}
-
 
 def roles(path=None):
     config = configparser.ConfigParser(interpolation=None)
@@ -33,7 +28,6 @@ def roles(path=None):
                 break
     return config
 
-
 def overlay():
     config = configparser.ConfigParser(interpolation=None)
     config.optionxform = str
@@ -41,26 +35,21 @@ def overlay():
         config.read(OVERLAY)
     return config
 
-
 def lua_string(value):
     if any(ord(c) < 32 for c in value):
         raise ValueError('Control characters are not allowed in display settings')
     return json.dumps(value, ensure_ascii=False)
 
-
 def monitors(everything=False):
     return json.loads(subprocess.check_output(['hyprctl', 'monitors'] + (['all'] if everything else []) + ['-j'], text=True))
-
 
 def hypr_eval(expr):
     if subprocess.check_output(['hyprctl', 'eval', expr], text=True).strip() != 'ok':
         raise RuntimeError('Hyprland rejected the display change')
 
-
 def apply(rule):
     fields = ', '.join(f'{key} = {str(value).lower() if isinstance(value, bool) else value if isinstance(value, (int, float)) else lua_string(value)}' for key, value in rule.items())
     hypr_eval('hl.monitor({ ' + fields + ' })')
-
 
 def write_atomic(path, text):
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -68,14 +57,11 @@ def write_atomic(path, text):
     temp.write_text(text)
     temp.replace(path)
 
-
 def monitor_key(monitor, live):
-    """Settings follow the physical monitor, not the port; duplicates fall back to the port."""
     desc = (monitor.get('description') or '').strip()
     if desc and not re.search(r'[\[\]\n]', desc) and sum((m.get('description') or '').strip() == desc for m in live) == 1:
         return 'desc:' + desc
     return monitor['name']
-
 
 def primary_output(config, live, saved=None):
     saved = saved or overlay()
@@ -84,7 +70,6 @@ def primary_output(config, live, saved=None):
     if saved.has_section('primary'):
         key = saved['primary'].get('display', '')
         found = next((m['name'] for m in live if monitor_key(m, live) == key and not m.get('disabled')), None)
-    # A docked laptop keeps the desktop on an external display (same rule as outputs.lua).
     if os.environ.get('ONINIX_LAPTOP') == '1' and 'main' in config:
         outside = sorted(m['name'] for m in live if m['name'] != config['main'].get('output') and not m.get('disabled'))
         if outside:
@@ -95,7 +80,6 @@ def primary_output(config, live, saved=None):
         if role in config and config[role].get('output') in names:
             return config[role]['output']
     return None
-
 
 def tv_rule(config, active):
     tv = config['tv']
@@ -116,7 +100,6 @@ def tv_rule(config, active):
         position = f'{x}x{y}'
     return {'output': tv['output'], 'mode': mode, 'scale': scale, 'position': position, 'disabled': False}
 
-
 def profile(name):
     if name not in {'desk', 'extended'}:
         raise ValueError('Unknown display profile')
@@ -124,7 +107,6 @@ def profile(name):
     if 'tv' not in config:
         raise ValueError('This host has no dedicated TV profile')
     active = monitors()
-    # The VM has no physical LG; its explicit role stands in during rehearsal.
     if not primary_output(config, active):
         raise ValueError('Main display must be connected before changing the TV')
     connected = monitors(everything=True)
@@ -144,13 +126,8 @@ def profile(name):
     elif not any(m['name'] == tv for m in active):
         apply(tv_rule(config, active))
     write_atomic(PROFILE, 'profile=' + name + '\n')
-    # Neither profile changes the user's audio device or the LG/Edge modes.
-
-
-# ---- Displays tab -------------------------------------------------------------
 
 def hdr_capable(name):
-    """True/False from the EDID HDR static metadata block, None when unreadable."""
     for path in Path('/sys/class/drm').glob(f'card*-{name}/edid'):
         try:
             edid = path.read_bytes()
@@ -171,7 +148,6 @@ def hdr_capable(name):
         return False
     return None
 
-
 def group_modes(available):
     modes = {}
     for entry in available:
@@ -184,13 +160,11 @@ def group_modes(available):
     return [{'width': w, 'height': h, 'rates': sorted(rates, reverse=True)}
             for (w, h), rates in sorted(modes.items(), key=lambda item: item[0][0] * item[0][1], reverse=True)]
 
-
 def pending_seconds():
     try:
         return max(0, round(json.loads(REVERT.read_text())['deadline'] - time.time()))
     except (OSError, ValueError, KeyError):
         return None
-
 
 def data():
     config = roles()
@@ -219,14 +193,11 @@ def data():
     return {'displays': displays, 'pending': pending_seconds(), 'tv': tv,
             'profile': PROFILE.read_text().strip().removeprefix('profile=') if PROFILE.exists() else 'desk'}
 
-
 def valid_scale(width, height, scale):
     return 0.5 <= scale <= 4 and abs(scale * 120 - round(scale * 120)) < 0.01 \
         and all(abs(n / scale - round(n / scale)) < 0.01 for n in (width, height))
 
-
 def checked(request, live):
-    """Validate the whole requested layout against what Hyprland reports."""
     by_key = {monitor_key(m, live): m for m in live}
     config = roles()
     role_of = {config[s]['output']: s for s in config.sections() if 'output' in config[s]}
@@ -276,11 +247,9 @@ def checked(request, live):
         raise ValueError('The primary display must be an enabled, unmirrored desktop display')
     return out, primary, role_of
 
-
 def snapshot():
     return {'overlay': OVERLAY.read_text() if OVERLAY.exists() else None,
             'profile': PROFILE.read_text() if PROFILE.exists() else None}
-
 
 def restore_file(path, text):
     if text is None:
@@ -288,17 +257,13 @@ def restore_file(path, text):
     else:
         write_atomic(path, text)
 
-
 def schedule_revert():
     subprocess.run(['systemctl', '--user', 'stop', REVERT_UNIT + '.timer'], stderr=subprocess.DEVNULL)
     env = [f'--setenv={k}={os.environ[k]}' for k in ('HYPRLAND_INSTANCE_SIGNATURE', 'XDG_RUNTIME_DIR', 'WAYLAND_DISPLAY') if k in os.environ]
     subprocess.run(['systemd-run', '--user', '--quiet', '--collect', '--unit=' + REVERT_UNIT, f'--on-active={REVERT_SECONDS}',
                     *env, str(Path(__file__).resolve()), 'revert'], check=True)
 
-
 def commit(text, before, tv_on=None, primary=None):
-    """Write the overlay, reload Hyprland, and arm the revert unless confirmed in time."""
-    # A pending change keeps the last confirmed state, so revert always lands there.
     state = json.loads(REVERT.read_text()) if REVERT.exists() else {**before, 'primary': primary}
     state['deadline'] = time.time() + REVERT_SECONDS
     write_atomic(REVERT, json.dumps(state))
@@ -309,13 +274,11 @@ def commit(text, before, tv_on=None, primary=None):
         subprocess.run(['hyprctl', 'reload'], check=True, stdout=subprocess.DEVNULL)
         schedule_revert()
     except BaseException:
-        # Never leave a live change without its timer.
         try:
             revert()
         except Exception:
             pass
         raise
-
 
 def render(saved):
     lines = ['# Control Center display settings for this machine. Overrides monitors.conf.']
@@ -324,7 +287,6 @@ def render(saved):
         lines += [f'{key}={value}' for key, value in saved[section].items()]
     return '\n'.join(lines) + '\n'
 
-
 def move_workspaces(old, new):
     if not old or not new or old == new:
         return
@@ -332,14 +294,12 @@ def move_workspaces(old, new):
               'local n = tonumber(ws.name) if not ws.special and n and n >= 1 and n <= 10 and ws.monitor and ws.monitor.name == '
               + lua_string(old) + ' then hl.dispatch(hl.dsp.workspace.move({ workspace = ws, monitor = m })) end end end')
 
-
 def gather_workspaces(output):
     if not output:
         return
     hypr_eval('local m = hl.get_monitor(' + lua_string(output) + ') if m then for _, ws in ipairs(hl.get_workspaces()) do '
               'local n = tonumber(ws.name) if not ws.special and n and n >= 1 and n <= 10 and ws.monitor and ws.monitor.name ~= '
               + lua_string(output) + ' then hl.dispatch(hl.dsp.workspace.move({ workspace = ws, monitor = m })) end end end')
-
 
 def apply_layout(request):
     live = monitors(everything=True)
@@ -351,7 +311,6 @@ def apply_layout(request):
     tv_on = None
     for key, entry in entries.items():
         if role_of.get(entry['output']) == 'tv':
-            # The TV keeps its profile switch, which also evacuates its windows.
             want = entry.pop('disabled') == 'false'
             have = not next(m for m in live if m['name'] == entry['output']).get('disabled')
             tv_on = want if want != have else None
@@ -366,7 +325,6 @@ def apply_layout(request):
     commit(render(saved), before, tv_on, old_primary)
     move_workspaces(old_primary, entries[primary]['output'])
 
-
 def forget(key):
     saved = overlay()
     if not saved.has_section(key):
@@ -378,11 +336,9 @@ def forget(key):
         saved.remove_section('primary')
     commit(render(saved), before, primary=old_primary)
 
-
 def confirm():
     subprocess.run(['systemctl', '--user', 'stop', REVERT_UNIT + '.timer'], stderr=subprocess.DEVNULL)
     REVERT.unlink(missing_ok=True)
-
 
 def revert():
     subprocess.run(['systemctl', '--user', 'stop', REVERT_UNIT + '.timer'], stderr=subprocess.DEVNULL)
@@ -395,7 +351,6 @@ def revert():
     REVERT.unlink(missing_ok=True)
     subprocess.run(['hyprctl', 'reload'], check=True, stdout=subprocess.DEVNULL)
     gather_workspaces(before.get('primary'))
-
 
 def main():
     args = sys.argv[1:]
@@ -444,7 +399,6 @@ def main():
             print(json.dumps({'error': str(error)}))
             sys.exit(1)
         raise
-
 
 if __name__ == '__main__':
     main()

@@ -1,9 +1,5 @@
 .pragma library
 
-// Public holidays of Lithuania (Labour Code, art. 123) and Ireland, computed
-// locally. Neither moves a holiday that falls on a weekend; Irish employers
-// give a day off instead, which is not shown.
-
 function pad(n) {
     return (n < 10 ? "0" : "") + n;
 }
@@ -12,7 +8,6 @@ function key(d) {
     return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
 }
 
-// Western Easter Sunday (anonymous Gregorian algorithm).
 function easter(year) {
     const a = year % 19, b = Math.floor(year / 100), c = year % 100;
     const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
@@ -23,7 +18,6 @@ function easter(year) {
     return new Date(year, month - 1, ((h + l - 7 * m + 114) % 31) + 1);
 }
 
-// The nth given weekday (0 = Sunday) of a month; n = -1 is the last one.
 function nth(year, month, weekday, n) {
     if (n < 0) {
         const last = new Date(year, month + 1, 0);
@@ -37,7 +31,6 @@ function shift(date, days) {
     return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
 }
 
-// { "YYYY-MM-DD": [{ country: "LT" | "IE", name }] }
 function forYear(year) {
     const out = {};
     function add(country, date, name) {
@@ -62,7 +55,6 @@ function forYear(year) {
     const ie = [[0, 1, "New Year's Day"], [2, 17, "St Patrick's Day"], [11, 25, "Christmas Day"], [11, 26, "St Stephen's Day"]];
     for (const [m, d, name] of ie)
         add("IE", new Date(year, m, d), name);
-    // Since 2023: the first Monday of February, or 1 February when that is a Friday.
     if (year >= 2023)
         add("IE", new Date(year, 1, 1).getDay() === 5 ? new Date(year, 1, 1) : nth(year, 1, 1, 1), "St Brigid's Day");
     add("IE", shift(sunday, 1), "Easter Monday");

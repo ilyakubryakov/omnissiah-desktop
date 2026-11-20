@@ -1,8 +1,6 @@
 import QtQuick
 import "../shared" as Shared
 
-// A pinned app, or an unpinned app with minimized windows. BarItems owns the
-// shared windows card; hovering an app with minimized windows previews it.
 Item {
     id: button
     required property string appId
@@ -33,7 +31,6 @@ Item {
         color: button.tone
     }
     readonly property string badge: Minimized.badge(appId)
-    // Unread from comms-unread: a count, or a bare dot for Slack.
     Rectangle {
         visible: button.badge !== ""
         anchors.right: parent.right; anchors.top: parent.top
@@ -49,7 +46,6 @@ Item {
             color: Colors.background
         }
     }
-    // Running: a short line; each minimized window: a dot (up to three).
     Row {
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom; anchors.bottomMargin: 2

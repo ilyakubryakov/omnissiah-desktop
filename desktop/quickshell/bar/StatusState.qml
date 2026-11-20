@@ -3,7 +3,6 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// Recording and keep-awake, polled once for every panel that shows their icons.
 Singleton {
     id: root
     property bool recording: false

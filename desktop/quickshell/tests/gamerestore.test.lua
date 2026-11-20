@@ -1,8 +1,3 @@
--- Game mode app restore against a small dwindle model; no compositor calls.
--- Run: nix shell nixpkgs#lua5_4 -c lua quickshell/tests/gamerestore.test.lua
--- The plan is station_gameapps.plan() output for the 2026-11-08 desks: 3 has
--- Telegram | Teams+Thunderbird tabs | Slack, 2 has kitty over Chrome | Chrome,
--- and a floating Slack huddle sits on 4.
 local here = debug.getinfo(1, "S").source:sub(2):match("(.*/)") or "./"
 local plan = {slots={{id=1,address=nil,class="org.telegram.desktop",title="Telegram",w=1298,h=1662,fullscreen=0},{id=2,address=nil,class="chrome-teams",title="Teams",w=1296,h=1642,fullscreen=0},{id=3,address=nil,class="thunderbird",title="Inbox",w=1296,h=1642,fullscreen=0},{id=4,address=nil,class="slack",title="Slack",w=1484,h=1662,fullscreen=0},{id=5,address="k",class="kitty",title="",w=2042,h=828,fullscreen=0},{id=6,address=nil,class="google-chrome",title="Proxmox",w=2042,h=828,fullscreen=0},{id=7,address=nil,class="google-chrome",title="New Tab",w=2042,h=1662,fullscreen=0},{id=8,address=nil,class="slack",title="Huddle",w=800,h=600,fullscreen=0}},workspaces={{name="3",tree={dir="h",a={members={1},current=1},b={dir="h",a={members={2,3},current=2},b={members={4},current=4}}}},{name="2",tree={dir="h",a={dir="v",a={members={5},current=5},b={members={6},current=6}},b={members={7},current=7}}}},floating={{slot=8,workspace="4",x=100,y=200}},special={}}
 
@@ -109,7 +104,6 @@ local function shape(node)
     return node.dir .. "(" .. shape(node.a) .. "," .. shape(node.b) .. ")"
 end
 
--- What stayed open while gaming: kitty alone on 2, an unrelated window on 5.
 windows.k = { address = "k", class = "kitty", title = "zsh", mapped = true }
 place(windows.k, "2")
 windows.z = { address = "z", class = "kitty", title = "agents", mapped = true }
@@ -117,7 +111,6 @@ place(windows.z, "5")
 focused = windows.z
 
 M.expect(plan)
--- Apps come back in their own order onto whatever rules choose.
 open("n1", "slack", "Slack", "3")
 open("n2", "google-chrome", "New Tab", "1")
 open("n3", "thunderbird", "Inbox", "3")

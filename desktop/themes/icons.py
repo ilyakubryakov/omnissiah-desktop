@@ -1,8 +1,3 @@
-"""Five desktop icon families and batched freedesktop lookup for the shell.
-
-Resolve explicit files so changing a theme does not depend on Qt's process-wide
-icon cache. Only indexed directories are searched; no recursive filesystem scan.
-"""
 import configparser
 from functools import lru_cache
 import json
@@ -24,7 +19,6 @@ DATA = list(dict.fromkeys([Path(os.environ.get('XDG_DATA_HOME', str(Path.home() 
     Path('/run/current-system/sw/share'), Path('/var/lib/flatpak/exports/share')]))
 ROOTS = [Path.home() / '.icons', *(d / 'icons' for d in DATA)]
 
-
 def family():
     try:
         value = (STATE / 'icons.conf').read_text().strip()
@@ -32,10 +26,8 @@ def family():
         value = 'papirus'
     return value if value in FAMILIES else 'papirus'
 
-
 def variant(name, dark):
     return FAMILIES[name][int(dark)]
-
 
 def select(name):
     if name not in FAMILIES:
@@ -45,7 +37,6 @@ def select(name):
     with os.fdopen(fd, 'w') as stream:
         stream.write(name + '\n')
     os.replace(tmp, STATE / 'icons.conf')
-
 
 @lru_cache(maxsize=None)
 def theme_dirs(theme):
@@ -63,11 +54,9 @@ def theme_dirs(theme):
                 continue
             spec = conf[sub]
             size = spec.getint('Size', 48) * spec.getint('Scale', 1)
-            # Scalable app icons stay crisp at panel and launchpad sizes.
             score = 0 if spec.get('Type') == 'Scalable' else abs(size - 48) + 1
             dirs.append((score, root / theme / sub))
     return [p for _, p in sorted(dirs, key=lambda x: x[0])], list(dict.fromkeys(i for i in inherited if i))
-
 
 @lru_cache(maxsize=None)
 def lookup(name, theme, seen=()):
@@ -90,7 +79,6 @@ def lookup(name, theme, seen=()):
             return result
     return ''
 
-
 def resolve(name, theme):
     for fallback in (theme, 'hicolor'):
         result = lookup(name, fallback)
@@ -102,7 +90,6 @@ def resolve(name, theme):
                 return (data / 'pixmaps' / filename).as_uri()
     return ''
 
-
 def catalog(names):
     try:
         active = (STATE / 'icon-theme').read_text().strip()
@@ -110,7 +97,6 @@ def catalog(names):
         active = 'Papirus-Dark'
     palette = ''
     dark = 'dark' in active.lower() or not (STATE / 'name').exists()
-    # Palette-specific Papirus names need the actual palette mode.
     try:
         import tomllib
         palette = (STATE / 'name').read_text().strip()
@@ -128,7 +114,6 @@ def catalog(names):
             'available': bool(theme_dirs(variant(key, dark))[0]),
             'preview': [resolve(n, preview_theme(key)) or resolve('application-x-executable', preview_theme(key)) for n in ('folder', 'system-file-manager', 'preferences-system', 'utilities-terminal')]}
             for key in FAMILIES]}
-
 
 if __name__ == '__main__':
     command, *args = sys.argv[1:]

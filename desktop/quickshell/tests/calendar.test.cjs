@@ -1,4 +1,3 @@
-// TZ=Europe/Vilnius node quickshell/tests/calendar.test.cjs
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -23,7 +22,6 @@ assert.equal(cal.countdown(ongoing, now), 'Now · 30 min left');
 assert.equal(cal.duration(next), '1 h 30 min');
 assert.equal(cal.duration(point), '');
 assert.equal(cal.duration(allDay), 'All day');
-// The repeated hour on a 25-hour day belongs to that day, not the following one.
 const dst = event('2026-10-25T23:30:00+02:00', '2026-10-26T00:00:00+02:00');
 assert.equal(cal.onDay([dst], new Date(2026, 9, 25)).length, 1);
 assert.equal(cal.onDay([dst], new Date(2026, 9, 26)).length, 0);

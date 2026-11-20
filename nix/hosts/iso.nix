@@ -39,10 +39,8 @@ in
     squashfsCompression = "zstd -Xcompression-level 15";
   };
 
-  # The live system uses the latest kernel, which this nixpkgs pin does not support with ZFS.
   boot.supportedFilesystems.zfs = lib.mkForce false;
 
-  # The installer uses flakes, so the legacy channel and HTML manuals are redundant.
   system.installer.channel.enable = false;
   documentation.enable = lib.mkForce false;
   documentation.nixos.enable = lib.mkForce false;

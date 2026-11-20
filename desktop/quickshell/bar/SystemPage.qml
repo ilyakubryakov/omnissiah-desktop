@@ -6,7 +6,6 @@ import Quickshell
 import Quickshell.Io
 import "../shared" as Shared
 
-// Time zone and night light (General), NixOS and AI / GPU (Software).
 ColumnLayout {
     id: root
     spacing: Shared.DesktopStyle.px(20)
@@ -19,7 +18,6 @@ ColumnLayout {
     function gib(bytes) {
         return (bytes / 1073741824).toFixed(0);
     }
-    // Search targets on the second tab: switch first (see AppearancePanel.reveal).
     readonly property var targetTabs: ({ "NixOS": "software", "AI / GPU": "software", "Voice and machine spirit": "software" })
     function reveal(target) {
         const next = targetTabs[target]
@@ -41,7 +39,6 @@ ColumnLayout {
         onChosen: id => root.tab = id
     }
 
-    // ---- General ---------------------------------------------------------------
     SettingsGroup {
         id: tzGroup
         readonly property var tz: (DesktopData.settings || {}).timezone || null
@@ -130,7 +127,6 @@ ColumnLayout {
         }
     }
 
-    // ---- Software --------------------------------------------------------------
     SettingsGroup {
         id: nixGroup
         readonly property var sys: (DesktopData.settings || {}).system || null

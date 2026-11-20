@@ -5,9 +5,6 @@ import Quickshell.Io
 import Quickshell.Hyprland
 import "MinimizedLogic.js" as Logic
 
-// Minimized windows live on Hyprland's hidden special workspace; hypr/minimize.lua
-// owns moving them. This keeps the panel view: per-app windows, minimize order,
-// temporary icons for unpinned apps, attention requests and unread badges.
 Singleton {
     id: root
     property var order: ({})
@@ -25,7 +22,6 @@ Singleton {
     }
     function minimizedOf(id) { return windowsOf(id).filter(Logic.isMinimized) }
     function visibleOf(id) { return windowsOf(id).filter(Logic.isVisible) }
-    // Visible windows first (most recent first), then minimized in minimize order.
     function listOf(id) {
         const all = windowsOf(id)
         return all.filter(Logic.isVisible).sort((a, b) => a.focusHistoryID - b.focusHistoryID)
@@ -49,7 +45,6 @@ Singleton {
     }
     function minimizeApp(id) { const v = visibleOf(id); if (v.length) lua("minimize_app", v[0].address) }
     function closeApp(id) { for (const c of windowsOf(id)) close(c) }
-    // Dock click: a visible window is focused, otherwise the last minimized returns.
     function activate(id) {
         const c = Logic.pick(windowsOf(id), order)
         if (c) show(c)
@@ -64,8 +59,6 @@ Singleton {
         if (Object.keys(u).length !== Object.keys(urgent).length) urgent = u
     }
 
-    // dotfiles/.local/bin/comms-unread (user unit comms-unread) keeps the cache.
-    // A watch cannot start before the helper first writes the file.
     FileView {
         id: unreadFile
         property bool ok: false
@@ -79,7 +72,6 @@ Singleton {
 
     Connections {
         target: Hyprland
-        // Application titlebar "−" buttons request minimize through xdg-shell.
         function onRawEvent(event) {
             if (event.name === "minimized") {
                 const [raw, state] = event.data.split(",")

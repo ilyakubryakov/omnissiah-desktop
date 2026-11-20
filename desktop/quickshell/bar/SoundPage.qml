@@ -5,7 +5,6 @@ import QtQuick.Layouts
 import Quickshell.Services.Pipewire
 import "../shared" as Shared
 
-// Sound: output, microphone, per-application streams and studio tools.
 ColumnLayout {
     id: root
     property bool studioExpanded: false
@@ -39,7 +38,6 @@ ColumnLayout {
         palette.highlight: Colors.accent
         palette.highlightedText: Colors.background
     }
-    // Volume slider plus Mute for one node; a row control of a SettingsRow.
     component VolumeControl: RowLayout {
         id: volume
         required property var node

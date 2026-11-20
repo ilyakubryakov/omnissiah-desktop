@@ -3,7 +3,6 @@ import QtQuick
 import QtQuick.Layouts
 import "../shared" as Shared
 
-// Updates stay visible when the adjacent media or briefing view changes.
 RowLayout {
     id: root
     required property var barWindow
@@ -11,10 +10,6 @@ RowLayout {
     spacing: 2
     Layout.fillHeight: true
 
-    // Updates (owner decision 2026-11-08): no count, so waiting updates do not
-    // pull attention; the glyph turns urgent red only when it is time to
-    // update, the warning badge shows when the last check failed or a source
-    // has not answered for three days. The count stays in the card.
     StatusChip {
         id: updatesSeg
         readonly property var updates: Shared.UpdatesData

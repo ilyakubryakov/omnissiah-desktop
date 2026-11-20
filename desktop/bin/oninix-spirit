@@ -44,7 +44,6 @@ file needs it). Keep the file valid Nix and keep every existing setting unless t
 changes it. Do not touch any other file, do not run commands that change the system.
 Finish with one short sentence describing the change, in the owner's language."""
 
-
 LAYER_PROMPT = """You are the machine spirit of the OniNix desktop layer on Linux.
 The owner asks: {request}
 
@@ -53,10 +52,8 @@ already imports the rest of the OniNix desktop. Packages must come from the exis
 Keep existing packages unless the request changes them. You cannot change the host system
 or its package manager. Do not apply the change. Finish with a short summary in the owner's language."""
 
-
 def say(text, color=GLOW):
     subprocess.run(['gum', 'style', '--foreground', color, '--bold', text])
-
 
 def agent():
     wanted = json.loads(CONFIG.read_text()).get('agent') if CONFIG.exists() else None
@@ -64,7 +61,6 @@ def agent():
         if name and shutil.which(name):
             return name
     return None
-
 
 def run_agent(name, request):
     prompt = (LAYER_PROMPT if LAYER_PROFILE else PROMPT).format(request=request)
@@ -78,7 +74,6 @@ def run_agent(name, request):
     lines = [line for line in result.stdout.strip().splitlines() if line.strip()]
     return lines[-1] if lines else 'Done.'
 
-
 def prepare():
     if WORK.exists():
         shutil.rmtree(WORK)
@@ -86,7 +81,6 @@ def prepare():
     shutil.copytree(FLAKE, WORK, ignore=shutil.ignore_patterns('.git', 'result'))
     for path in WORK.rglob('*'):
         path.chmod(0o644 if path.is_file() else 0o755)
-
 
 def build():
     out = STATE / 'result'
@@ -97,12 +91,10 @@ def build():
     subprocess.run([*NIX, 'build', *lock_flags, '--out-link', str(out), f'path:{WORK}#{target}'], check=True)
     return out
 
-
 def record(entry):
     HISTORY.parent.mkdir(parents=True, exist_ok=True)
     with HISTORY.open('a') as f:
         f.write(json.dumps({**entry, 'at': time.time()}) + '\n')
-
 
 def request_text(args):
     if args:
@@ -110,7 +102,6 @@ def request_text(args):
     return subprocess.run(['gum', 'write', '--header', 'Tell the machine spirit what you want',
                            '--placeholder', 'Install Blender. Turn on the gaming set. Add the German layout.'],
                           stdout=subprocess.PIPE, text=True).stdout.strip()
-
 
 def ask(args):
     say('OniNix · the machine spirit listens')
@@ -162,13 +153,11 @@ def ask(args):
     say('Applied. `oninix-spirit undo` brings back the previous system.')
     return 0
 
-
 def write_flake(text):
     dest = FLAKE / EDITABLE
     temp = dest.with_suffix('.nix.tmp')
     temp.write_text(text)
     temp.replace(dest)
-
 
 def apply_layer(before, after):
     if (FLAKE / EDITABLE).read_text() != before:
@@ -186,7 +175,6 @@ def apply_layer(before, after):
         (STATE / 'layer-undo.json').write_text(json.dumps({
             'previous': previous, 'current': current, 'before': before, 'after': after,
         }))
-
 
 def undo_layer():
     profile = Path(LAYER_PROFILE)
@@ -206,7 +194,6 @@ def undo_layer():
     say('Previous OniNix profile restored. Log out and in to reload the desktop.')
     return 0
 
-
 def undo():
     say('Returning to the previous system…', BRASS)
     if PREVIOUS.exists():
@@ -216,7 +203,6 @@ def undo():
     record({'request': 'undo', 'summary': 'rolled back', 'agent': ''})
     say('Done. The previous system and its settings are back.')
     return 0
-
 
 def main(args):
     if args[:1] == ['ask'] and len(args) == 1 and not sys.stdin.isatty():
@@ -240,7 +226,6 @@ def main(args):
                 say(str(error), CRIMSON)
                 return 1
     return action()
-
 
 if __name__ == '__main__':
     raise SystemExit(main(sys.argv[1:]))

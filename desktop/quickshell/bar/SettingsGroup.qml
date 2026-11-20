@@ -2,8 +2,6 @@ import QtQuick
 import QtQuick.Layouts
 import "../shared" as Shared
 
-// A System Settings style group: an optional title above, rows in one rounded
-// box separated by hairlines (SettingsRow draws them), an optional footnote below.
 ColumnLayout {
     id: root
     property string title: ""

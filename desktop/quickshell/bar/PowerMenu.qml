@@ -5,8 +5,6 @@ import Quickshell
 import Quickshell.Io
 import "../shared" as Shared
 
-// Session actions. Lock and sleep act at once; shut down and restart need a
-// second click within a few seconds so a stray click never ends the session.
 ColumnLayout {
     id: root
     property bool active: false
@@ -24,7 +22,6 @@ ColumnLayout {
         if (action.confirm && armed !== action.id) { armed = action.id; disarm.restart(); return }
         armed = ""
         root.done()
-        // Let the card close first so the lock screen and suspend start from a clean desktop.
         Qt.callLater(() => Quickshell.execDetached(action.command))
     }
     onActiveChanged: { armed = ""; if (active) uptimeFile.reload() }
@@ -107,7 +104,6 @@ ColumnLayout {
                         color: tile.armed ? Colors.background : tile.lit ? tile.tone : Colors.foreground
                         Behavior on color { ColorAnimation { duration: Shared.DesktopStyle.fast } }
                     }
-                    // Countdown ring while a confirmation is pending.
                     Canvas {
                         id: ring
                         anchors.fill: parent

@@ -30,7 +30,6 @@ ColumnLayout {
         }
     }
 
-    // Focus-style list: pick a mode to see and edit its devices below.
     SettingsGroup {
         title: "Modes"
         Repeater {

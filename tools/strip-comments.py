@@ -15,7 +15,6 @@ LINE = {
     '.py': re.compile(r'^\s*#'),
 }
 
-
 def kind(path):
     if path.suffix in LINE:
         return path.suffix
@@ -28,7 +27,6 @@ def kind(path):
     if first.startswith('#!') and ('sh' in first.split('/')[-1] or 'bash' in first):
         return '.sh'
     return None
-
 
 def docstring_lines(text):
     try:
@@ -44,7 +42,6 @@ def docstring_lines(text):
                     continue
                 lines.update(range(first.lineno, first.end_lineno + 1))
     return lines
-
 
 def in_heredoc_or_string(kind_, lines):
     if kind_ not in ('.nix', '.sh'):
@@ -68,7 +65,6 @@ def in_heredoc_or_string(kind_, lines):
                 marker = found.group(1)
     return skip
 
-
 def strip(path):
     kind_ = kind(path)
     if not kind_:
@@ -89,7 +85,6 @@ def strip(path):
         path.write_text(cleaned)
     return removed
 
-
 def main(paths):
     total = 0
     for name in paths:
@@ -100,7 +95,6 @@ def main(paths):
                     print(f'{count:4d}  {path}')
                     total += count
     print(f'{total} comment lines removed')
-
 
 if __name__ == '__main__':
     main(sys.argv[1:])

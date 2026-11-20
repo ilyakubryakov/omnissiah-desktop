@@ -5,9 +5,6 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "../shared" as Shared
 
-// One answer, one action (owner decision 2026-11-08): up to date, updates
-// waiting (no rush) or time to update. The agent session does the updating;
-// the found changes stay folded behind Details.
 ColumnLayout {
     id: root
     property real maxHeight: 600
@@ -80,8 +77,6 @@ ColumnLayout {
         }
     }
 
-    // Only things the owner should know: the agent handles a blocked NixOS update,
-    // and a source that has not answered for three days.
     Note {
         text: root.updates.blocker && root.level !== "stale" ? "The NixOS update needs a configuration change; the update agent handles it." : ""
         color: Colors.muted

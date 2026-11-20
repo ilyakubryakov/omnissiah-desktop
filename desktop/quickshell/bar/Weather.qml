@@ -3,8 +3,6 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// Existing Vilnius location; hourly data shares the same request as the bar.
-// API field names/units: https://open-meteo.com/en/docs
 Singleton {
     id: root
     property string now: ""

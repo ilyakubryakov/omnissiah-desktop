@@ -1,5 +1,4 @@
 .pragma library
-// Sidebar groups, in order; a hairline separates them (System Settings style).
 var groups = ["network", "hardware", "personal", "work", "system"]
 var pages = [
     {id:"network", group:"network", tone:"blue", title:"Connections", glyph:"\uf0ac", keywords:"wifi lan bluetooth сеть интернет"},
@@ -16,9 +15,6 @@ var pages = [
     {id:"system", group:"system", tone:"green", title:"System", glyph:"\uf108", keywords:"update services generation system обновления службы"},
     {id:"guide", group:"system", tone:"green", title:"Shortcuts & guide", glyph:"\uf059", keywords:"help cheatsheet manual hotkeys keyboard shortcuts помощь шпаргалка сочетания клавиши подсказки инструкция"}
 ]
-// Labels shown on each page; search lists matching ones under their page, and choosing
-// one scrolls to that label (DesktopPanel.findLabel). Keep labels in sync with the pages.
-// [label on the page, extra search words, optional display name]
 var items = {
     audio: [["Output", "volume speakers headphones громкость наушники колонки"], ["Microphone", "mic input gain микрофон вход"],
             ["Applications", "app volume streams приложения потоки"]],

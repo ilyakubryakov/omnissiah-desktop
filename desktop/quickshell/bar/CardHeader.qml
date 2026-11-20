@@ -2,7 +2,6 @@ import QtQuick
 import QtQuick.Layouts
 import "../shared" as Shared
 
-// Shared title row of bottom-panel hover cards: accent glyph, title, dim note.
 RowLayout {
     property string glyph
     property string title

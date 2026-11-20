@@ -4,9 +4,6 @@ import Quickshell
 import Quickshell.Hyprland
 import "../shared" as Shared
 
-// A menu that drops from a bar item, in the bar's flat style. A click anywhere
-// outside it and the bar closes it (Hyprland focus grab); the bar stays in the
-// grab so clicking the same item again toggles instead of reopening.
 PopupWindow {
     id: drop
 

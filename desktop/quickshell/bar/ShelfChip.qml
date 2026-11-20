@@ -5,9 +5,6 @@ import Quickshell
 import Quickshell.Io
 import "../shared" as Shared
 
-// Shelf: up to five files kept at hand (oninix-desktop shelf-*). New screenshots land
-// here on their own; drag a tile into any window, or copy it. Lives in the runtime dir,
-// so it empties on logout. Visible only when something is on it.
 StatusChip {
     id: root
     required property var barWindow
@@ -20,8 +17,6 @@ StatusChip {
     function fileName(path) { return path.split("/").pop() }
     function uri(path) { return "file://" + path.split("/").map(encodeURIComponent).join("/") }
 
-    // oninix-desktop replaces shelf.json atomically (new inode), which the file
-    // watch does not follow; a tiny tmpfs file is cheap to re-read.
     Timer { interval: 2000; running: true; repeat: true; onTriggered: shelfFile.reload() }
     FileView {
         id: shelfFile
@@ -41,7 +36,6 @@ StatusChip {
     glyph: "\u{F0C3F}"
     badge: Colors.accent
     Accessible.name: "Shelf, " + items.length + " files"
-    // Click opens the card unpinned, like hover: drops from a pinned card are lost.
     onClicked: { shelfFile.reload(); if (shelfPopup.opened) shelfPopup.dismiss(); else shelfPopup.reveal(false) }
 
     BarPopup {
@@ -60,13 +54,11 @@ StatusChip {
                 radius: Shared.DesktopStyle.radiusControl
                 color: dragArea.containsMouse ? Colors.selection : Colors.lightBackground
                 border.width: 1; border.color: Colors.selection
-                // A platform drag: other applications receive the file as text/uri-list.
                 Drag.dragType: Drag.Automatic
                 Drag.supportedActions: Qt.CopyAction
                 Drag.mimeData: ({ "text/uri-list": root.uri(modelData) + "\r\n", "text/plain": modelData })
                 Drag.imageSource: picture ? root.uri(modelData) : ""
                 Drag.imageSourceSize: Qt.size(Shared.DesktopStyle.px(160), Shared.DesktopStyle.px(100))
-                // The platform drag outlives the MouseArea grab; release the card when it ends.
                 Drag.onDragFinished: { Drag.active = false; shelfPopup.holding = false }
                 RowLayout {
                     id: row
@@ -91,7 +83,6 @@ StatusChip {
                 }
                 MouseArea {
                     id: dragArea
-                    // Under the buttons: they keep their own clicks.
                     z: -1
                     anchors.fill: parent; hoverEnabled: true
                     drag.target: dragProxy

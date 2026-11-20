@@ -2,10 +2,6 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 
-// Transparent layers on every screen while a panel is open: a click anywhere
-// outside the panel closes it. HyprlandFocusGrab never cleared on outside
-// clicks here (Hyprland 0.56), so the panels rely on this instead. The panels
-// sit on the Overlay layer, above these.
 Scope {
     id: root
     property bool active: false

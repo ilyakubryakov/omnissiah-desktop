@@ -5,7 +5,6 @@ import QtQuick.Layouts
 import Quickshell
 import "../shared" as Shared
 
-// Devices: keyboard, mouse, touchpad, battery, printers and scanners.
 ColumnLayout {
     id: root
     spacing: Shared.DesktopStyle.px(20)

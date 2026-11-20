@@ -1,4 +1,3 @@
--- Fullscreen Steam/game windows without grabbing input or changing other desktops.
 local M = { enabled = false }
 local prefix = "oninix-game-restore-"
 
@@ -14,7 +13,6 @@ local function is_game(w)
     local class = (w.class or ""):lower()
     if class == "steam" or class:find("steamwebhelper", 1, true) then return false end
     if class:match("^steam_app_%d+$") or w.content_type == "game" then return true end
-    -- Proton games do not all set steam_app_ID as their X11 class.
     local f = io.open("/proc/" .. tostring(w.pid) .. "/environ", "rb")
     if not f then return false end
     local env = "\0" .. f:read("*a"); f:close()
@@ -22,12 +20,10 @@ local function is_game(w)
     return id ~= nil and tonumber(id) > 0
 end
 
--- One Game mode offer per game process while the mode is off (owner decision 2026-11-08).
 local offered, last_offer = {}, 0
 local function offer(w)
     if M.enabled or not w or not w.pid or offered[w.pid] or not is_game(w) then return end
     offered[w.pid] = true
-    -- A launcher and its game are separate processes: one toast for both.
     if os.time() - last_offer < 120 then return end
     last_offer = os.time()
     hl.exec_cmd("oninix-desktop game-offer")
@@ -46,7 +42,6 @@ function M.set(on)
         if on then apply(w) else
             local tag, previous = restore_tag(w)
             if tag then
-                -- An explicit user change while gaming is retained.
                 if w.fullscreen == 2 then
                     hl.dispatch(hl.dsp.window.fullscreen({ window = w, mode = "fullscreen", action = "unset" }))
                     if previous == 1 then

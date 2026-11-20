@@ -25,7 +25,6 @@ Singleton {
     }
     function wallpaperSurface(colors, base, foreground, muted) {
         if (!colors.length) return base
-        // Favor the image's colored midtones over black borders/white highlights.
         let r = 0, g = 0, b = 0, total = 0
         for (const c of colors) {
             const hi = Math.max(c.r, c.g, c.b), lo = Math.min(c.r, c.g, c.b)
@@ -33,8 +32,6 @@ Singleton {
             const weight = (0.15 + hi - lo) * Math.max(0.05, 1 - Math.abs(light - 0.5) * 2)
             r += c.r * weight; g += c.g * weight; b += c.b * weight; total += weight
         }
-        // Use the image's hue, not a faint overlay on the theme's old hue.
-        // Normalize brightness to the current light/dark theme before contrast checks.
         const hi = Math.max(r, g, b) / total
         const level = Math.max(base.r, base.g, base.b)
         const dark = luminance(base) < 0.5
@@ -58,7 +55,6 @@ Singleton {
         depth: 3
         rescaleSize: 64
     }
-    // One shared, event-driven extraction for all monitors. No polling or upload.
     function refreshWallpaper() { if (panelBackground === "wallpaper") wallpaperRefresh.restart() }
     onPanelBackgroundChanged: {
         if (panelBackground === "wallpaper") refreshWallpaper()
@@ -135,7 +131,6 @@ Singleton {
         if (buttonMode === "neutral") return Colors.foreground
         const tone = paletteTone(buttonMode === "theme" ? "accent" : buttonTone(group))
         let candidate = blend(Colors.foreground, tone, buttonStrength)
-        // Muted palette tones must stay legible on light and wallpaper surfaces.
         for (let amount = buttonStrength; amount > 0 && contrast(candidate, panelSurface) < 3; amount -= 0.05)
             candidate = blend(Colors.foreground, tone, amount)
         return candidate

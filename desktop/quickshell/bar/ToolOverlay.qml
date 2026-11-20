@@ -5,9 +5,6 @@ import Quickshell
 import Quickshell.Wayland
 import "../shared" as Shared
 
-// A standalone tool over the desktop (Windows, Clipboard): a centered card on a
-// dimmed main screen, opened by its hotkey. Escape or a click outside closes it.
-// Not part of the settings window, like Mission Control on macOS.
 PanelWindow {
     id: root
     property string title: ""
@@ -25,7 +22,6 @@ PanelWindow {
     color: "transparent"
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "oninix-tool"
-    // Opened by the owner's hotkey: take the keyboard for search and Escape.
     WlrLayershell.keyboardFocus: opened ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     Rectangle {
         id: shade

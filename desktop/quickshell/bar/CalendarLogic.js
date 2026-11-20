@@ -7,7 +7,6 @@ function endTime(event) {
 
 function onDay(events, date) {
     const from = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
-    // Calendar arithmetic, not 24 hours: a DST day may have 23 or 25 hours.
     const to = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1).getTime()
     return events.filter(event => {
         const start = Date.parse(event.s), end = endTime(event)
@@ -20,7 +19,6 @@ function upcoming(events, now, limit) {
         const start = Date.parse(event.s)
         return isFinite(start) && (start >= now || endTime(event) > now)
     }).sort((a, b) => {
-        // Current all-day reminders must not bury an ongoing call or next meeting.
         const rank = e => !e.a && Date.parse(e.s) <= now ? 0 : e.a ? 2 : 1
         return rank(a) - rank(b) || Date.parse(a.s) - Date.parse(b.s)
     }).slice(0, limit)

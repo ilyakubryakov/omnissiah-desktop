@@ -17,7 +17,6 @@ FloatingWindow {
     color: Colors.background
     onClosed: DesktopData.wallpapersOpen = false
     readonly property var wallpaper: DesktopData.appearance.wallpaper || ({})
-    // "greeter" picks the login-screen image; desktop slots keep their own logic.
     readonly property bool forGreeter: DesktopData.wallpaperSlot === "greeter"
     readonly property string slot: forGreeter ? "greeter" : wallpaper.mode !== "variant" ? "shared" : DesktopData.wallpaperSlot === "shared" ? activeVariant : DesktopData.wallpaperSlot
     readonly property string selected: forGreeter ? (((DesktopData.appearance.greeter || {}).prefs || {}).image || "") : wallpaper[slot] || wallpaper.shared || ""
@@ -43,7 +42,6 @@ FloatingWindow {
     function act(args) { DesktopData.act("appearance", args) }
     function nextThumbnail() {
         if (!visible || thumbnail.running || grid.moving) return
-        // Only the viewport and the next row. Scroll/search replace the pending work.
         const first = Math.max(0, Math.floor(grid.contentY / grid.cellHeight)) * columns
         const end = Math.min(filtered.length, (Math.ceil((grid.contentY + grid.height) / grid.cellHeight) + 1) * columns)
         for (let i = first; i < end; i++) {

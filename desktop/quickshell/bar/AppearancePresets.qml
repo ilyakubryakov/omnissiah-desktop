@@ -4,7 +4,6 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "../shared" as Shared
 
-// Saved looks: palette, icons, panel layout, accents and window styling together.
 SettingsGroup {
     id: root
     property string deleting: ""

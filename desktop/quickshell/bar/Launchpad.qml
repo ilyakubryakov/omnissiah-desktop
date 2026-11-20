@@ -5,11 +5,6 @@ import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Hyprland
 
-// Launchpad: apps over a live compositor blur of the current screen.
-// Drop an app onto a folder to file it, onto another app to make a folder of
-// the two, near an edge to reorder; drag it out of an open folder to put it
-// back at the top level. The layout lives in $XDG_STATE_HOME/oninix-launchpad.json;
-// new apps are filed by their desktop categories.
 PanelWindow {
     id: root
 
@@ -31,7 +26,6 @@ PanelWindow {
     readonly property int columns: Math.max(4, Math.min(8, Math.floor((width - 160) / cellW)))
     readonly property bool canDrag: query === ""
 
-    // First match wins; apps matching none stay at the top level.
     readonly property var rules: [
         { name: "Gaming", cats: ["Game"] },
         { name: "Coding", cats: ["Development", "IDE", "TextEditor", "TerminalEmulator"] },
@@ -84,10 +78,7 @@ PanelWindow {
         return out
     }
 
-    // ---- state ----
     function save() { store.setText(JSON.stringify(st, null, 1)) }
-    // Files every app the layout does not know yet; on the first run this
-    // builds the folders themselves.
     function reconcile() {
         if (!loaded) return
         const s = clone()
@@ -142,7 +133,6 @@ PanelWindow {
         function onApplicationsChanged() { root.reconcile() }
     }
 
-    // ---- actions ----
     function launch(id) {
         const e = apps[id]
         if (!e) return
@@ -173,7 +163,6 @@ PanelWindow {
         s.folders[fid].name = n
         st = s; save()
     }
-    // The folder's apps take its place at the top level.
     function ungroup(fid) {
         if (!st.folders[fid]) return
         const s = clone()
@@ -185,7 +174,6 @@ PanelWindow {
         search.forceActiveFocus()
     }
 
-    // ---- drag and drop ----
     function dropTarget(px, py) {
         if (openFolder !== "") {
             const p = folderPanel.mapFromItem(null, px, py)
@@ -214,7 +202,6 @@ PanelWindow {
         const t = dropTarget(px, py)
         hover = t.target && t.target !== drag ? t : null
     }
-    // Deferred: the drop rebuilds the grid that holds the dragged tile.
     function endDrag(px, py) {
         const t = dropTarget(px, py)
         const key = drag
@@ -251,7 +238,6 @@ PanelWindow {
         st = s; save()
     }
 
-    // ---- window ----
     function show() {
         const mon = Hyprland.focusedMonitor
         target = Quickshell.screens.find(s => mon && s.name === mon.name) || Quickshell.screens[0]
@@ -291,8 +277,6 @@ PanelWindow {
         opacity: root.opened ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: Shared.DesktopStyle.normal; easing.type: Easing.OutCubic } }
 
-        // The compositor blurs the live windows underneath. No asynchronous
-        // wallpaper image or screenshot can replace that backdrop mid-animation.
         Rectangle {
             anchors.fill: parent
             color: Colors.background
@@ -412,7 +396,6 @@ PanelWindow {
             }
         }
 
-        // ---- open folder ----
         Item {
             anchors.fill: parent
             visible: root.openFolder !== ""
@@ -516,7 +499,6 @@ PanelWindow {
             }
         }
 
-        // The dragged icon follows the pointer above everything.
         Image {
             visible: root.drag !== ""
             x: root.dragPos.x - width / 2

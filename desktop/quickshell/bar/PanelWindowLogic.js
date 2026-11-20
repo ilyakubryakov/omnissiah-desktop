@@ -1,10 +1,7 @@
-// look.lua: groupbar height 18 + Hyprland's 2 px lower gap. Only the active
-// member contributes geometry; inactive group members can retain stale positions.
 function groupbarHeight(client) {
     return client.grouped && client.grouped.length > 1 ? 20 : 0;
 }
 
-// Check the union, not a bounding box or summed areas: overlaps must not hide holes.
 function coversArea(windows, area, padding) {
     const rects = windows.filter(c => c.at && c.size && c.size[0] > 0 && c.size[1] > 0).map(c => [
         Math.max(area[0], c.at[0] - padding), Math.max(area[1], c.at[1] - padding - groupbarHeight(c)),
@@ -27,7 +24,6 @@ function coversArea(windows, area, padding) {
     return rects.length > 0;
 }
 
-// Hyprctl coordinates are logical; monitor dimensions are physical before transform.
 function surfaceWindow(clients, monitors, screenName, outerGap, innerGap) {
     const monitor = monitors.find(m => m.name === screenName);
     if (!monitor || monitor.disabled || monitor.dpmsStatus === false) return null;
@@ -46,7 +42,6 @@ function surfaceWindow(clients, monitors, screenName, outerGap, innerGap) {
         && c.visible !== false
         && c.workspace && (c.workspace.id === workspace || (special && c.workspace.id === special) || c.pinned));
     visible.sort((a, b) => (a.focusHistoryID ?? 9999) - (b.focusHistoryID ?? 9999));
-    // Internal compositor state, not fullscreenClient (which an app can fake).
     const expanded = visible.find(c => c.fullscreen === 1 || c.fullscreen === 2 || c.fullscreen === 3);
     if (expanded) return expanded;
     for (const id of special ? [special, workspace] : [workspace]) {
@@ -56,7 +51,6 @@ function surfaceWindow(clients, monitors, screenName, outerGap, innerGap) {
     return null;
 }
 
-// Match generated application surfaces, never sample page contents or wallpaper.
 function surfaceRole(appClass) {
     const name = (appClass || "").toLowerCase();
     if (name === "kitty" || name.startsWith("kitty-")) return "background";

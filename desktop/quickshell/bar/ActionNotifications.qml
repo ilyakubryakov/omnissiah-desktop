@@ -6,8 +6,6 @@ import Quickshell.Io
 import Quickshell.Wayland
 import "../shared" as Shared
 
-// Mako owns notification IDs and action callbacks. Only their presentation is
-// delegated here: never guess an action or invoke one without a button click.
 PanelWindow {
     id: root
     property var rows: []
@@ -22,8 +20,6 @@ PanelWindow {
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "oninix-action-notifications"
-    // A popup must not take the keyboard when it appears (Hyprland focuses any
-    // interactive layer on map): interactive only while the pointer is over it.
     WlrLayershell.keyboardFocus: hover.hovered ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
     function refresh() { if (!read.running) read.running = true }
@@ -37,7 +33,6 @@ PanelWindow {
             onStreamFinished: {
                 try {
                     const data = JSON.parse(text)
-                    // Keep delegates (and a pressed button) alive between polls.
                     if (root.snapshot !== text) {
                         root.snapshot = text
                         root.rows = data.current || []

@@ -3,9 +3,6 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// Daily update assessment (owner decision 2026-11-08). The hourly
-// oninix-maintenance-reminder timer checks at most once a day; the panel
-// only reads its cached answer: current, available (no rush) or due.
 Singleton {
     id: root
     property var result: ({})
@@ -20,7 +17,6 @@ Singleton {
     property double clock: Date.now() / 1000
     readonly property var assessment: result.assessment || ({})
     readonly property var items: result.items || []
-    // Older caches have no assessment; treat them as not yet checked.
     readonly property bool stale: !result.checkedAt || !result.assessment || clock - result.checkedAt > 2 * 86400
     readonly property string level: checking ? "checking" : error ? "error" : stale ? "stale" : assessment.level || "stale"
     readonly property int count: assessment.count || 0

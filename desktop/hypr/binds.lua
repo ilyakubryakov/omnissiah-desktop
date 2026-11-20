@@ -1,9 +1,3 @@
--- Keybinds. KDE muscle memory where it existed: Meta+Return terminal,
--- Meta+L lock, Meta+Shift+T TV, Meta+E files.
---
--- A description makes a bind show up on the cheatsheet (Meta+Shift+H), which
--- reads them back from `hyprctl binds`. Equal descriptions are grouped into
--- one row, with only the keys actually registered in this session.
 
 local function app(cmd)
 	return hl.dsp.exec_cmd("oninix-app " .. cmd)
@@ -18,10 +12,7 @@ end
 local home = os.getenv("HOME")
 local scripts = (os.getenv("ONINIX_SHARE") or "/run/current-system/sw/share/oninix") .. "/hypr/scripts/"
 
-
--- Apps
 bind("SUPER + Return", app("kitty"), "terminal")
--- Open the menu directly; oninix-launcher gives selected apps their own UWSM scope.
 bind("SUPER + space", hl.dsp.exec_cmd("oninix-launcher"), "launcher: apps, projects, files")
 bind("SUPER + D", hl.dsp.exec_cmd("oninix-shell ipc call launchpad toggle"), "launchpad: apps in folders")
 bind("SUPER + E", app("dolphin"), "files")
@@ -38,7 +29,6 @@ bind("SUPER + slash", hl.dsp.exec_cmd("oninix-shell ipc call keys toggle"), "sho
 bind("SUPER + CTRL + A", panel("appearance"), "appearance: palettes and wallpapers")
 bind("SUPER + CTRL + U", panel("notifications"), "notification history")
 bind("SUPER + CTRL + Tab", panel("overview"), "window and workspace overview")
--- Tokens pair each IPC request with its Alt release, including very fast taps.
 local switcher_prefix = tostring({}):gsub("%W", "")
 local switcher_sequence = 0
 local function switcher(action)
@@ -52,7 +42,6 @@ bind("ALT + Tab", switcher("next"), "switch between all application windows")
 for _, key in ipairs({ "Alt_L", "Alt_R" }) do
     bind(key, switcher("accept"), nil, { release = true, ignore_mods = true, non_consuming = true, transparent = true })
 end
--- Single-instance apps: focus the window if there is one, else start it.
 local function focus_or_start(class, cmd)
 	return hl.dsp.exec_cmd(scripts .. "launch-or-focus.sh '" .. class .. "' " .. cmd)
 end
@@ -76,7 +65,6 @@ bind("SUPER + SHIFT + H", hl.dsp.exec_cmd("oninix-shell ipc call cheat toggle"),
 	"this cheatsheet")
 
 local function tv_workspace(move)
-    -- Workspace 11 may not exist yet even though the TV is enabled.
     local tv = require("outputs").tv_monitor()
     if not tv then
         hl.notification.create({ text = "Enable the TV in Control Center first", timeout = 2000 })
@@ -87,13 +75,11 @@ end
 bind("SUPER + CTRL + T", function() tv_workspace(false) end, "TV workspace")
 bind("SUPER + CTRL + SHIFT + T", function() tv_workspace(true) end, "send window to TV workspace")
 
--- Session
 bind("SUPER + L", hl.dsp.exec_cmd("loginctl lock-session"), "lock")
 bind("SUPER + SHIFT + E", hl.dsp.exec_cmd(scripts .. "power-menu.sh --logout"), "log out (confirm)")
 bind("SUPER + SHIFT + P", hl.dsp.dpms({ action = "toggle" }), "displays off / on")
 bind("SUPER + CTRL + N", hl.dsp.exec_cmd("oninix-theme-schedule --nightlight toggle"), "night light on / off")
 
--- Windows
 bind("SUPER + Q", hl.dsp.window.close(), "close window")
 bind("SUPER + SHIFT + W", function() require("minimize").minimize() end, "minimize window to the panel")
 bind("SUPER + CTRL + W", function() require("minimize").minimize_app() end, "minimize all windows of the app")
@@ -118,8 +104,6 @@ for key, dir in pairs({ left = "l", right = "r", up = "u", down = "d" }) do
 	}), "resize (arrows)", { repeating = true })
 end
 
--- Workspace modes: Meta+T cycles the tiling layout, Meta+Shift+Space floats
--- the whole workspace (new windows included) and back.
 local function active_workspace()
 	return hl.get_active_special_workspace() or hl.get_active_workspace()
 end
@@ -182,12 +166,10 @@ hl.on("window.move_to_workspace", function(window, ws)
 	end
 end)
 
--- Tabs (groups)
 bind("SUPER + W", hl.dsp.group.toggle(), "group into tabs / ungroup")
 bind("SUPER + Tab", hl.dsp.group.next(), "next tab")
 bind("SUPER + SHIFT + Tab", hl.dsp.group.prev(), "previous tab")
 
--- Workspaces 1..10
 for i = 1, 10 do
 	local key = tostring(i % 10)
 	bind("SUPER + " .. key, hl.dsp.focus({ workspace = tostring(i) }), "go to workspace (1..0)")
@@ -197,14 +179,9 @@ end
 bind("SUPER + mouse_down", hl.dsp.focus({ workspace = "e+1" }), "next workspace with mouse wheel")
 bind("SUPER + mouse_up", hl.dsp.focus({ workspace = "e-1" }), "previous workspace with mouse wheel")
 
--- Mouse
 bind("SUPER + mouse:272", hl.dsp.window.drag(), "drag window", { mouse = true })
 bind("SUPER + mouse:273", hl.dsp.window.resize(), "resize window", { mouse = true })
 
--- Screens
--- The capture key does what the bar's camera menu says (area, screen or video);
--- with the save key screenshots also land in ~/Pictures/Screenshots.
--- Both are set in Control Center > Session.
 local capture = { key = "SUPER+SHIFT+S", key_save = "CTRL+SUPER+SHIFT+S" }
 for _, kv in ipairs(require("prefs").lines("capture")) do
     if capture[kv[1]] and kv[2]:match("^[%w_]+[%w_+]*$") then capture[kv[1]] = kv[2] end
@@ -219,8 +196,6 @@ bind("ALT + Print", hl.dsp.exec_cmd(scripts .. "screenrecord.sh"), "record scree
 bind("ALT + SHIFT + Print", hl.dsp.exec_cmd(scripts .. "screenrecord.sh region"), "record region / stop")
 bind("SUPER + SHIFT + T", hl.dsp.exec_cmd(scripts .. "tv-toggle.sh"), "TV on / off")
 
--- Media and volume, also on the lock screen. Printed on the keys, so no
--- descriptions: they would only crowd the cheatsheet.
 local locked = { locked = true }
 local held = { locked = true, repeating = true }
 hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 5%+"), held)

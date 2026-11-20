@@ -1,7 +1,5 @@
 .pragma library
 
-// Fit balanced rows of cards to logical screen dimensions. Large collections
-// scroll vertically; the selected item is always positioned by GridView.
 function layout(count, screenWidth, screenHeight) {
     const maxWidth = Math.max(220, Math.min(1200, screenWidth - 80))
     const maxColumns = Math.max(1, Math.floor((maxWidth - 30) / 178))

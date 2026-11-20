@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Power menu for the bar's power button.
 set -euo pipefail
 
 if [[ "${1:-}" == "--logout" ]]; then

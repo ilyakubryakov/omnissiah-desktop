@@ -6,17 +6,14 @@ import Quickshell.Io
 Singleton {
     id: root
     property string page: ""
-    // The settings page to open next; "" means the last one visited.
     property string controlTab: ""
     property bool open: false
-    // The standalone clipboard tool (Super+Shift+V), outside the settings window.
     property bool clipboardOpen: false
     readonly property bool clipsWanted: clipboardOpen || open && page === "clipboard"
     property bool notificationsOpen: false
     signal notificationsRequested()
     onOpenChanged: open ? markSeen() : cleanupDelay.restart()
     onPageChanged: markSeen()
-    // Opening the notification centre is what counts as reading them.
     function markSeen() { if (open && page === "notifications") act("mark-seen") }
     property var appearance: ({ palettes: [], wallpaper: {}, schedule: {} })
     property bool wallpapersOpen: false
@@ -41,8 +38,6 @@ Singleton {
     readonly property int unreadCount: notifications.unread || 0
     readonly property string helper: "oninix-desktop"
     signal actionDone(string name)
-    // Brightness has its own coalesced writer: the final drag value must not be
-    // dropped while an unrelated action (or the previous brightness write) runs.
     property int brightnessTarget: -1
     property int brightnessQueued: -1
     function setBrightness(amount) {
@@ -68,7 +63,6 @@ Singleton {
             else root.refresh()
         }
     }
-    // ---- Wi-Fi: read only while the Connect tab is open ----
     property var wifi: ({ device: null, enabled: false, networks: [] })
     property string wifiError: ""
     property bool scanning: false
@@ -81,7 +75,6 @@ Singleton {
     }
     function readWifi() { if (!wifiRead.running) wifiRead.running = true }
     function scanWifi() { scanning = true; act("wifi-scan"); scanDone.restart() }
-    // The password travels on the helper's stdin, never on a command line.
     function connectWifi(ssid, password) {
         if (wifiJoin.running) return
         wifiError = ""; askSsid = ""
@@ -89,7 +82,6 @@ Singleton {
         wifiJoin.command = [helper, "wifi-connect", ssid]
         wifiJoin.running = true
     }
-    // Paused while a password is typed, so the list does not shift under it.
     Timer { interval: 5000; running: root.networkOpen && root.askSsid === ""; repeat: true; onTriggered: root.readWifi() }
     Timer { id: scanDone; interval: 6000; onTriggered: { root.scanning = false; root.readWifi() } }
     Process {
@@ -112,7 +104,6 @@ Singleton {
         onExited: { stdinEnabled = true; root.readWifi(); root.refresh() }
     }
 
-    // ---- Devices / Session / System settings: read only while one is open ----
     property var settings: ({})
     readonly property bool settingsOpen: open && page === "controls" && ["devices", "session", "system", "power"].includes(controlTab)
     onSettingsOpenChanged: if (settingsOpen) readSettings()
@@ -126,7 +117,6 @@ Singleton {
         } }
     }
 
-    // ---- Displays: read while the tab is open or a change awaits Keep ----
     property var displays: ({ displays: [], pending: null })
     property string displayError: ""
     readonly property string displayHelper: "oninix-display"
@@ -136,7 +126,6 @@ Singleton {
     signal displaysApplied()
     onDisplaysOpenChanged: if (displaysOpen) readDisplays()
     function readDisplays() { if (!displayRead.running) displayRead.running = true }
-    // args: ["apply"] with a JSON layout on stdin, ["confirm"], ["revert"], ["forget", key].
     function displayCommand(args, input) {
         if (displayAct.running) return
         displayError = ""

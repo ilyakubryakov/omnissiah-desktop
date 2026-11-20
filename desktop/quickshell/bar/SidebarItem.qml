@@ -2,7 +2,6 @@ import QtQuick
 import QtQuick.Layouts
 import "../shared" as Shared
 
-// A System Settings sidebar entry: a glyph on a small tinted tile, then the title.
 Rectangle {
     id: root
     property string text: ""

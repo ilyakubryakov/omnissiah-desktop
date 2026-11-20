@@ -6,14 +6,12 @@ import Quickshell.Io
 Singleton {
     id: root
     property var roles: ({})
-    // Primary chosen in Control Center > Displays; port as last written by oninix-display.
     property string primaryOutput: ""
     function output(role) { return roles[role] || "" }
     function screen(role) {
         const name = output(role)
         return name ? Quickshell.screens.find(s => s.name === name) || null : null
     }
-    // A docked laptop keeps the desktop on an external display (same rule as outputs.lua).
     readonly property var docked: {
         if (Quickshell.env("ONINIX_LAPTOP") !== "1") return null
         const outside = Quickshell.screens.filter(s => s.name !== output("main"))
@@ -43,7 +41,6 @@ Singleton {
             root.roles = next
         }
     }
-    // A file created after start is not watched yet; poll only while it is missing.
     property bool primaryMissing: false
     Timer { interval: 5000; running: root.primaryMissing; repeat: true; onTriggered: saved.reload() }
     FileView {

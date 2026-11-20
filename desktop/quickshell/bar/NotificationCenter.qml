@@ -20,7 +20,6 @@ ColumnLayout {
     }
     UiLabel { Layout.fillWidth: true; text: DesktopData.controls.dnd ? "Do not disturb · critical alerts can still appear." : "Recent messages · " + root.groups.length; color: Colors.muted; font.pixelSize: Shared.DesktopStyle.px(12) }
     UiLabel { visible: !!DesktopData.notifications.error || !!DesktopData.error; Layout.fillWidth: true; text: DesktopData.notifications.error || DesktopData.error; color: Colors.red }
-    // From the local delivery log: titles that keep arriving and are never opened.
     ColumnLayout {
         visible: root.suggestions.length > 0
         Layout.fillWidth: true; spacing: 6

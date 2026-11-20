@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Data and explicit actions for the desktop panels. Never evaluates user text."""
 import fcntl
 import hashlib
 import json
@@ -25,15 +24,12 @@ import ui_metrics
 
 BIN = Path.home() / '.local/bin'
 ENV = {**os.environ, 'LC_ALL': 'C'}
-# Direct D-Bus: powerprofilesctl (PyGObject) can segfault on exit under Python 3.14.
 PPD = ['busctl', '--system']
 PPD_IFACE = ['net.hadess.PowerProfiles', '/net/hadess/PowerProfiles', 'net.hadess.PowerProfiles']
-
 
 def run(args, data=None, timeout=6):
     return subprocess.run([str(a) for a in args], input=data, capture_output=True,
                           timeout=timeout, check=True, env=ENV).stdout
-
 
 def runtime():
     base = os.environ.get('XDG_RUNTIME_DIR')
@@ -43,31 +39,25 @@ def runtime():
     path.mkdir(mode=0o700, exist_ok=True)
     return path
 
-
 def read_json(path, default):
     try:
         return json.loads(path.read_text())
     except (OSError, ValueError):
         return default
 
-
 def save(path, value):
     tmp = path.with_suffix('.tmp')
     tmp.write_text(json.dumps(value))
     tmp.replace(path)
 
-
 def modes():
     return run(['makoctl', 'mode']).decode().splitlines()
-
 
 def nightlight():
     return json.loads(run(['oninix-theme-schedule', '--status']))['nightlight']
 
-
 def set_dnd(value):
     run(['makoctl', 'mode', '-a' if value else '-r', 'do-not-disturb'])
-
 
 def audio_defaults():
     objects = json.loads(run(['pw-dump']))
@@ -88,7 +78,6 @@ def audio_defaults():
                         configured[kind] = value.get('name')
     return configured, available
 
-
 def set_audio_default(kind, name):
     command = ['pw-metadata', '-n', 'default']
     key = 'default.configured.audio.' + kind
@@ -96,7 +85,6 @@ def set_audio_default(kind, name):
         run(command + ['-d', '0', key])
     else:
         run(command + ['0', key, json.dumps({'name': name}), 'Spa:String:JSON'])
-
 
 def profile(name):
     if name not in {'normal', 'work', 'call', 'game', 'music'}:
@@ -109,7 +97,6 @@ def profile(name):
         current = {'dnd': 'do-not-disturb' in modes(), 'nightlight': nightlight(),
                    **{'audio_' + k: v for k, v in audio.items()}}
         base = {**current, **old.get('base', {})}
-        # A manual change made while a mode is active becomes the new baseline.
         for key, value in current.items():
             if old and value != old.get('applied', {}).get(key):
                 base[key] = value
@@ -167,16 +154,13 @@ def profile(name):
         else:
             save(path, {'name': name, 'base': base, 'applied': target, 'gaming': game_state if name == 'game' else {}})
         if old.get('name', 'normal') != name:
-            # oninix-doctor --events shows these lines in the Doctor timeline.
             previous = old.get('name', 'normal').capitalize()
             try:
                 run(['logger', '-t', 'oninix-mode', f'{name.capitalize()} mode on (was {previous})'])
             except (OSError, subprocess.SubprocessError):
                 pass
 
-
 def game_offer():
-    """A Steam game opened outside Game mode (gaming.lua): offer it, never switch alone."""
     if read_json(runtime() / 'mode.json', {}).get('name') == 'game':
         return
     chosen = subprocess.run(['notify-send', '--app-name=Game mode', '--icon=input-gaming', '--wait',
@@ -186,7 +170,6 @@ def game_offer():
                             capture_output=True, text=True, env=ENV).stdout.strip()
     if chosen == 'enable':
         profile('game')
-
 
 def split_nm(line):
     fields, field, escaped = [], '', False
@@ -204,16 +187,13 @@ def split_nm(line):
     fields.append(field)
     return fields
 
-
 def battery_watts(battery):
-    # Some firmware reports only current and voltage (micro-units).
     try:
         if (battery / 'power_now').exists():
             return round(int((battery / 'power_now').read_text()) / 1e6, 1)
         return round(int((battery / 'current_now').read_text()) * int((battery / 'voltage_now').read_text()) / 1e12, 1)
     except (OSError, ValueError):
         return None
-
 
 def laptop_state():
     result = {'battery': None, 'brightness': None, 'profile': None, 'profiles': []}
@@ -243,9 +223,7 @@ def laptop_state():
         pass
     return result
 
-
 def network_state():
-    """NetworkManager state without triggering probes or changing connections."""
     links = []
     lines = run(['nmcli', '-t', '-f', 'DEVICE,TYPE,STATE,CONNECTION', 'device']).decode().splitlines()
     for fields in map(split_nm, lines):
@@ -270,9 +248,7 @@ def network_state():
     connectivity = run(['nmcli', '-t', '-f', 'CONNECTIVITY', 'general']).decode().strip()
     return {'connectivity': connectivity, 'links': links, 'timestamp': time.time()}
 
-
 def network_dns(provider, uuid):
-    # Scope changes to a visible physical connection, never VPN/Tailscale DNS.
     state = network_state()
     link = next((x for x in state['links'] if x['uuid'] == uuid), None)
     if not link:
@@ -284,7 +260,6 @@ def network_dns(provider, uuid):
          'ipv4.ignore-auto-dns', 'no' if provider == 'dhcp' else 'yes', 'ipv4.dns', servers,
          'ipv6.ignore-auto-dns', 'no' if provider == 'dhcp' else 'yes', 'ipv6.dns', ''])
     run(['nmcli', 'device', 'reapply', link['device']])
-
 
 def controls():
     result = {'mode': read_json(runtime() / 'mode.json', {}).get('name', 'normal'), 'capture': capture_settings()}
@@ -328,17 +303,12 @@ def controls():
         result['awake'] = None
     return result
 
-
 VPN_PROFILES = Path('/etc/oninix/vpns.json')
 VPN_AUTOSTART = Path(os.environ.get('XDG_STATE_HOME', str(Path.home() / '.local/state'))) / 'oninix-vpn-autostart.json'
-
 
 def vpn_autostart():
     return set(read_json(VPN_AUTOSTART, {}).get('ids', []))
 
-
-# OpenVPN system units (nixos/modules/vpn.nix). The unit runs while it retries;
-# the tunnel device exists only once the server has accepted the client.
 def vpn_profiles():
     profiles = [p for p in read_json(VPN_PROFILES, []) if Path(p['key']).exists()]
     if not profiles:
@@ -352,29 +322,23 @@ def vpn_profiles():
                        'state': 'connected' if up else 'connecting' if running else 'disconnected'})
     return result
 
-
 def vpn_profile(vpn_id):
     vpn = next((v for v in vpn_profiles() if v['id'] == vpn_id), None)
     if not vpn:
         raise ValueError('VPN profile is unavailable')
     return vpn
 
-
-# Reconnecting after sleep or a network change is the units' own business
-# (openvpn-restart, the NM dispatcher hook); login only starts the chosen ones.
 def vpn_login():
     wanted = vpn_autostart()
     for vpn in vpn_profiles():
         if vpn['id'] in wanted and vpn['state'] == 'disconnected':
             run(['systemctl', 'start', vpn['unit']], timeout=30)
 
-
 def wifi_device():
     for fields in map(split_nm, run(['nmcli', '-t', '-f', 'DEVICE,TYPE', 'device']).decode().splitlines()):
         if len(fields) >= 2 and fields[1] == 'wifi':
             return fields[0]
     return None
-
 
 def wifi():
     device = wifi_device()
@@ -401,7 +365,6 @@ def wifi():
     rows = sorted(networks.values(), key=lambda r: (not r['active'], r['known'] is None, -r['signal']))
     return {'device': device, 'enabled': enabled, 'networks': rows[:30]}
 
-
 def wifi_connect(ssid, password):
     state = wifi()
     net = next((n for n in state['networks'] if n['ssid'] == ssid), None)
@@ -427,7 +390,6 @@ def wifi_connect(ssid, password):
         out = run(['nmcli', 'connection', 'add', 'type', 'wifi', 'ifname', state['device'], 'con-name', ssid,
                    'ssid', ssid, 'wifi-sec.key-mgmt', key]).decode()
         uuid, created = re.search(r'\(([0-9a-f-]{36})\)', out).group(1), True
-    # The password reaches nmcli through a private file, never the command line.
     secret = runtime() / 'wifi-secret'
     try:
         secret.write_text(f'802-11-wireless-security.psk:{password}\n')
@@ -439,10 +401,6 @@ def wifi_connect(ssid, password):
     finally:
         secret.unlink(missing_ok=True)
 
-
-# ---- Control Center settings (Devices, Session and System tabs) ----
-# Per-machine preferences live in $XDG_STATE_HOME/oninix/*.conf as key=value
-# lines; Hyprland reads them as data (hypr/prefs.lua), hypridle via idle.sh.
 STATE_HOME = Path(os.environ.get('XDG_STATE_HOME', str(Path.home() / '.local/state')))
 ONINIX_STATE = STATE_HOME / 'oninix'
 LAPTOP = os.environ.get('ONINIX_LAPTOP') == '1'
@@ -465,10 +423,8 @@ DEFAULT_APPS = [
     ('audio', 'Music', ['audio/mpeg', 'audio/flac', 'audio/ogg']),
     ('text', 'Text', ['text/plain']),
 ]
-# Started by hypr/autostart.lua, not XDG autostart: shown, not switchable here.
 SESSION_APPS = ['Quickshell panels', 'Clipboard history', 'Idle and lock (hypridle)']
 WM_CLASS = re.compile(r'[A-Za-z0-9._ -]{1,64}')
-
 
 def read_conf(name):
     try:
@@ -477,14 +433,12 @@ def read_conf(name):
         return {}
     return dict(line.split('=', 1) for line in lines if '=' in line)
 
-
 def write_conf(name, values):
     ONINIX_STATE.mkdir(parents=True, exist_ok=True)
     path = ONINIX_STATE / f'{name}.conf'
     tmp = path.with_suffix('.tmp')
     tmp.write_text(''.join(f'{k}={v}\n' for k, v in values.items()))
     tmp.replace(path)
-
 
 def desktop_entry(path):
     data, section = {}, None
@@ -500,7 +454,6 @@ def desktop_entry(path):
             key, value = line.split('=', 1)
             data.setdefault(key.strip(), value.strip())
     return data
-
 
 def applications():
     dirs = [Path.home() / '.local/share'] + [Path(d) for d in os.environ.get('XDG_DATA_DIRS', '').split(':') if d]
@@ -518,22 +471,18 @@ def applications():
                             and entry.get('Hidden') != 'true'}
     return apps
 
-
 def applies_here(entry):
     desktops = {'Hyprland'}
     only = {d for d in entry.get('OnlyShowIn', '').split(';') if d}
     never = {d for d in entry.get('NotShowIn', '').split(';') if d}
     return (not only or only & desktops) and not never & desktops
 
-
 def autostart_dirs():
     dirs = [Path(d) / 'autostart' for d in os.environ.get('XDG_CONFIG_DIRS', '/etc/xdg').split(':') if d]
     return [d for d in dirs if d.is_dir()]
 
-
 def system_autostart(name):
     return next((d / f'{name}.desktop' for d in autostart_dirs() if (d / f'{name}.desktop').exists()), None)
-
 
 def autostart_entries():
     names = {p.stem for d in autostart_dirs() + [USER_AUTOSTART] if d.is_dir() for p in d.glob('*.desktop')}
@@ -547,7 +496,6 @@ def autostart_entries():
                      'system': system is not None, 'applies': bool(applies_here(base))})
     return rows
 
-
 def set_desktop_hidden(path, hidden):
     lines = [l for l in path.read_text().splitlines()
              if not l.startswith(('Hidden=', 'X-GNOME-Autostart-enabled='))]
@@ -555,7 +503,6 @@ def set_desktop_hidden(path, hidden):
         at = lines.index('[Desktop Entry]') + 1 if '[Desktop Entry]' in lines else 0
         lines.insert(at, 'Hidden=true')
     path.write_text('\n'.join(lines) + '\n')
-
 
 def autostart_set(name, on):
     system, user = system_autostart(name), USER_AUTOSTART / f'{name}.desktop'
@@ -567,10 +514,8 @@ def autostart_set(name, on):
     elif user.exists():
         set_desktop_hidden(user, not on)
     elif not on:
-        # A system entry is switched off by a user copy that hides it.
         user.write_text('[Desktop Entry]\nType=Application\nName=' + desktop_entry(system).get('Name', name)
                         + '\nHidden=true\nX-OniNix-Override=true\n')
-
 
 def battery_health():
     for bat in Path('/sys/class/power_supply').glob('BAT*'):
@@ -585,7 +530,6 @@ def battery_health():
                 'limit': read('charge_control_end_threshold')}
     return None
 
-
 def printers():
     if not shutil.which('lpstat'):
         return None
@@ -593,7 +537,6 @@ def printers():
     default = run(['lpstat', '-d']).decode()
     jobs = [line for line in run(['lpstat', '-o']).decode().splitlines() if line.strip()]
     return {'queues': queues, 'default': default.split(':', 1)[1].strip() if ':' in default else '', 'jobs': len(jobs)}
-
 
 def timezone():
     zone = run(['timedatectl', 'show', '-p', 'Timezone', '--value']).decode().strip()
@@ -605,13 +548,11 @@ def timezone():
         service = False
     return {'zone': zone, 'zones': zones, 'auto': not TZ_MANUAL.exists(), 'service': service}
 
-
 def nightlight_settings():
     theme = STATE_HOME / 'theme'
     data = read_json(theme / 'nightlight.json', {})
     return {'on': (theme / 'nightlight').exists(), 'kelvin': data.get('kelvin', 4000),
             'from': data.get('from', ''), 'to': data.get('to', '')}
-
 
 def system_info():
     profiles = Path('/nix/var/nix/profiles')
@@ -628,7 +569,6 @@ def system_info():
     return {'version': run(['nixos-version']).decode().strip(), 'generation': current,
             'generations': len(generations), 'built': int(built), 'disks': disks}
 
-
 def default_apps(apps):
     rows = []
     for key, label, mimes in DEFAULT_APPS:
@@ -637,7 +577,6 @@ def default_apps(apps):
                          key=lambda c: c['name'].lower())
         rows.append({'key': key, 'label': label, 'current': current, 'choices': choices})
     return rows
-
 
 def workspace_rules():
     rules = [{'class': k, 'workspace': int(v)} for k, v in read_conf('workspaces').items()
@@ -649,7 +588,6 @@ def workspace_rules():
         running = []
     return {'rules': rules, 'running': running, 'fixed': []}
 
-
 CAPTURE_DEFAULTS = {'mode': 'region', 'audio': 'yes', 'mic': 'no', 'pointer': 'no',
                     'key': 'SUPER+SHIFT+S', 'key_save': 'CTRL+SUPER+SHIFT+S'}
 KEY_COMBO = r'((SUPER|CTRL|ALT|SHIFT)\+){1,4}([A-Z0-9]|F([1-9]|1[0-2])|Print|space)'
@@ -657,11 +595,9 @@ CAPTURE_VALUES = {'mode': 'region|screen|video', 'audio': 'yes|no', 'mic': 'yes|
                   'key': KEY_COMBO, 'key_save': KEY_COMBO}
 MOD_BITS = {'SHIFT': 1, 'CTRL': 4, 'ALT': 8, 'SUPER': 64}
 
-
 def capture_settings():
     return {**CAPTURE_DEFAULTS, **{k: v for k, v in read_conf('capture').items()
                                    if k in CAPTURE_VALUES and re.fullmatch(CAPTURE_VALUES[k], v)}}
-
 
 def bind_owner(combo):
     *mods, key = combo.split('+')
@@ -670,7 +606,6 @@ def bind_owner(combo):
         if bind.get('modmask') == mask and bind.get('key', '').lower() == key.lower() and not bind.get('release'):
             return bind.get('description') or bind.get('dispatcher') or 'another shortcut'
     return None
-
 
 def capture_set(key, value):
     if key not in CAPTURE_VALUES or not re.fullmatch(CAPTURE_VALUES[key], value):
@@ -684,7 +619,6 @@ def capture_set(key, value):
     write_conf('capture', {**current, key: value})
     if key in {'key', 'key_save'}:
         run(['hyprctl', 'reload'])
-
 
 def settings():
     apps = applications()
@@ -716,9 +650,7 @@ def settings():
             result[key] = None
     return result
 
-
 def scanners():
-    """Network discovery takes seconds: a background refresh at most every 5 minutes."""
     if not shutil.which('scanimage'):
         return None
     cache, pending = runtime() / 'scanners.json', runtime() / 'scanners.pending'
@@ -732,21 +664,17 @@ def scanners():
         busy = True
     return {'devices': data['devices'] if data else [], 'searching': busy}
 
-
 def scanners_refresh():
     try:
         out = run(['scanimage', '-L'], timeout=40).decode(errors='replace')
-        # Webcams show up through SANE's v4l backend; they are not scanners.
         devices = [{'id': d, 'name': n} for d, n in re.findall(r"device `([^']+)' is an? (.+)", out)
                    if not d.startswith('v4l:')]
         save(runtime() / 'scanners.json', {'at': time.time(), 'devices': devices})
     finally:
         (runtime() / 'scanners.pending').unlink(missing_ok=True)
 
-
 def restart_idle():
     run(['systemctl', '--user', 'restart', 'hypridle.service'])
-
 
 def set_input(key, value):
     paths = {'layouts': 'kb_layout', 'repeat_rate': 'repeat_rate', 'repeat_delay': 'repeat_delay',
@@ -768,8 +696,6 @@ def set_input(key, value):
         previous = old.get(key, INPUT_DEFAULTS[key])
         if previous == value:
             return
-        # A full reload rebuilt keymaps and disconnected Wayland clients on 0.56.2.
-        # Only apply the changed option, then persist it for the next login/reload.
         result = run(['hyprctl', 'eval', expression(value)]).decode().strip()
         if result != 'ok':
             raise RuntimeError('Hyprland could not apply the input setting')
@@ -778,7 +704,6 @@ def set_input(key, value):
         except Exception:
             run(['hyprctl', 'eval', expression(previous)])
             raise
-
 
 def settings_action(command, args):
     if command == 'input-set' and len(args) == 2 and args[0] in INPUT_VALUES:
@@ -848,18 +773,14 @@ def settings_action(command, args):
         return False
     return True
 
-
 def notification_owner():
-    # IDs restart with the notification daemon. Scope UI marks to its D-Bus owner.
     return run(['busctl', '--user', 'call', 'org.freedesktop.DBus',
                 '/org/freedesktop/DBus', 'org.freedesktop.DBus', 'GetNameOwner',
                 's', 'org.freedesktop.Notifications']).decode().strip()
 
-
 def notification_state(owner):
     state = read_json(runtime() / 'notifications-state.json', {})
     return state if state.get('owner') == owner else {'owner': owner}
-
 
 def notification_update(owner, **changes):
     with (runtime() / 'notifications.lock').open('a') as lock:
@@ -867,7 +788,6 @@ def notification_update(owner, **changes):
         state = notification_state(owner)
         state.update(changes)
         save(runtime() / 'notifications-state.json', state)
-
 
 def notifications(popup_only=False):
     owner = notification_owner()
@@ -896,12 +816,10 @@ def notifications(popup_only=False):
     for kind in ('current', 'history'):
         result[kind] = [n for n in result[kind] if n.get('id', 0) > cleared and n.get('id') not in hidden]
         for n in result[kind]:
-            # Critical alerts are never quieter than critical, whatever the rules say.
             n['tier'] = 'critical' if n.get('urgency') == 'critical' else notes.tier(n.get('app_name', ''), n.get('summary', ''), rules)
             if n['tier'] == 'quiet':
                 quiet.add(n.get('id'))
     result['latest'] = max(ids, default=0)
-    # Quiet notifications wait in the centre without raising the unread count.
     result['unread'] = sum(1 for i in ids if i > max(state.get('seen', 0), cleared) and i not in hidden and i not in quiet)
     result['rules'] = rules
     try:
@@ -909,7 +827,6 @@ def notifications(popup_only=False):
     except OSError:
         result['suggestions'] = []
     return result
-
 
 def notification_hide(identifier, snapshot=None):
     data = snapshot or notifications()
@@ -924,11 +841,9 @@ def notification_hide(identifier, snapshot=None):
         state['hidden'] = sorted(set(state.get('hidden', [])) | {identifier})[-512:]
         save(runtime() / 'notifications-state.json', state)
 
-
 def notification_open(identifier):
     data = notifications()
     item = next((n for n in data['current'] if n.get('id') == identifier), None)
-    # Only the default action means opening. Never guess a reply/delete action.
     if item and 'default' in (item.get('actions') or {}):
         try:
             run(['makoctl', 'invoke', '-n', str(identifier), '--', 'default'])
@@ -936,10 +851,8 @@ def notification_open(identifier):
             pass  # Expired actions fall back to dismissal.
     notification_hide(identifier)
 
-
 def clipboard_rows():
     return [line for line in run(['cliphist', 'list']).decode(errors='replace').splitlines() if re.match(r'^\d+\t', line)]
-
 
 def clip_line(identifier):
     if not re.fullmatch(r'\d+', identifier):
@@ -948,7 +861,6 @@ def clip_line(identifier):
     if line is None:
         raise ValueError('This clipboard entry has expired')
     return line
-
 
 def decode(line, limit=16 * 1024 * 1024, timeout=3):
     with subprocess.Popen(['cliphist', 'decode'], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
@@ -978,20 +890,15 @@ def decode(line, limit=16 * 1024 * 1024, timeout=3):
                 process.kill()
             process.wait()
 
-
 CLIP_PINS_MAX = 12
 CLIP_PIN_BYTES = 64 * 1024
 
-
 def clip_pins_path():
-    # Host-local and outside Git and oninix-profile: pins can hold tokens.
     return shell.state() / 'oninix/clipboard-pins.json'
-
 
 def clip_pins():
     pins = read_json(clip_pins_path(), [])
     return [p for p in pins if isinstance(p, dict) and isinstance(p.get('key'), str) and isinstance(p.get('text'), str)] if isinstance(pins, list) else []
-
 
 def clip_pins_save(pins):
     path = clip_pins_path()
@@ -1001,16 +908,13 @@ def clip_pins_save(pins):
         json.dump(pins, stream)
     tmp.replace(path)
 
-
 def clip_text(identifier):
-    """Full text of a history entry (digits) or a pin ("pin:<key>")."""
     if identifier.startswith('pin:'):
         pin = next((p for p in clip_pins() if p['key'] == identifier[4:]), None)
         if pin is None:
             raise ValueError('This pinned entry no longer exists')
         return pin['text'].encode()
     return decode(clip_line(identifier))
-
 
 def clip_pin(identifier):
     data = clip_text(identifier)
@@ -1024,7 +928,6 @@ def clip_pin(identifier):
         raise ValueError(f'Up to {CLIP_PINS_MAX} pins: unpin one first')
     pins.insert(0, {'key': hashlib.sha256(text.encode()).hexdigest()[:12], 'text': text, 'at': int(time.time())})
     clip_pins_save(pins)
-
 
 def clip_transform(identifier, kind):
     text = clip_text(identifier).decode(errors='strict').strip()
@@ -1042,7 +945,6 @@ def clip_transform(identifier, kind):
         raise ValueError('Unknown transform')
     subprocess.run(['wl-copy'], input=result.encode(), stdout=subprocess.DEVNULL,
                    stderr=subprocess.DEVNULL, timeout=6, check=True, env=ENV)
-
 
 def clipboard():
     rows = []
@@ -1068,32 +970,24 @@ def clipboard():
         rows.append(row)
     return rows
 
-
 SHELF_MAX = 5
 SHELF_IMAGES = ('.png', '.jpg', '.jpeg', '.webp', '.gif')
 
-
 def shelf_dir():
-    # A temporary tray: runtime tmpfs, gone after logout or reboot.
     path = runtime() / 'shelf'
     path.mkdir(mode=0o700, exist_ok=True)
     return path
-
 
 def shelf_items():
     entries = read_json(shelf_dir() / 'shelf.json', [])
     return [e for e in entries if isinstance(e, dict) and isinstance(e.get('path'), str)] if isinstance(entries, list) else []
 
-
 def shelf_save(entries):
     save(shelf_dir() / 'shelf.json', entries)
 
-
 def shelf_drop(entry):
-    # Only copies the shelf made itself are deleted; added files stay where they are.
     if entry.get('owned'):
         Path(entry['path']).unlink(missing_ok=True)
-
 
 def shelf_add(paths, copy=False):
     with (shelf_dir() / 'shelf.lock').open('w') as lock:
@@ -1116,22 +1010,17 @@ def shelf_add(paths, copy=False):
             shelf_drop(old)
         shelf_save(entries[:SHELF_MAX])
 
-
 def shelf_clip(data):
-    """Files copied in a file manager (text/uri-list on the clipboard) join the shelf by path."""
     paths = []
     for line in data.decode(errors='replace').splitlines():
         line = line.strip()
         if not line.startswith('file://'):
             continue
         path = Path(urllib.parse.unquote(urllib.parse.urlsplit(line).path))
-        # Already-shelved copies and folders stay out; the shelf holds files.
         if path.is_file() and shelf_dir() not in path.parents:
             paths.append(str(path))
     if paths:
-        # Oldest first, so the first copied file ends on top.
         shelf_add(list(reversed(paths[:SHELF_MAX])))
-
 
 def shelf_remove(path):
     with (shelf_dir() / 'shelf.lock').open('w') as lock:
@@ -1141,7 +1030,6 @@ def shelf_remove(path):
             if path in (entry['path'], '*'):
                 shelf_drop(entry)
         shelf_save([e for e in entries if path not in (e['path'], '*')])
-
 
 def shelf():
     rows = []
@@ -1153,14 +1041,11 @@ def shelf():
                      'image': target.suffix.lower() in SHELF_IMAGES, 'size': target.stat().st_size})
     return rows
 
-
 DESKTOP_DEFAULTS = {'windows': 'flat', 'gap': '0', 'outer': '0', 'motion': 'off', 'density': 'compact', 'agent': 'claude',
                     **ui_metrics.preference_defaults()}
 
-
 def desktop_path():
     return Path(os.environ.get('XDG_STATE_HOME', str(Path.home() / '.local/state'))) / 'theme/desktop.conf'
-
 
 def desktop_preferences():
     values = DESKTOP_DEFAULTS.copy()
@@ -1175,7 +1060,6 @@ def desktop_preferences():
         pass
     return values
 
-
 def valid_preference(key, value):
     if key.startswith('ui_'):
         return ui_metrics.valid_preference(key, value)
@@ -1183,7 +1067,6 @@ def valid_preference(key, value):
         'windows': {'flat', 'soft'}, 'motion': {'off', 'subtle', 'smooth'},
         'density': {'compact', 'comfortable'}, 'agent': {'claude', 'codex', 'opencode', 'agy'}
     }.get(key, set())
-
 
 def set_desktop_preference(key, value):
     if not valid_preference(key, value):
@@ -1221,7 +1104,6 @@ def set_desktop_preference(key, value):
                 pass
             raise
 
-
 def wallpaper_command(command, *args):
     try:
         return json.loads(run(['oninix-theme', command, *args], timeout=30))
@@ -1232,9 +1114,6 @@ def wallpaper_command(command, *args):
             message = None
         raise ValueError(message or 'Could not update wallpaper settings') from None
 
-
-# Login screen: choices stay in the user's state; a resolved, validated request goes to
-# /var/lib/station, where the unprivileged oninix-greeter-apply service renders it.
 GREETER_PREFS = STATE_HOME / 'oninix/greeter.json'
 GREETER_REQUEST = Path('/var/lib/oninix/greeter.json')
 GREETER_IMAGE = Path('/var/lib/oninix/greeter-wallpaper')
@@ -1244,14 +1123,12 @@ GREETER_DEFAULTS = {'version': 1, 'palette': 'desktop', 'wallpaper': 'desktop', 
                     'clock': 'date', 'fontSize': 16, 'showSelectors': True}
 GREETER_RANGES = {'blur': (0, 40), 'dim': (0, 70), 'cardOpacity': (60, 100), 'radius': (0, 24), 'fontSize': (12, 22)}
 
-
 def greeter_prefs():
     try:
         stored = json.loads(GREETER_PREFS.read_text())
     except (OSError, ValueError):
         stored = {}
     return {**GREETER_DEFAULTS, **{k: v for k, v in stored.items() if k in GREETER_DEFAULTS}}
-
 
 def greeter_set(key, value, palettes):
     prefs = greeter_prefs()
@@ -1282,7 +1159,6 @@ def greeter_set(key, value, palettes):
     save(GREETER_PREFS, prefs)
     greeter_sync()
 
-
 def greeter_choose_image(value):
     path = Path(urllib.parse.unquote(value[7:]) if value.startswith('file://') else value).expanduser().resolve()
     if path.suffix.lower() not in {'.png', '.jpg', '.jpeg', '.webp'} or not path.is_file():
@@ -1293,9 +1169,7 @@ def greeter_choose_image(value):
     save(GREETER_PREFS, prefs)
     greeter_sync()
 
-
 def greeter_sync():
-    """Resolve 'same as desktop' choices and publish only when the result changed."""
     if not GREETER_REQUEST.parent.is_dir():
         return  # Host without the login-screen service.
     prefs = greeter_prefs()
@@ -1317,7 +1191,6 @@ def greeter_sync():
         stat = source.stat()
         if stat.st_size > 64 * 1024 * 1024:
             raise ValueError('Images larger than 64 MiB are not supported')
-        # The key changes with the image, so a new image always triggers a render.
         request['imageKey'] = hashlib.sha256(f'{source}:{stat.st_size}:{stat.st_mtime_ns}'.encode()).hexdigest()[:16]
     try:
         if json.loads(GREETER_REQUEST.read_text()) == request:
@@ -1334,7 +1207,6 @@ def greeter_sync():
     tmp.chmod(0o644)
     tmp.replace(GREETER_REQUEST)
 
-
 def greeter_data():
     try:
         status = json.loads(GREETER_STATUS.read_text())
@@ -1348,7 +1220,6 @@ def greeter_data():
             pass
     return {'available': GREETER_REQUEST.parent.is_dir(), 'prefs': greeter_prefs(), 'status': status,
             'preview': preview}
-
 
 def appearance():
     palettes = []
@@ -1369,16 +1240,13 @@ def appearance():
             'palettes': palettes, 'schedule': schedule,
             'wallpaper': wallpaper, 'greeter': greeter_data()}
 
-
 def wallpaper_gallery():
-    # Listing is on demand; opening Appearance never scans or decodes a collection.
     directory = wallpaper_command('wallpaper-config').get('directory', '')
     if not directory:
         return {'images': [], 'error': 'Choose a wallpaper folder to start.'}
     root = Path(directory)
     if not root.is_dir():
         return {'images': [], 'error': 'This folder is unavailable. Reconnect the drive or choose another folder.'}
-    # Subfolders are part of the collection; hidden folders and deep trees are not.
     images = []
     for folder, dirs, files in os.walk(root, onerror=lambda _: None):
         relative = Path(folder).relative_to(root)
@@ -1388,7 +1256,6 @@ def wallpaper_gallery():
     images.sort(key=lambda p: str(p.relative_to(root)).casefold())
     return {'images': [{'path': str(p), 'name': ' / '.join(p.relative_to(root).with_suffix('').parts).replace('_', ' ')}
                        for p in images[:5000]]}
-
 
 def wallpaper_thumbnail(value=None):
     if value is None:
@@ -1404,8 +1271,6 @@ def wallpaper_thumbnail(value=None):
     cache.mkdir(parents=True, exist_ok=True)
     target = cache / (key + '.jpg')
     if not target.is_file():
-        # Gallery and panel color extraction share one decoder and the same cache.
-        # Qt only receives the small JPEG, including for very large source PNGs.
         with (cache / '.lock').open('a') as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
             if not target.is_file():
@@ -1423,7 +1288,6 @@ def wallpaper_thumbnail(value=None):
                     raise ValueError('Preview unavailable for this image') from None
                 finally:
                     Path(name).unlink(missing_ok=True)
-                # Bounded, regenerable cache. Do not evict the image just requested.
                 files = sorted(cache.glob('*.jpg'), key=lambda p: p.stat().st_mtime, reverse=True)
                 total = 0
                 for item in files:
@@ -1431,7 +1295,6 @@ def wallpaper_thumbnail(value=None):
                     if total > 128 * 1024 * 1024 and item != target:
                         item.unlink(missing_ok=True)
     return {'url': target.as_uri(), 'path': str(path)}
-
 
 def appearance_action(args):
     if not args:
@@ -1472,7 +1335,6 @@ def appearance_action(args):
         out = GREETER_STATUS.parent
         if not (out / 'regreet.toml').is_file():
             raise ValueError('The login screen has not been rendered yet')
-        # Demo mode never talks to greetd: the same look, without a real login.
         log = Path(os.environ.get('XDG_RUNTIME_DIR', '/tmp')) / 'regreet-preview.log'
         subprocess.Popen(['oninix-app', 'regreet', '--demo', '--logs', str(log),
                           '--config', str(out / 'regreet.toml'), '--style', str(out / 'regreet.css')],
@@ -1527,14 +1389,12 @@ def appearance_action(args):
                 config[key] = dict(tones, **{values[0]: values[1]})
             else:
                 raise ValueError('Invalid layout setting')
-            # Only Classic remains; retire old layout/dock preferences on the next save.
             config = {key: value for key, value in config.items() if key in {
                 'layout', 'panelWidth', 'panelHeight', 'panelRadius', 'panelOpacity', 'panelBackground', 'adaptivePanels', 'groupStrength', 'groupTones', 'buttonMode', 'buttonTones', 'buttonStrength'}}
             config['layout'] = 'classic'
             save(target, config)
     else:
         raise ValueError('Invalid appearance setting')
-
 
 def action(command, args):
     if command == 'system-agent' and not args:
@@ -1560,7 +1420,6 @@ def action(command, args):
     elif command == 'appearance':
         appearance_action(args)
         if args and args[0] in {'palette', 'wallpaper', 'wallpaper-mode'}:
-            # Best effort: a login-screen problem must not undo a desktop change.
             try:
                 greeter_sync()
             except (OSError, ValueError, RuntimeError):
@@ -1616,7 +1475,6 @@ def action(command, args):
     elif command in {'copy', 'delete'} and len(args) == 1:
         line = clip_line(args[0])
         if command == 'copy':
-            # The clipboard owner may keep inherited pipes open after its parent exits.
             subprocess.run(['wl-copy'], input=decode(line), stdout=subprocess.DEVNULL,
                            stderr=subprocess.DEVNULL, timeout=6, check=True, env=ENV)
         else:
@@ -1625,7 +1483,6 @@ def action(command, args):
         copy = args[0] == '--copy'
         shelf_add(args[1:] if copy else args, copy)
     elif command == 'shelf-clip' and not args:
-        # wl-paste --watch feeds every clipboard change here; only file URIs count.
         if os.environ.get('CLIPBOARD_STATE', 'data') == 'data':
             shelf_clip(sys.stdin.buffer.read(256 * 1024))
     elif command == 'shelf-remove' and len(args) == 1:
@@ -1688,7 +1545,6 @@ def action(command, args):
         raise ValueError('Unknown desktop action')
     return {'ok': True}
 
-
 def main():
     os.umask(0o077)
     try:
@@ -1720,11 +1576,9 @@ def main():
             result = action(command, args)
         print(json.dumps(result))
     except Exception as error:
-        # Command output may contain notification text or secrets; never log it.
         message = str(error) if isinstance(error, (ValueError, RuntimeError)) else 'Service unavailable or action failed'
         print(json.dumps({'error': message}))
         raise SystemExit(1)
-
 
 if __name__ == '__main__':
     main()

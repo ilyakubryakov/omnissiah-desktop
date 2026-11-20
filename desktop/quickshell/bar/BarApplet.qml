@@ -6,13 +6,10 @@ import Quickshell.Services.Pipewire
 import Quickshell.Services.SystemTray
 import "../shared" as Shared
 
-// One movable panel icon of the launchers or status group, with its own card or menu.
-// BarItems places it; the token names it (see BarItemsLogic.js).
 Item {
     id: root
     required property string token
     required property var bar
-    // Battery, recording and keep-awake only take space while they mean something.
     readonly property bool shown: token === "battery" ? Quickshell.env("ONINIX_LAPTOP") === "1"
         : token === "recording" ? StatusState.recording
         : token === "awake" ? StatusState.awake : true
@@ -43,7 +40,6 @@ Item {
         }
     }
 
-    // Folds the tray away; the choice survives config reloads.
     Component {
         id: tray
         RowLayout {
@@ -65,12 +61,9 @@ Item {
                     id: trayIcon
                     required property var modelData
                     visible: trayState.shown
-                    // Mdi glyphs fill ~0.8 em, so raster icons get the same visual size.
                     readonly property int iconSize: Math.round((Colors.fontSize + 2) * 0.8)
                     implicitWidth: Colors.fontSize + 4
                     implicitHeight: root.bar.implicitHeight
-                    // A glyph wherever one exists, so tray icons match the launchers;
-                    // stateful trays (bluetooth, Nextcloud) keep their state.
                     readonly property string glyph: {
                         const k = ((trayIcon.modelData.id || "") + " " + (trayIcon.modelData.title || "") + " "
                                    + (trayIcon.modelData.tooltipTitle || "")).toLowerCase()
@@ -117,8 +110,6 @@ Item {
                         fillMode: Image.PreserveAspectFit
                         smooth: true
                         mipmap: true
-                        // Every remaining tray icon as a flat silhouette in the bar's text colour:
-                        // brightness pushes the pixels to white, colorization tints them.
                         layer.enabled: GraphicsInfo.api !== GraphicsInfo.Software
                         layer.effect: MultiEffect {
                             brightness: 1.0
@@ -143,9 +134,6 @@ Item {
                             else if (m.button === Qt.RightButton || item.onlyMenu) {
                                 if (item.hasMenu) trayMenu.show(item, trayIcon)
                             } else {
-                                // Apps that hide to the tray by minimizing (Wine's Battle.net) cannot
-                                // unminimize on Wayland, only ask for attention: bring the parked
-                                // window back here, the click is the owner's explicit request.
                                 const keys = [item.id, item.title].map(v => ("" + (v || "")).toLowerCase()).filter(v => v.length > 2)
                                 const parked = Minimized.windows.find(c => keys.some(k =>
                                     ("" + (c["class"] || "")).toLowerCase().includes(k) || ("" + (c.title || "")).toLowerCase() === k))
@@ -165,7 +153,6 @@ Item {
         }
     }
 
-    // Network details are available in the popover.
     Component {
         id: network
         Seg {
@@ -205,7 +192,6 @@ Item {
         }
     }
 
-    // Recording and keep-awake are states one forgets about; a click ends them.
     Component {
         id: recording
         Seg {
@@ -224,7 +210,6 @@ Item {
         }
     }
 
-    // What the capture key does; the menu switches it and captures right away.
     Component {
         id: capture
         Seg {
@@ -247,7 +232,6 @@ Item {
                 }
                 function pick(key, value) { DesktopData.act("capture-set", [key, value]) }
                 function flip(key) { pick(key, cap[key] === "yes" ? "no" : "yes") }
-                // A short pause lets the menu vanish before a screen shot.
                 function now(args) {
                     open = false
                     Hypr.exec("sh -c 'sleep 0.3; exec " + StatusState.scripts + "shot.sh " + args + "'")
@@ -288,7 +272,6 @@ Item {
         }
     }
 
-    // Lit while the mic is live; crossed out and plain when muted or absent.
     Component {
         id: microphone
         Seg {
@@ -311,7 +294,6 @@ Item {
         Seg {
             id: notificationSeg
             glyph: "\u{F009A}"
-            // A dot, not a count: the number invited checking it (owner 2026-11-15).
             badge: DesktopData.unreadCount === 0 ? "transparent" : DesktopData.controls.dnd ? Colors.muted : Colors.statusUrgent
             tint: DesktopData.controls.dnd ? Colors.muted : Colors.foreground
             onClicked: { notificationPopup.dismiss(); root.bar.openPanel("notifications") }
@@ -370,7 +352,6 @@ Item {
             toolTip: "Control Center · " + (DesktopData.controls.mode || "normal") + " · Meta+Ctrl+C"
             tint: (DesktopData.controls.mode || "normal") === "normal" ? Colors.foreground : Colors.accent
             onClicked: controlCenter.togglePinned()
-            // The hotkey reaches the chip on the main screen (ControlCenterState).
             readonly property bool primary: root.bar.screen === Shared.Screens.main
             onPrimaryChanged: ControlCenterState.chips += primary ? 1 : -1
             Component.onCompleted: if (primary) ControlCenterState.chips += 1
@@ -379,7 +360,6 @@ Item {
                 target: ControlCenterState
                 function onToggleRequested() { if (controlsSeg.primary) controlCenter.togglePinned() }
             }
-            // Opens on click only, like the macOS Control Center: no hover preview.
             BarPopup {
                 id: controlCenter
                 anchorItem: controlsSeg; barWindow: root.bar

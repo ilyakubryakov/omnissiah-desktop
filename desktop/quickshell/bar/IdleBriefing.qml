@@ -4,7 +4,6 @@ import QtQuick.Layouts
 import QtQuick.Controls
 import "../shared" as Shared
 
-// AI quotas for configured providers, with details in the hover card.
 RowLayout {
     id: root
     required property var barWindow

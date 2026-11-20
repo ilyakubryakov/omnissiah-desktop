@@ -42,7 +42,6 @@ PanelWindow {
         target: "notebook"
         function toggle(): void { root.toggle() }
         function close(): void { root.opened = false }
-        // Meta+Shift+N: the primary selection goes into the open note (or a new one).
         function capture(): void { selection.running = true }
         function meetings(): void { NotebookData.save(false); root.page = "meetings"; root.settings = false; if (!root.opened) root.toggle() }
     }
@@ -63,7 +62,6 @@ PanelWindow {
             }
         }
     }
-    // Pinned mode leaves other applications usable while the note stays visible.
     Shared.ClickCatcher { active: root.opened && !root.pinned; onClicked: root.opened = false }
     Rectangle {
         id: surface
@@ -152,8 +150,6 @@ PanelWindow {
                     text: NotebookData.title
                     onTextEdited: NotebookData.edit(text, editor.text)
                 }
-                // Clickable checklist: toggles "- [ ]" lines through the normal save path,
-                // so a note changed elsewhere still ends in the conflict prompt.
                 ScrollView {
                     visible: NotebookData.tasks.length > 0
                     Layout.fillWidth: true; Layout.maximumHeight: Shared.DesktopStyle.px(170)
@@ -200,7 +196,6 @@ PanelWindow {
                             onTextChanged: { if (activeFocus && text !== NotebookData.body) NotebookData.edit(titleField.text, text) }
                             Keys.onPressed: event => {
                                 if (event.key === Qt.Key_S && event.modifiers & Qt.ControlModifier) { NotebookData.save(false); event.accepted = true }
-                                // Ctrl+Enter toggles the task on the cursor's line.
                                 else if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && event.modifiers & Qt.ControlModifier) {
                                     const line = text.slice(0, cursorPosition).split("\n").length - 1
                                     const position = cursorPosition

@@ -19,7 +19,6 @@ Singleton {
     }
     readonly property int outerGap: 0
     readonly property bool customCorners: typeof ShellLayout.state.panelRadius === "number"
-    // A file created after start is not watched yet; poll only while it is missing.
     property bool missing: false
     Timer { interval: 2000; running: root.missing; repeat: true; onTriggered: store.reload() }
     readonly property int cornerRadius: Math.min(barHeight / 2, customCorners ? Math.max(0, Math.min(24, ShellLayout.state.panelRadius)) : style === "islands" ? 12 : 0)

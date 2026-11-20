@@ -15,7 +15,6 @@ RowLayout {
     signal openCalendar()
         spacing: 8
 
-        // Station only: oninix-status is off on the laptop and stale data is never shown.
         Seg {
             id: gpuSeg
             onClicked: resourcePopup.togglePinned()
@@ -88,7 +87,6 @@ RowLayout {
         onOpenedChanged: if (opened && (Weather.stale || Weather.checkedAt === 0 || Weather.error !== "")) Weather.refresh()
         WeatherCard { Layout.fillWidth: true }
     }
-    // Click only: a hover preview of session actions would be noise.
     BarPopup {
         id: powerPopup
         anchorItem: powerSeg; barWindow: bar.barWindow; above: bar.barWindow.edge === "bottom"; cardWidth: Shared.DesktopStyle.px(400)

@@ -5,9 +5,6 @@ import Quickshell
 import Quickshell.Wayland
 import "../shared" as Shared
 
-// Right-click on the empty desktop opens a menu of desktop actions. A transparent
-// Bottom-layer surface over the wallpaper catches the click; windows and panels stay
-// above it. Escape, a pick or a click anywhere else closes the menu.
 Scope {
     id: root
     required property var screens
@@ -73,7 +70,6 @@ Scope {
                 readonly property int edgeGap: Shared.DesktopStyle.px(8)
                 width: Shared.DesktopStyle.px(260)
                 height: column.implicitHeight + Shared.DesktopStyle.px(16)
-                // Opens at the pointer, flipped inward near the screen edges.
                 x: root.at.x + width + edgeGap > menu.width ? Math.max(edgeGap, root.at.x - width) : root.at.x
                 y: root.at.y + height + edgeGap > menu.height ? Math.max(edgeGap, root.at.y - height) : root.at.y
                 color: Colors.background
@@ -106,7 +102,6 @@ Scope {
 
                     DropdownRow { header: true; label: "Station" }
                     DropdownRow { glyph: "\u{F1DE}"; label: "Control Station"; detail: "Win+,"; onClicked: root.run(() => root.openPanel("settings")) }
-                    // A short pause lets the menu vanish before the capture starts.
                     DropdownRow { glyph: "\u{F0100}"; label: "Capture"; onClicked: root.run(() => root.exec(["sh", "-c", "sleep 0.3; exec \"$0\"", root.scripts + "shot.sh"])) }
                     DropdownRow { glyph: "\u{F033E}"; label: "Lock"; detail: "Win+L"; onClicked: root.run(() => root.exec(["loginctl", "lock-session"])) }
                 }

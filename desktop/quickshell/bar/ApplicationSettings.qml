@@ -65,8 +65,6 @@ ColumnLayout {
         }
         SettingsRow {
             stacked: true
-            // The outer Control Station scroll area owns scrolling; a bounded virtual list
-            // avoids constructing every installed app when opening Appearance.
             ListView {
                 Layout.fillWidth: true; Layout.preferredHeight: Shared.DesktopStyle.px(330)
                 clip: true; spacing: 0; model: root.results

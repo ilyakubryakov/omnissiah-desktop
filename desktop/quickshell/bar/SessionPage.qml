@@ -4,7 +4,6 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "../shared" as Shared
 
-// Session: autostart, apps on workspaces, default apps and capture shortcuts.
 ColumnLayout {
     id: root
     spacing: Shared.DesktopStyle.px(20)

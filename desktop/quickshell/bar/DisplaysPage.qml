@@ -4,8 +4,6 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "../shared" as Shared
 
-// Control Center > Displays. Edits stay a local draft until Apply; oninix-display
-// then reverts by itself unless Keep is pressed, so a blank screen undoes itself.
 ColumnLayout {
     id: page
     spacing: Shared.DesktopStyle.px(20)
@@ -59,7 +57,6 @@ ColumnLayout {
             return x < o.x + ow && o.x < x + w && y < o.y + oh && o.y < y + h
         })
     }
-    // Keep a shared edge with some display; snap to its start, centre or end when close.
     function align(p, size, o, osize) {
         const v = Math.max(o - size + 1, Math.min(o + osize - 1, p))
         for (const t of [o, o + osize - size, o + Math.round((osize - size) / 2)])
@@ -89,7 +86,6 @@ ColumnLayout {
         if (mx !== 0 || my !== 0)
             draft = draft.map(d => d.enabled && !d.mirror ? Object.assign({}, d, { x: d.x - mx, y: d.y - my }) : d)
     }
-    // Something switched on or unmirrored lands to the right of the current layout.
     function placeRight(key) {
         const others = placed.filter(d => d.key !== key)
         const right = others.length ? Math.max(...others.map(o => o.x + logical(o)[0])) : 0
@@ -101,7 +97,6 @@ ColumnLayout {
         update(d.key, { width: width, height: height, refresh: refresh, scale: scale })
         relayout()
     }
-    // A size change can push neighbours into overlap; re-snap the changed display.
     function relayout() {
         const d = selected
         if (d && d.enabled && !d.mirror) {
@@ -162,7 +157,6 @@ ColumnLayout {
                 return { x: x, y: y, w: Math.max(...x2) - x, h: Math.max(...y2) - y }
             }
             readonly property real fitK: Math.min((width - 40) / bounds.w, (height - 40) / bounds.h)
-            // Frozen while dragging so the layout does not rescale under the pointer.
             readonly property real k: dragging ? frozenK : fitK
             readonly property real ox: (width - bounds.w * k) / 2 - bounds.x * k
             readonly property real oy: (height - bounds.h * k) / 2 - bounds.y * k

@@ -1,4 +1,3 @@
-"""Portable shell preferences and appearance snapshots; device bindings stay local."""
 from contextlib import contextmanager
 from copy import deepcopy
 import fcntl
@@ -16,8 +15,6 @@ TILES = ('network', 'bluetooth', 'dnd', 'awake', 'nightlight', 'microphone', 'ou
 PAGES = ('quick', 'audio', 'network', 'displays', 'devices', 'power', 'session', 'system',
          'clipboard', 'calendars', 'overview', 'themes', 'panels', 'apps', 'login', 'modes')
 LAYOUT = {'top': list(GROUPS[:3]), 'bottom': list(GROUPS[3:]), 'hidden': []}
-# Panel icons of the launchers and status groups; pinned apps appear as app:<desktop id>.
-# Keep in sync with quickshell/bar/BarItemsLogic.js.
 ITEMS = {'launchers': ['applications', 'notebook'],
          'status': ['tray', 'network', 'battery', 'recording', 'awake', 'capture',
                     'microphone', 'notifications', 'volume', 'clock', 'controls']}
@@ -28,17 +25,14 @@ DEFAULT = {'version': 1, 'favorites': list(TILES[:6]),
            'ui': {'last': 'quick', 'scroll': {}}}
 LOOK_FILES = ('name', 'shell.json', 'panels.json', 'desktop.conf', 'icons.conf', 'launchers.json', 'schedule.conf')
 
-
 def state():
     return Path(os.environ.get('XDG_STATE_HOME', Path.home() / '.local/state'))
-
 
 def read(path, default):
     try:
         return json.loads(path.read_text())
     except (OSError, ValueError):
         return deepcopy(default)
-
 
 def atomic(path, text):
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -50,10 +44,8 @@ def atomic(path, text):
     finally:
         Path(tmp).unlink(missing_ok=True)
 
-
 def write(path, value):
     atomic(path, json.dumps(value, ensure_ascii=False, indent=2) + '\n')
-
 
 @contextmanager
 def change_lock():
@@ -62,7 +54,6 @@ def change_lock():
     with (folder / 'shell.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         yield
-
 
 def validate_layout(value):
     if not isinstance(value, dict) or set(value) != {'top', 'bottom', 'hidden'}:
@@ -73,7 +64,6 @@ def validate_layout(value):
     if sorted(items) != sorted(GROUPS) or 'status' in value['hidden']:
         raise ValueError('Keep every group once and keep the Control Station group visible')
     return value
-
 
 def validate_items(value):
     if not isinstance(value, dict) or set(value) != set(ITEMS):
@@ -87,7 +77,6 @@ def validate_items(value):
     if 'controls' not in value['status']:
         raise ValueError('Keep Control Station in the status group')
     return value
-
 
 def preferences():
     value = read(state() / 'theme/control-center.json', DEFAULT)
@@ -116,16 +105,13 @@ def preferences():
                                       and type(v) in (int, float) and 0 <= v <= 1}
     return result
 
-
 def save_preferences(value):
     write(state() / 'theme/control-center.json', value)
-
 
 def look_path(name):
     if name == 'schedule.conf':
         return Path(os.environ.get('XDG_CONFIG_HOME', Path.home() / '.config')) / 'theme-schedule.conf'
     return state() / 'theme' / name
-
 
 def snapshot():
     files = {}
@@ -135,11 +121,9 @@ def snapshot():
     prefs = preferences()
     return {'files': files, 'layouts': prefs['layouts'], 'items': prefs['items']}
 
-
 def remember(before, label='Appearance changed'):
     if before != snapshot():
         write(state() / 'oninix/appearance-undo.json', {'snapshot': before, 'label': label, 'at': time.time()})
-
 
 def apply_snapshot(value):
     if not isinstance(value, dict):
@@ -157,7 +141,6 @@ def apply_snapshot(value):
     if palette and not re.fullmatch(r'[a-z0-9-]{1,48}', palette):
         raise ValueError('Invalid palette name')
     layouts = {role: validate_layout(value.get('layouts', {})[role]) for role in ('primary', 'secondary')}
-    # Presets saved before panel icons became movable keep the current arrangement.
     items = validate_items(value['items']) if 'items' in value else None
     for name, text in files.items():
         path = look_path(name)
@@ -177,7 +160,6 @@ def apply_snapshot(value):
         subprocess.run(['hyprctl', 'reload'], check=True, stdout=subprocess.DEVNULL,
                        stderr=subprocess.DEVNULL, timeout=10)
 
-
 def data():
     looks = read(state() / 'theme/looks.json', {})
     undo = read(state() / 'oninix/appearance-undo.json', {})
@@ -186,7 +168,6 @@ def data():
     return {'prefs': preferences(), 'looks': sorted(looks) if isinstance(looks, dict) else [],
             'undo': bool(undo.get('snapshot')), 'undoLabel': undo.get('label', ''),
             'devices': read(state() / 'oninix/work-mode-devices.json', {})}
-
 
 def dispatch(args):
     command = args[0] if args else 'data'

@@ -18,10 +18,8 @@ DAY = 24 * 60 * 60
 DUE_AGE_DAYS = 14
 RENOTIFY = 3 * DAY
 
-
 def run(args, timeout=120):
     return subprocess.run(args, capture_output=True, text=True, timeout=timeout, check=True).stdout
-
 
 def read_json(path, default):
     try:
@@ -29,20 +27,17 @@ def read_json(path, default):
     except (OSError, ValueError):
         return default
 
-
 def write_json(path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix('.tmp')
     tmp.write_text(json.dumps(value))
     tmp.replace(path)
 
-
 def oninix_input():
     lock = json.loads((FLAKE / 'flake.lock').read_text())
     nodes = lock['nodes']
     node = nodes[nodes['root']['inputs']['oninix']]
     return node
-
 
 def upstream(node):
     source = UPSTREAM
@@ -54,7 +49,6 @@ def upstream(node):
         data = json.loads(run(['nix', 'flake', 'metadata', '--json', '--refresh', source]))
     return data['locked']
 
-
 def original_ref(original):
     if original['type'] == 'path':
         return 'path:' + original['path']
@@ -64,10 +58,8 @@ def original_ref(original):
         return 'github:' + original['owner'] + '/' + original['repo'] + ('/' + original['ref'] if 'ref' in original else '')
     raise ValueError('Unsupported update source')
 
-
 def revision(node):
     return node.get('rev') or node.get('narHash', '').removeprefix('sha256-')
-
 
 def assess(item, now):
     if item['status'] == 'unknown':
@@ -81,7 +73,6 @@ def assess(item, now):
     return {'level': 'due' if reasons else 'available', 'count': 1, 'reasons': reasons,
             'summary': 'Time to update: ' + ', '.join(reasons) if reasons else 'An OniNix update is waiting, no rush',
             'blocker': '', 'unreachable': [], 'nixpkgsAgeDays': age}
-
 
 def check():
     STATE.mkdir(parents=True, exist_ok=True)
@@ -106,7 +97,6 @@ def check():
         write_json(CHECK, value)
         return value
 
-
 def session_open():
     session = read_json(SESSION, {})
     pid = session.get('pid')
@@ -118,10 +108,8 @@ def session_open():
     except OSError:
         return False
 
-
 def status():
     return {'sessionOpen': session_open(), 'checkRunning': False, 'agent': 'claude'}
-
 
 def launch():
     if session_open():
@@ -142,7 +130,6 @@ def launch():
     write_json(SESSION, {'pid': process.pid, 'startedAt': time.time()})
     return {}
 
-
 def apply_layer():
     with Path(LAYER_PROFILE).with_name('lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
@@ -158,7 +145,6 @@ def apply_layer():
             raise
         print('OniNix profile updated. Log out and in to reload the desktop.')
 
-
 def daily():
     cached = read_json(CHECK, {})
     if time.time() - cached.get('checkedAt', 0) >= DAY:
@@ -171,7 +157,6 @@ def daily():
     if shutil.which('notify-send'):
         subprocess.run(['notify-send', '-a', 'OniNix', 'Time to update OniNix', cached['assessment']['summary']])
     write_json(reminder, {'notifiedAt': time.time()})
-
 
 def main(args):
     if args == ['status']:
@@ -186,7 +171,6 @@ def main(args):
         daily()
     else:
         raise SystemExit('Usage: oninix-maintenance status|check|launch|daily')
-
 
 if __name__ == '__main__':
     main(sys.argv[1:])

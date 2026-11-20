@@ -5,9 +5,6 @@ import Quickshell
 import Quickshell.Io
 import "../shared" as Shared
 
-// Super+/: one page with the shortcuts used every day, read live from
-// `hyprctl binds` by description so it never goes stale. The full guide
-// (every bind, with search) stays on Super+Shift+H.
 ToolOverlay {
     id: root
     title: "Shortcuts"

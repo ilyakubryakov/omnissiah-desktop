@@ -27,7 +27,6 @@ VAD = speech.CACHE / 'ggml-silero-v6.2.0.bin'
 ASSISTANT = Path(shutil.which('oninix-spirit') or '/run/current-system/sw/bin/oninix-spirit')
 VAD_HASH = '2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987'
 
-
 def settings(values=None):
     value = dict(model=speech.profile().get('model', 'base'), language='auto', vocabulary='')
     value.update(speech.read(CONFIG, {}))
@@ -42,10 +41,8 @@ def settings(values=None):
         speech.write(CONFIG, value)
     return value
 
-
 def available_vad():
     return VAD.is_file() and VAD.stat().st_size == 885098 and speech.read(VAD.with_suffix('.verified')) == VAD_HASH
-
 
 def focus():
     locked = json.loads(subprocess.check_output(['hyprctl','-j','locked'], timeout=2))
@@ -56,10 +53,8 @@ def focus():
         raise ValueError('Focus a text field in an application first.')
     return {key:window.get(key) for key in ('address','pid','class','title','monitor','xwayland')}
 
-
 def same_window(original, current):
     return all(original.get(k) == current.get(k) for k in ('address','pid','class'))
-
 
 def text_from(result):
     parts = []
@@ -69,7 +64,6 @@ def text_from(result):
             parts.append(text)
     text = ' '.join(' '.join(parts).split())
     return ''.join(c for c in text if ord(c) >= 32 and ord(c) != 127)[:12000]
-
 
 def executable(name):
     found = shutil.which(name)
@@ -81,15 +75,11 @@ def executable(name):
         raise ValueError(name + ' is not installed.')
     return found
 
-
 def insert_text(text, target, cancelled):
     if not target.get('xwayland'):
         speech.run([executable('wtype'),'-'],cancelled,input_text=text,timeout=10)
         return
 
-    # XWayland clients can retain the old keymap while wtype installs a new
-    # Unicode map, turning speech into unrelated physical-key characters.
-    # Paste uses a fixed shortcut and transfers UTF-8 without that keymap race.
     paste = executable('wl-paste')
     copy = executable('wl-copy')
     types = subprocess.run([paste,'--list-types'],capture_output=True,timeout=3)
@@ -107,32 +97,22 @@ def insert_text(text, target, cancelled):
     owner = subprocess.Popen([copy,'--foreground','--sensitive','--type','text/plain;charset=utf-8'],stdin=subprocess.PIPE,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     try:
         owner.stdin.write(text.encode()); owner.stdin.close()
-        # Wait for ownership before sending the shortcut. Do not read the
-        # clipboard here: that could consume a paste-once selection.
         if cancelled.wait(.15) or owner.poll() is not None:
             raise ValueError('Clipboard paste interrupted. Your dictation is kept.')
         if not same_window(target,focus()):
             raise ValueError('Focus changed before paste. Your dictation is kept.')
-        # Hyprland sends the shortcut with the real keyboard keymap, so it does
-        # not hit the same race. code:55 is the physical V key: a keysym fails
-        # while the Russian layout is active.
         address = target.get('address','')
         if not re.fullmatch(r'0x[0-9a-f]+', address):
             raise ValueError('Window address is unknown. Your dictation is kept.')
         speech.run(['hyprctl','dispatch',"hl.dsp.send_shortcut({mods='CTRL', key='code:55', window='address:" + address + "'})"],cancelled,timeout=3)
-        # The recipient requests the selection asynchronously after the key.
         time.sleep(.6)
     finally:
-        # A new selection terminates wl-copy. Never replace something copied
-        # by the owner in the meantime. Restore the preferred representation,
-        # including binary images, rather than decoding it as plain text.
         if owner.poll() is None:
             command = [copy,'--type',saved_type] if saved_type else [copy,'--clear']
             subprocess.run(command,input=saved,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=3,check=True)
         if owner.poll() is None:
             owner.terminate()
         owner.wait(timeout=3)
-
 
 class Dictation:
     def __init__(self):
@@ -211,11 +191,8 @@ class Dictation:
                 if self.phase in ('recording','transcribing','cancelling'):
                     return self.status()
                 if self.text and self.phase == 'copied':
-                    # Already on the clipboard: a new press may start over.
                     self.text=''; (STATE/'draft.txt').unlink(missing_ok=True)
                 if self.text:
-                    # Keep the unsent words, but say why the key did nothing and let the
-                    # panels resurface them .
                     self.blocked+=1
                     self.message='Previous text is still waiting. Copy or dismiss it, then hold the key again.'
                     return self.status()
@@ -238,7 +215,6 @@ class Dictation:
                     raise ValueError('The machine spirit is not set up yet.')
                 if not assistant:
                     executable('wtype')
-                # Owner decision 2026-11-09: music goes down while he speaks (the monitor restores it).
                 self.ducked=oninix_duck.duck('dictation')>=0
                 nodes=self.devices()
                 selected=speech.read(STATE/'device.json',{}).get('name','default')
@@ -306,8 +282,6 @@ class Dictation:
                 try:
                     speech.run(command,self.cancelled,timeout=300)
                 except ValueError:
-                    # A busy GPU (e.g. a local LLM generating) can make the CUDA
-                    # backend fail; keep the phrase by retrying once on the CPU.
                     if self.cancelled.is_set(): raise
                     (RUNTIME/'result.json').unlink(missing_ok=True)
                     speech.run(command[:-1]+['-ng','-t','8','-np'],self.cancelled,timeout=300)
@@ -400,7 +374,6 @@ class Dictation:
             self.download=dict(state='error',message='Model download failed. Check your connection and retry.')
         finally: self.downloading=False
 
-
 def serve():
     os.umask(0o077); RUNTIME.mkdir(parents=True,exist_ok=True,mode=0o700)
     guard=(RUNTIME/'lock').open('a');fcntl.flock(guard,fcntl.LOCK_EX|fcntl.LOCK_NB)
@@ -428,7 +401,6 @@ def serve():
             raise SystemExit(0)
         signal.signal(signal.SIGTERM,close);signal.signal(signal.SIGINT,close)
         server.serve_forever()
-
 
 def rpc(request):
     with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as client:

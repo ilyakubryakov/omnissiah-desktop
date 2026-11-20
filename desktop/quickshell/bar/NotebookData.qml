@@ -35,7 +35,6 @@ Singleton {
     signal noteLoaded()
     signal captureFailed(string message)
 
-    // Markdown task lines in the body: [{line, done, text}] for the checklist strip.
     readonly property var tasks: {
         const out = [], lines = body.split("\n")
         for (let i = 0; i < lines.length; i++) {
@@ -54,7 +53,6 @@ Singleton {
         lines[index] = m[1] + (m[2] === " " ? "x" : " ") + m[3]
         edit(title, lines.join("\n")); noteLoaded()
     }
-    // Primary selection (or clipboard) into the open note, else into a new one.
     function capture(text) {
         const clean = text.replace(/\s+$/, "")
         if (!clean.trim()) { captureFailed("Select some text first."); return false }

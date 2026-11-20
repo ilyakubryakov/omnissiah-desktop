@@ -5,8 +5,6 @@ import Quickshell.Io
 import Quickshell.Services.Mpris
 import "../shared" as Shared
 
-// One cava process for every bar. It runs only while a player is actually
-// playing, the media view is shown and nothing is fullscreen.
 Singleton {
     id: root
     readonly property int count: 14

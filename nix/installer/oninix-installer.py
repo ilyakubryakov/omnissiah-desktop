@@ -32,17 +32,14 @@ FEATURES = [
 ]
 LAYOUTS = ['us', 'us,ru', 'us,de', 'us,fr', 'us,es', 'us,ua', 'gb', 'de', 'fr']
 
-
 def gum(*args, stdin=None):
     result = subprocess.run(['gum', *args], input=stdin, stdout=subprocess.PIPE, text=True)
     if result.returncode == 130:
         raise SystemExit('Installation cancelled.')
     return result
 
-
 def say(text, color=GLOW):
     subprocess.run(['gum', 'style', '--foreground', color, '--bold', text])
-
 
 def choose(header, options, selected=None, many=False):
     args = ['choose', '--header', header]
@@ -53,23 +50,19 @@ def choose(header, options, selected=None, many=False):
     out = gum(*args, *options).stdout.strip()
     return [line for line in out.splitlines() if line] if many else out
 
-
 def ask(header, value='', placeholder='', password=False):
     args = ['input', '--header', header, '--value', value, '--placeholder', placeholder]
     if password:
         args.append('--password')
     return gum(*args).stdout.strip()
 
-
 def confirm(text, default=True):
     args = ['confirm', text] + ([] if default else ['--default=false'])
     return subprocess.run(['gum', *args]).returncode == 0
 
-
 def run(args, **kwargs):
     print('$ ' + ' '.join(args), flush=True)
     subprocess.run(args, check=True, **kwargs)
-
 
 def detect_gpu():
     try:
@@ -86,15 +79,12 @@ def detect_gpu():
         return 'intel'
     return 'none'
 
-
 def detect_laptop():
     return any(Path('/sys/class/power_supply').glob('BAT*'))
-
 
 def detect_virt():
     result = subprocess.run(['systemd-detect-virt'], capture_output=True, text=True)
     return result.stdout.strip() if result.returncode == 0 else ''
-
 
 def disks():
     data = json.loads(subprocess.run(['lsblk', '-J', '-d', '-b', '-o', 'NAME,PATH,SIZE,MODEL,TYPE,RM,RO'],
@@ -110,7 +100,6 @@ def disks():
         model = (dev.get('model') or '').strip() or 'disk'
         result.append((dev['path'], f"{dev['path']}  {size:.0f} GB  {model}"))
     return result
-
 
 def disko_config(device, encrypt, password_file=None):
     btrfs = '''{
@@ -151,10 +140,8 @@ def disko_config(device, encrypt, password_file=None):
 }
 '''
 
-
 def nix_string(value):
     return json.dumps(value, ensure_ascii=False).replace('${', r'\${')
-
 
 def settings(answers):
     features = '\n'.join(f'      {key} = {"true" if key in answers["features"] else "false"};' for key, _ in FEATURES)
@@ -182,7 +169,6 @@ def settings(answers):
 }}
 '''
 
-
 def ask_password(label):
     while True:
         first = ask(label, password=True)
@@ -192,7 +178,6 @@ def ask_password(label):
         if first == ask('Repeat ' + label.lower(), password=True):
             return first
         say('The passwords do not match.', CRIMSON)
-
 
 def collect():
     say('OniNix installer · the machine spirit awaits')
@@ -229,7 +214,6 @@ def collect():
             'password': password, 'hostname': hostname, 'timezone': timezone, 'layout': layout,
             'gpu': gpu, 'laptop': laptop, 'virt': virt, 'features': features}
 
-
 def install(answers):
     with tempfile.TemporaryDirectory() as work:
         disko_file = Path(work) / 'disko.nix'
@@ -261,7 +245,6 @@ def install(answers):
     run(['nixos-enter', '--root', str(TARGET), '--', 'chpasswd'],
         input=f'{answers["user"]}:{answers["password"]}\n', text=True)
 
-
 def main():
     if os.geteuid() != 0:
         os.execvp('sudo', ['sudo', '--preserve-env=ONINIX_TEMPLATE,ONINIX_SOURCE,PATH', sys.executable, *sys.argv])
@@ -278,7 +261,6 @@ def main():
     say('OniNix is installed. The machine spirit sleeps until you reboot.')
     if confirm('Reboot now?'):
         run(['systemctl', 'reboot'])
-
 
 if __name__ == '__main__':
     main()

@@ -2,8 +2,6 @@ import QtQuick
 import QtQuick.Layouts
 import "../shared" as Shared
 
-// Mirrored spectrum in the group accent. At rest (paused, no cava) the bars
-// settle into a row of dots instead of disappearing, so the bar width stays put.
 Item {
     id: root
     property color tone: Colors.accent

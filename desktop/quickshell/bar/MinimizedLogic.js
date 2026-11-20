@@ -1,10 +1,6 @@
 .pragma library
 
-// Pure helpers behind Minimized.qml; quickshell/tests/minimized.test.cjs covers them.
-// `apps` maps desktop entry ids to entries ({startupClass}); clients come from hyprctl.
-
 var WORKSPACE = "special:minimized"
-// Window classes that differ from their desktop entry ids.
 var CLASS_OF = {"com.google.chrome": "google-chrome", "com.anthropic.claude": "claude", "md.obsidian.obsidian": "obsidian"}
 
 function isMinimized(c) { return !!(c && c.workspace && c.workspace.name === WORKSPACE) }
@@ -32,8 +28,6 @@ function matches(id, c, apps) {
     return cls === key || cls === CLASS_OF[key] || (!!e && (e.startupClass || "").toLowerCase() === cls)
 }
 
-// Minimize order: known windows keep their number, new ones get the next numbers.
-// Windows found already minimized (panel restart) are ordered by focus history.
 function updateOrder(order, sequence, minimized) {
     var next = {}, n = sequence
     minimized.forEach(function (c) { if (order[c.address] !== undefined) next[c.address] = order[c.address] })
@@ -45,7 +39,6 @@ function updateOrder(order, sequence, minimized) {
 
 function rank(c, order) { return order[c.address] !== undefined ? order[c.address] : -c.focusHistoryID }
 
-// Unpinned apps with minimized windows, in the order their first window was minimized.
 function extraIds(minimized, pinned, apps, order) {
     var index = classIndex(apps), seen = []
     minimized.slice().sort(function (a, b) { return rank(a, order) - rank(b, order) }).forEach(function (c) {
@@ -56,7 +49,6 @@ function extraIds(minimized, pinned, apps, order) {
     return seen
 }
 
-// Dock click: the most recently focused visible window, else the last minimized one.
 function pick(windows, order) {
     var visible = windows.filter(isVisible).sort(function (a, b) { return a.focusHistoryID - b.focusHistoryID })
     if (visible.length) return visible[0]
@@ -64,7 +56,6 @@ function pick(windows, order) {
     return hidden.length ? hidden[hidden.length - 1] : null
 }
 
-// comms-unread source for an app id; mail counts belong to the mail client.
 function unreadKey(id) {
     var key = id.toLowerCase()
     if (key.indexOf("telegram") >= 0) return "telegram"
@@ -73,7 +64,6 @@ function unreadKey(id) {
     return ""
 }
 
-// "" (nothing), "dot" (Slack exposes only a dot), or a capped count.
 function badge(id, unread) {
     var key = unreadKey(id)
     if (!key || !unread) return ""

@@ -1,4 +1,3 @@
--- Read bounded preferences as data, never execute state-directory code.
 local state = os.getenv("XDG_STATE_HOME") or (os.getenv("HOME") .. "/.local/state")
 local prefs = { windows = "flat", gap = "0", outer = "0", motion = "off", density = "compact" }
 local file = io.open(state .. "/theme/desktop.conf", "r")

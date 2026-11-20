@@ -1,12 +1,3 @@
-"""Notification tiers, the generated mako rules and the local delivery log.
-
-Tiers: important (stays until answered), normal, quiet (history only, no popup),
-hidden (discarded). Rules match the application and, optionally, the exact title;
-a title rule beats an application rule. Critical alerts and do-not-disturb always
-win, except Gaming mode which pauses every popup. The log keeps application,
-title, urgency and what happened, never bodies. The feed is a separate stream with
-bodies for Vika (personal_assistant bin/notifications), same retention.
-"""
 import json
 import os
 from pathlib import Path
@@ -17,12 +8,10 @@ TIERS = ('important', 'quiet', 'hidden')
 KEEP_DAYS = 21
 URGENCY = ('low', 'normal', 'critical')
 DEFAULT_RULES = [
-    # Bank confirmations and codes arrive through the phone; never quiet them.
     {'app': 'KDE Connect', 'summary': 'Revolut', 'tier': 'important'},
     {'app': 'KDE Connect', 'summary': 'Swedbank', 'tier': 'important'},
 ]
 STYLE = {
-    # Mako merges matching rules property by property; reset the parent tier fully.
     'important': ['invisible=0', 'history=1', 'default-timeout=0', 'ignore-timeout=1'],
     'quiet': ['invisible=1', 'history=1', 'default-timeout=1', 'ignore-timeout=1'],
     'hidden': ['invisible=1', 'history=0', 'default-timeout=1', 'ignore-timeout=1'],
@@ -40,41 +29,32 @@ invisible=1
 [mode=do-not-disturb urgency=critical]
 invisible=0
 
-# Action buttons are presented by Quickshell, with the same tier/DND guards.
 [actionable=1]
 invisible=1
 
-# Last, after tier and critical overrides: Gaming pauses every popup.
 [mode=gaming]
 invisible=1
 """
 
-
 def state():
     return Path(os.environ.get('XDG_STATE_HOME', str(Path.home() / '.local/state'))) / 'oninix'
-
 
 def rules_path():
     return state() / 'notification-rules.json'
 
-
 def mako_path():
     return state() / 'notification-rules.conf'
-
 
 def log_dir():
     return state() / 'notification-log'
 
-
 def feed_dir():
     return state() / 'notification-feed'
-
 
 def clean(text):
     if not isinstance(text, str) or len(text) > 200 or re.search(r'[\x00-\x1f\x7f]', text):
         raise ValueError('Notification rules take a single line of up to 200 characters')
     return text
-
 
 def valid(rule):
     try:
@@ -82,7 +62,6 @@ def valid(rule):
                 and clean(rule.get('app')) != '' and clean(rule.get('summary', '')) is not None)
     except ValueError:
         return False
-
 
 def load_rules():
     try:
@@ -94,18 +73,15 @@ def load_rules():
     rows = data.get('rules', []) if isinstance(data, dict) else []
     return [{'app': r['app'], 'summary': r.get('summary', ''), 'tier': r['tier']} for r in rows if valid(r)]
 
-
 def atomic(path, text):
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name('.' + path.name + '.tmp')
     tmp.write_text(text)
     tmp.replace(path)
 
-
 def save_rules(rules):
     atomic(rules_path(), json.dumps({'rules': rules}, indent=1, ensure_ascii=False) + '\n')
     render(rules)
-
 
 def set_rule(app, summary, tier):
     app, summary = clean(app), clean(summary)
@@ -117,7 +93,6 @@ def set_rule(app, summary, tier):
     save_rules(rules)
     return rules
 
-
 def tier(app, summary, rules):
     for r in rules:
         if r['app'] == app and r['summary'] and r['summary'] == summary:
@@ -127,14 +102,11 @@ def tier(app, summary, rules):
             return r['tier']
     return 'normal'
 
-
 def quote(value):
     return '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"'
 
-
 def mako(rules):
     out = ['# Generated from notification-rules.json by oninix-desktop; edits are replaced.', '']
-    # Application rules first, so a title rule for the same application wins.
     for r in sorted(rules, key=lambda r: bool(r['summary'])):
         head = 'app-name=' + quote(r['app'])
         if r['summary']:
@@ -142,12 +114,8 @@ def mako(rules):
         out += ['[' + head + ']'] + STYLE[r['tier']] + ['']
     return '\n'.join(out) + GUARD
 
-
 def render(rules=None):
     atomic(mako_path(), mako(load_rules() if rules is None else rules))
-
-
-# ---- delivery log -----------------------------------------------------------
 
 def append(record, now=None, directory=None):
     now = time.time() if now is None else now
@@ -158,10 +126,8 @@ def append(record, now=None, directory=None):
     with os.fdopen(fd, 'a') as stream:
         stream.write(json.dumps(dict(record, t=round(now, 3)), ensure_ascii=False) + '\n')
 
-
 def append_feed(record, now=None):
     append(record, now, feed_dir())
-
 
 def prune(now=None):
     now = time.time() if now is None else now
@@ -170,7 +136,6 @@ def prune(now=None):
         for path in directory.glob('*.jsonl'):
             if path.stem < cutoff:
                 path.unlink(missing_ok=True)
-
 
 def read_log(days, now=None):
     now = time.time() if now is None else now
@@ -189,10 +154,7 @@ def read_log(days, now=None):
                 rows.append(row)
     return rows
 
-
 class Monitor:
-    """Turns `busctl --user monitor --json=short org.freedesktop.Notifications` into log records.
-    The optional feed writer also gets each arrival with its body and the id it replaces."""
 
     def __init__(self, write, feed=None):
         self.write, self.feed_write, self.pending = write, feed, {}
@@ -224,7 +186,6 @@ class Monitor:
         elif kind == 'signal' and member == 'NotificationClosed' and len(data) == 2:
             self.write({'e': 'closed', 'o': message.get('sender'), 'id': data[0], 'reason': data[1]})
 
-
 def stats(days=7, now=None, rules=None):
     rules = load_rules() if rules is None else rules
     rows = read_log(days, now)
@@ -242,9 +203,7 @@ def stats(days=7, now=None, rules=None):
         item['dismissed'] += (r.get('o'), r.get('id')) in dismissed
     return sorted(table.values(), key=lambda i: -i['count'])
 
-
 def suggestions(days=7, now=None, rules=None, limit=3):
-    """Titles (or whole applications) that keep arriving and are never opened."""
     rules = load_rules() if rules is None else rules
     rows, out, apps = stats(days, now, rules), [], {}
     for item in rows:

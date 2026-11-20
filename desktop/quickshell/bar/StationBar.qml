@@ -12,7 +12,6 @@ PanelWindow {
     property string edge: "top"
     signal openPanel(string page)
     signal openCalendar()
-    // Icon drag between the launchers and status groups of this panel (BarItems).
     property string dragToken: ""
     property point dragPoint: Qt.point(-1e6, -1e6)
     signal iconDropped(string token)
@@ -80,10 +79,8 @@ PanelWindow {
                 Flickable {
                     id: viewport
                     anchors.fill: parent; clip: true; boundsBehavior: Flickable.StopAtBounds
-                    // Wheel scrolling only: a mouse flick would steal icon drags.
                     interactive: false
                     contentWidth: content.width; contentHeight: height
-                    // Narrow panels retain access to every applet by horizontal scrolling.
                     onContentWidthChanged: if (slot.modelData === "status") contentX = Math.max(0, contentWidth - width)
                     onWidthChanged: if (slot.modelData === "status") contentX = Math.max(0, contentWidth - width)
                     onContentXChanged: {
@@ -113,7 +110,6 @@ PanelWindow {
                         anchors.fill: parent; cursorShape: Qt.OpenHandCursor
                         onClicked: shellWindow.openPanel("panels")
                     }
-                    // The editor is the drag surface, leaving live bar applets intact.
                 }
             }
         }

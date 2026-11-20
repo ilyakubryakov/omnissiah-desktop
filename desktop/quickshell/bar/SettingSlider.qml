@@ -1,7 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
 
-// A Control Center slider (optionally labelled) that commits on drag release or a keyboard step.
 RowLayout {
     id: root
     property string label: ""
@@ -14,7 +13,6 @@ RowLayout {
     Layout.fillWidth: true
     spacing: 12
 
-    // Without a label it is the control of a SettingsRow, which shows the title.
     UiLabel {
         visible: root.label !== ""
         Layout.preferredWidth: 150

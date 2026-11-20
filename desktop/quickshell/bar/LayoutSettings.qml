@@ -4,7 +4,6 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "../shared" as Shared
 
-// Panel size, surface and accent colors, as System Settings style groups.
 ColumnLayout {
     id: root
     spacing: Shared.DesktopStyle.px(20)

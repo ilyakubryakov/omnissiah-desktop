@@ -2,8 +2,6 @@ import QtQuick
 import QtQuick.Layouts
 import "../shared" as Shared
 
-// Shared by Quick settings and the bar preview. PipeWire remains the source of
-// truth; moving a microphone slider must never unmute it as a side effect.
 ColumnLayout {
     id: root
     required property string title

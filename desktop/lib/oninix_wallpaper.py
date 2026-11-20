@@ -1,4 +1,3 @@
-"""Resolve the OniNix wallpaper and reuse the existing preferences format."""
 import json
 from pathlib import Path
 import sys
@@ -7,14 +6,12 @@ THEMES = Path(__file__).resolve().parents[1] / 'themes'
 sys.path.insert(0, str(THEMES))
 import wallpapers
 
-
 def current(config, palette):
     chosen = wallpapers.effective(config, palette)
     if chosen:
         return chosen
     image = 'Mechanicus_light.png' if wallpapers.palette_mode(palette) == 'light' else 'Mechanicus_Dark.png'
     return str(THEMES / 'wallpapers' / image)
-
 
 def main():
     command, palette, *args = sys.argv[1:]
@@ -45,7 +42,6 @@ def main():
         raise ValueError('Unknown wallpaper setting')
     wallpapers.save(config)
     print(json.dumps({'ok': True}))
-
 
 if __name__ == '__main__':
     try:

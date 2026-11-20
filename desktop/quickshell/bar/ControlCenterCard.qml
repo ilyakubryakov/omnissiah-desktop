@@ -5,9 +5,6 @@ import Quickshell
 import Quickshell.Services.Mpris
 import "../shared" as Shared
 
-// The macOS-style Control Center: quick toggles, sliders, now playing and the
-// desktop mode in one compact card under the panel chip. Settings live in the
-// Control Station; `settingsRequested` opens a page there.
 ColumnLayout {
     id: root
     signal settingsRequested(string page)
@@ -75,7 +72,6 @@ ColumnLayout {
         UiLabel { text: "Desktop mode"; font.weight: Font.DemiBold; font.pixelSize: Shared.DesktopStyle.px(13) }
         Segmented {
             Layout.fillWidth: true
-            // The laptop has no games or studio set (owner 2026-11-15).
             model: (Quickshell.env("ONINIX_LAPTOP") === "1" ? ["normal", "work", "call"] : ["normal", "work", "call", "game", "music"])
                 .map(id => ({id: id, title: id === "music" ? "Recording" : id.charAt(0).toUpperCase() + id.slice(1)}))
             current: DesktopData.controls.mode || "normal"

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Station launcher: applications, projects, files and workstation actions."""
 
 import os
 from pathlib import Path
@@ -10,7 +9,6 @@ import sys
 PROJECTS = Path.home() / "Projects"
 EXCLUDED = {".git", "node_modules", ".venv", ".terraform", "__pycache__", "target", "build", "dist", ".next", ".cache"}
 CACHE = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "oninix-launcher"
-
 
 def refresh_cache() -> None:
     import contextlib
@@ -28,13 +26,11 @@ def refresh_cache() -> None:
                 generate()
             temporary.replace(CACHE / mode)
 
-
 def emit_entry(path: Path, icon: str) -> None:
     relative = str(path.relative_to(PROJECTS))
     if any(character in str(path) for character in "\n\r\x00\x1f"):
         return
     print(f"{relative}\0icon\x1f{icon}\x1finfo\x1f{path}")
-
 
 def list_projects() -> None:
     for directory, children, _ in os.walk(PROJECTS):
@@ -47,7 +43,6 @@ def list_projects() -> None:
         else:
             children[:] = sorted(child for child in children if child not in EXCLUDED and not child.startswith("."))
 
-
 def list_files() -> None:
     if not PROJECTS.is_dir():
         return
@@ -59,14 +54,11 @@ def list_files() -> None:
         if name:
             emit_entry(PROJECTS / os.fsdecode(name), "text-x-generic")
 
-
 def launch(command: list[str]) -> None:
-    # Manage the chosen application, not the short-lived menu, through UWSM.
     if "HYPRLAND_INSTANCE_SIGNATURE" in os.environ:
         command = ["oninix-app", *command]
     subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                      stderr=subprocess.DEVNULL, start_new_session=True)
-
 
 def open_selection(action: int) -> None:
     selected = os.environ.get("ROFI_INFO")
@@ -78,7 +70,6 @@ def open_selection(action: int) -> None:
     commands = {10: [kitty, "--detach", "--directory", str(directory)], 11: ["code", str(directory)]}
     command = commands.get(action, ["xdg-open", str(path)])
     launch(command)
-
 
 def workstation_actions() -> dict:
     import shutil
@@ -113,7 +104,6 @@ def workstation_actions() -> dict:
         actions["vms"] = ("Virtual machines", "computer", ["virt-manager", "--connect", "qemu:///system"])
     return {key: value for key, value in actions.items() if shutil.which(value[2][0])}
 
-
 def run_actions(action: int) -> None:
     actions = workstation_actions()
     if action == 1:
@@ -126,7 +116,6 @@ def run_actions(action: int) -> None:
     print("\0no-custom\x1ftrue")
     for key, (label, icon, _) in actions.items():
         print(f"{label}\0icon\x1f{icon}\x1finfo\x1f{key}")
-
 
 def run_mode(mode: str) -> None:
     action = int(os.environ.get("ROFI_RETV", "0"))
@@ -146,11 +135,7 @@ def run_mode(mode: str) -> None:
     else:
         (list_projects if mode == "projects" else list_files)()
 
-
 def cached_mode(mode: str, script: str) -> str:
-    # Rofi initializes every enabled mode before painting Apps. Reading the two
-    # ready indexes with shell builtins + cat avoids two Python startups. Keep
-    # selection handling in Python, with argv (including paths with spaces).
     headers = (f"\\0prompt\\37{mode.title()}\\n"
                "\\0message\\37Enter: open   Alt+1 / Shift+Enter: terminal   Alt+2: VS Code   Tab / Shift+Tab: switch\\n"
                "\\0no-custom\\37true\\n\\0use-hot-keys\\37true\\n")
@@ -160,10 +145,7 @@ def cached_mode(mode: str, script: str) -> str:
     return mode.title() + ":" + shlex.join([
         "sh", "-c", reader, "oninix-launcher-mode", str(CACHE / mode), script, mode])
 
-
 def desktop_cache_stale() -> bool:
-    # Rofi never refreshes its drun cache. Store paths have a fixed mtime, so
-    # key it on the resolved application directories plus the user's own.
     dirs = [os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local/share"))]
     dirs += os.environ.get("XDG_DATA_DIRS", "/usr/local/share:/usr/share").split(":")
     stamp = []
@@ -184,7 +166,6 @@ def desktop_cache_stale() -> bool:
     except OSError:
         pass
     return True
-
 
 def main() -> None:
     show_actions = sys.argv[1:] == ["--show-actions"]
@@ -223,7 +204,6 @@ def main() -> None:
                     "-run-shell-command", "oninix-app {terminal} -e {cmd}",
                     "-terminal", "kitty"])
     os.execvp(command[0], command)
-
 
 if __name__ == "__main__":
     main()

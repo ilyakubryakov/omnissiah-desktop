@@ -9,8 +9,6 @@ Slider {
     focusPolicy: Qt.StrongFocus
     snapMode: Slider.SnapAlways
     property color tint: Colors.accent
-    // Animate a single visual position, so the fill and thumb never drift apart.
-    // The value itself remains immediate while dragging or using arrow keys.
     property real drawnPosition: visualPosition
     Behavior on drawnPosition { enabled: !slider.pressed; NumberAnimation { duration: Shared.DesktopStyle.fast; easing.type: Easing.OutCubic } }
     opacity: enabled ? 1 : 0.4

@@ -3,8 +3,6 @@ import QtQuick
 import QtQuick.Layouts
 import "../shared" as Shared
 
-// A Seg-like chip: accent glyph, optional value, per-source status dots,
-// provider meters or level bars.
 Item {
     id: chip
     property string glyph
@@ -14,14 +12,12 @@ Item {
     property var meters: []
     property color badge: "transparent"
     readonly property bool hovered: chipMouse.containsMouse
-    // Each item is { value: 0-100, color }; drawn as thin vertical level bars.
     property var bars: []
     function inheritedGroup() {
         for (let item = parent; item; item = item.parent)
             if (item.panelAccentGroup !== undefined) return item.panelAccentGroup
         return "status"
     }
-    // Optional status tint for the glyph; transparent keeps the panel accent.
     property color tint: "transparent"
     readonly property color glyphColor: tint.a > 0 ? tint : ShellLayout.buttonColor(inheritedGroup())
     signal clicked()

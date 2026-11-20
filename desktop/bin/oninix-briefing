@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Cached, read-only AI quota and Kubernetes summaries for the idle media area."""
 import concurrent.futures
 import datetime as dt
 import fcntl
@@ -21,13 +20,11 @@ import re
 CACHE = Path(os.environ.get('XDG_CACHE_HOME', Path.home() / '.cache')) / 'oninix-briefing'
 CLUSTERS = []
 
-
 def read(path):
     try:
         return json.loads(path.read_text())
     except (OSError, ValueError):
         return {}
-
 
 def cached(key, ttl, fetch):
     CACHE.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -42,7 +39,6 @@ def cached(key, ttl, fetch):
         try:
             data = {**fetch(), 'updatedAt': now, 'stale': False, 'error': ''}
         except Exception as error:
-            # Never pass kubectl stderr, credentials, or API response bodies to the UI/cache.
             message = str(error) if isinstance(error, SummaryError) else 'Update unavailable'
             data = {**old, 'stale': True, 'error': message}
         data['checkedAt'] = now
@@ -56,14 +52,11 @@ def cached(key, ttl, fetch):
                 os.unlink(tmp)
         return data
 
-
 class SummaryError(Exception):
     pass
 
-
 def number(value):
     return type(value) in (int, float) and math.isfinite(value)
-
 
 def quota(key, label, used, minutes, reset):
     if not number(used) or used < 0:
@@ -77,9 +70,7 @@ def quota(key, label, used, minutes, reset):
             'windowMinutes': minutes if number(minutes) and minutes > 0 else None,
             'resetsAt': reset if number(reset) and reset > 0 else None}
 
-
 def codex_response():
-    # Official local RPC: no thread, inference, reset-credit consumption or token parsing.
     try:
         proc = subprocess.Popen(['codex', 'app-server', '--listen', 'stdio://'],
                                 stdin=subprocess.PIPE, stdout=subprocess.PIPE,
@@ -123,7 +114,6 @@ def codex_response():
         raise SummaryError('Codex limits request timed out')
     finally:
         proc.stdin.close()
-        # Only this short-lived RPC process group, never an interactive Codex client.
         try:
             os.killpg(proc.pid, signal.SIGTERM)
         except ProcessLookupError:
@@ -134,7 +124,6 @@ def codex_response():
             os.killpg(proc.pid, signal.SIGKILL)
             proc.wait()
         proc.stdout.close()
-
 
 def codex_usage():
     data = codex_response()
@@ -155,14 +144,11 @@ def codex_usage():
         raise SummaryError('No subscription limits returned by Codex')
     return {'windows': windows}
 
-
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
 
-
 def claude_usage():
-    # Claude Code's existing usage endpoint. Private API: fail visibly if it changes.
     directory = Path(os.environ.get('CLAUDE_CONFIG_DIR', Path.home() / '.claude'))
     auth = read(directory / '.credentials.json').get('claudeAiOauth', {})
     token = auth.get('accessToken')
@@ -195,9 +181,7 @@ def claude_usage():
         raise SummaryError('No subscription limits returned by Claude')
     return {'windows': windows}
 
-
 def kube(config, context, resource, fields):
-    # JSONPath projects only metadata/status. Pod specs, environment and secrets stay out.
     template = '{range .items[*]}' + '{"\\t"}'.join('{' + f + '}' for f in fields) + '{"\\n"}{end}'
     cmd = ['kubectl', '--kubeconfig', str(config), '--context', context, '--request-timeout=8s',
            'get', resource, '--all-namespaces', '-o', 'jsonpath=' + template]
@@ -214,13 +198,11 @@ def kube(config, context, resource, fields):
         raise SummaryError('API unreachable')
     return [line.split('\t') for line in result.stdout.splitlines() if line]
 
-
 def age(value):
     try:
         return max(0, time.time() - dt.datetime.fromisoformat(value.replace('Z', '+00:00')).timestamp())
     except (ValueError, TypeError):
         return float('inf')
-
 
 def cluster(filename, context):
     config = Path.home() / '.kube/configs' / filename
@@ -247,7 +229,6 @@ def cluster(filename, context):
         if phase == 'Succeeded':
             completed += 1
             continue
-        # Failed job pods stay in history; warn for a day, not until someone deletes them.
         if phase == 'Failed' and 'Job' in owner.split() and age(created) > 86400:
             continue
         active += 1
@@ -275,9 +256,7 @@ def cluster(filename, context):
             'readyPods': ready_pods, 'completed': completed, 'nodeIssues': node_issues[:8],
             'podIssues': pod_issues[:8], 'issueCount': len(node_issues) + len(pod_issues)}
 
-
 def opencode_usage():
-    # Project token fields in SQLite; never load chat content or authentication.
     import sqlite3
     path = Path(os.environ.get('XDG_DATA_HOME', str(Path.home() / '.local/share'))) / 'opencode/opencode.db'
     if not path.is_file():
@@ -291,9 +270,7 @@ def opencode_usage():
     return {'windows': [], 'note': 'Local history · all time; account limits unavailable',
             'tokens': {'input': row[1], 'output': row[2], 'cacheRead': row[3]}, 'messages': row[0]}
 
-
 def ollama_usage():
-    # The local server has no account quota. Inspect resident models, no inference.
     try:
         with urllib.request.urlopen('http://127.0.0.1:11434/api/ps', timeout=2) as response:
             models = json.load(response).get('models', [])
@@ -302,14 +279,11 @@ def ollama_usage():
     except (OSError, ValueError):
         return {'windows': [], 'note': 'Local Ollama is unavailable; no account quota'}
 
-
 def google_usage():
     return {'windows': [], 'note': 'Antigravity / Gemini · sign in in the client; account quota integration pending'}
 
-
 def backup_rows():
     return {'backups': []}
-
 
 def main():
     if sys.argv[1:] == ['ai']:
@@ -329,7 +303,6 @@ def main():
     else:
         raise SystemExit('Usage: oninix-briefing ai|clusters|backups')
     print(json.dumps(result, allow_nan=False))
-
 
 if __name__ == '__main__':
     main()

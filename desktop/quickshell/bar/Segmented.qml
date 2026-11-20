@@ -3,8 +3,6 @@ import QtQuick
 import QtQuick.Layouts
 import "../shared" as Shared
 
-// A macOS segmented control: page tabs, or one choice out of a few options.
-// model: [{id, title}]; `current` is the selected id.
 Rectangle {
     id: root
     property var model: []

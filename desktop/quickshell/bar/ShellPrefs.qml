@@ -10,7 +10,6 @@ Singleton {
     property var layouts: ({primary: {top: ["launchers", "workspaces", "status"], bottom: ["media", "window", "metrics"], hidden: []}, secondary: {top: ["launchers", "workspaces", "status"], bottom: ["media", "window", "metrics"], hidden: []}})
     property var ui: ({last: "network", scroll: {}})
     property var items: Items.DEFAULTS
-    // Icons of the launchers and status groups, pinned apps included.
     readonly property var placed: Items.resolve(items, PinnedApps.visibleIds)
     property var looks: []
     property var devices: ({})
@@ -38,7 +37,6 @@ Singleton {
     }
     function send(action, value) {
         const next = queue.slice()
-        // Only the newest navigation write matters; ordering of user actions does.
         if (action === "ui") for (let i = next.length - 1; i >= 0; i--) if (next[i][0] === "ui") next.splice(i, 1)
         next.push([action, value]); queue = next; pump()
     }

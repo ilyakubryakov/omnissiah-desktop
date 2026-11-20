@@ -1,11 +1,4 @@
 #!/bin/sh
-# One capture key (Win+Shift+S by default) whose job is the mode picked on the bar:
-#   region   drag an area or click a window -> clipboard
-#   screen   the monitor under the pointer  -> clipboard
-#   video    click a screen or drag an area -> start recording; again -> stop and save
-#   shot.sh [region|screen|video] [save]
-# A mode argument overrides the bar for one run; "save" also files screenshots in
-# ~/Pictures/Screenshots. Settings: $XDG_STATE_HOME/oninix/capture.conf.
 set -u
 conf="${XDG_STATE_HOME:-$HOME/.local/state}/oninix/capture.conf"
 shots="$HOME/Pictures/Screenshots"
@@ -25,8 +18,6 @@ case "${1:-}" in region|screen|video) mode=$1; shift ;; esac
 save=${1:-}
 stamp=$(date '+%Y-%m-%d %H.%M.%S')
 
-# Any capture key ends a running recording, whatever the mode. Matched by path:
-# on NixOS the recorder runs as .../.wrapped/gpu-screen-recorder.
 if pkill -INT -f '(^|/)gpu-screen-recorder( |$)'; then
     sleep 1
     last=$(ls -t "$videos"/*.mp4 2>/dev/null | head -n 1)
@@ -40,7 +31,6 @@ if pkill -INT -f '(^|/)gpu-screen-recorder( |$)'; then
     exit 0
 fi
 
-# Windows on the visible workspaces, so a click picks one in slurp.
 windows() {
     hyprctl -j monitors | jq -r '.[].activeWorkspace.id' > "${XDG_RUNTIME_DIR:?}/shot-ws"
     hyprctl -j clients | jq -r --slurpfile ws "$XDG_RUNTIME_DIR/shot-ws" \
@@ -70,7 +60,6 @@ else
     grim $cursor -g "$geom" "$file" || exit 1
 fi
 wl-copy --type image/png < "$file"
-# The bar's shelf keeps its own copy: this file goes when the notification closes.
 oninix-desktop shelf-add --copy "$file" >/dev/null 2>&1 || true
 
 saved=
@@ -79,7 +68,6 @@ if [ "$save" = save ]; then
     saved="$shots/${file##*/}"
     cp "$file" "$saved"
 fi
-# Clicking the notification edits the shot; it waits in the background.
 (
     if [ -n "$saved" ]; then
         action=$(notify-send -a Screenshot -i "$saved" -A default=Edit -A folder="Open folder" "Screenshot saved and copied" "${saved##*/}")

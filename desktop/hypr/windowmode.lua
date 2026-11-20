@@ -1,4 +1,3 @@
--- Global desktop-style floating. Static tags survive config reloads with their windows.
 local M = { enabled = false }
 local state_dir = (os.getenv("XDG_STATE_HOME") or (os.getenv("HOME") .. "/.local/state")) .. "/oninix/"
 local path = state_dir .. "window-mode.conf"
@@ -22,7 +21,6 @@ local function workarea(window)
     return m.width / m.scale, m.height / m.scale
 end
 
--- Keep an oversized floating window inside a desktop-like default size.
 local function fit(window)
     local width, height = workarea(window)
     local size = window.size
@@ -41,7 +39,6 @@ local function float(window)
     fit(window)
 end
 
--- Cascade a new window off one that sits at exactly the same spot.
 local function cascade(window)
     local at = window.at
     if not at then return end
@@ -61,9 +58,6 @@ local function cascade(window)
     end
 end
 
--- A window opened in Floating maps floating at the size it asks for, like on a
--- stacking desktop. A remembered maximized state is not restored; the title bar
--- or a double click maximizes on demand.
 local function opened(window)
     if not window or not window.mapped or not window.workspace then return end
     if window.workspace.name == "edge" then return end
@@ -76,9 +70,7 @@ local function opened(window)
     cascade(window)
 end
 
--- New windows float from their first frame instead of flashing tiled first.
 local new_floating = hl.window_rule({ name = "oninix-floating-desktop", match = { class = ".*" }, float = true, center = true })
--- Maximization should work normally in Floating, including application titlebars.
 local suppress_maximize = hl.window_rule({ name = "oninix-tiling-maximize", match = { class = ".*" }, suppress_event = "maximize" })
 
 function M.apply(on)
@@ -91,7 +83,6 @@ function M.apply(on)
         hl.config({ group = { auto_group = not on } })
         local windows = hl.get_windows()
         if on then
-            -- Mark the complete original set before a group dispatch can affect its peers.
             for _, w in ipairs(windows) do
                 if eligible(w) and not w.floating then
                     hl.dispatch(hl.dsp.window.tag({ window = w, tag = "+" .. tag }))

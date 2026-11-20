@@ -1,8 +1,4 @@
 #!/bin/sh
-# Grab something off the screen into the clipboard.
-#   capture.sh colour   pick a pixel's colour (hex)
-#   capture.sh text     OCR a region (English and Russian)
-#   capture.sh qr       decode a QR code in a region
 
 case "$1" in
 colour)

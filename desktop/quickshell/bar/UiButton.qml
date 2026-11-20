@@ -11,8 +11,6 @@ Rectangle {
     property bool alignLeft: false
     property bool danger: false
     signal clicked()
-    // Measure the unelided string. A Layout can shrink Text.implicitWidth to the
-    // previous allocation, making standalone/Flow buttons truncate themselves.
     readonly property real naturalContentWidth: Math.ceil(labelMeasure.advanceWidth) + (glyph ? icon.implicitWidth + (text ? Shared.DesktopStyle.spaceUnit * 2 : 0) : 0)
     implicitWidth: naturalContentWidth + 2 * Shared.DesktopStyle.controlPadding
     implicitHeight: Shared.DesktopStyle.controlHeight

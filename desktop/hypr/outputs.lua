@@ -1,6 +1,3 @@
--- The same role map is read by Quickshell and oninix-display.
--- Control Center overrides live in $XDG_STATE_HOME/oninix/monitors.conf, keyed by
--- monitor description (or port), and are read here as data, never executed.
 local state = os.getenv("XDG_STATE_HOME") or (os.getenv("HOME") .. "/.local/state")
 local function read_ini(file, section_pattern)
     local list, by_name, current = {}, {}, nil
@@ -27,14 +24,10 @@ local _, saved = read_ini(io.open(state .. "/oninix/monitors.conf", "r"), "^%[(.
 local by_output = {}
 for _, role in ipairs(roles) do by_output[role.output] = role end
 
--- On the laptop any connected external display is the desk: it becomes main, and
--- closing the lid then turns the internal panel off instead of suspending.
 local internal = os.getenv("ONINIX_LAPTOP") == "1" and by_name.main and by_name.main.output or nil
 local lid_closed = false
 local lid_state_path
 if internal then
-    -- Discover once; later checks read procfs directly without spawning a process
-    -- on the compositor event loop.
     local paths = io.popen("printf '%s\\n' /proc/acpi/button/lid/*/state")
     if paths then
         lid_state_path = paths:read("*l")
@@ -71,7 +64,6 @@ if profile_file then
     if by_name.tv and profile:match("^profile=extended%s*$") then
         local tv = by_name.tv
         tv.disabled = false
-        -- Use declared geometry before outputs exist; reconcile actual geometry later.
         local main = by_name.main
         local mw = tonumber(main.mode:match("^(%d+)x"))
         local mx, my = main.position:match("^(%-?%d+)x(%-?%d+)$")
@@ -82,8 +74,6 @@ if profile_file then
     end
 end
 
--- Saved settings follow the physical monitor. Before outputs exist, trust the
--- last port it was seen on, unless another monitor now sits there.
 local function live_monitors()
     local by_desc, desc_of = {}, {}
     local ok, list = pcall(hl.get_monitors)
@@ -148,7 +138,6 @@ for name, rule in pairs(custom) do
 end
 hl.monitor({ output = "", mode = "preferred", position = "auto", scale = 1 })
 
--- A docked laptop learns which port each monitor landed on only after it appears.
 local function refresh_custom()
     local before = custom
     custom = custom_rules()
@@ -160,7 +149,6 @@ local function refresh_custom()
     end
 end
 
--- The Edge is an appliance surface, never an application monitor.
 local function main_monitor()
     local primary = primary_name()
     local external = external_monitor(primary)
@@ -178,7 +166,6 @@ local function reconcile(main)
         for i = 1, 10 do
             hl.workspace_rule({ workspace = tostring(i), monitor = main.name, default = i == 1 })
         end
-        -- Docking moves the desktop to the external display at once.
         if internal and main.name ~= internal then
             for _, ws in ipairs(hl.get_workspaces()) do
                 local n = tonumber(ws.name)
@@ -190,7 +177,6 @@ local function reconcile(main)
         bound_main = main.name
     end
     local tv = by_name.tv and hl.get_monitor(by_name.tv.output)
-    -- A TV placed by hand in Control Center keeps its position.
     if tv and not (custom[tv.name] and custom[tv.name].position) then
         local x = math.floor(main.x + (main.width / main.scale - tv.width / tv.scale) / 2)
         local y = math.floor(main.y - tv.height / tv.scale)
@@ -210,7 +196,6 @@ end
 if by_name.tv then
     hl.workspace_rule({ workspace = "11", monitor = by_name.tv.output, default = true })
 end
--- Ordinary windows follow the active workspace, including the TV.
 hl.config({ misc = { mouse_move_focuses_monitor = false } })
 
 local protecting = false
@@ -240,7 +225,6 @@ local function protect_edge()
     protecting = false
     if not ok then print("Edge protection will retry: " .. tostring(err)) end
 end
--- Re-enabling uses the same rule as at startup, so saved Displays settings stay in force.
 local function apply_lid()
     if not internal then return end
     set_monitor(custom[internal] or by_name.main)
@@ -252,10 +236,7 @@ hl.on("monitor.added", function()
     protect_edge()
 end)
 if internal then
-    -- Unplugging with the lid shut brings the panel back; logind then suspends.
     hl.on("monitor.removed", function() apply_lid(); protect_edge() end)
-    -- Switch events can be missed across resume/input reconfiguration. Reconcile
-    -- against the kernel state, including a display connected while already shut.
     hl.timer(function()
         local closed = read_lid()
         if closed ~= nil then lid_closed = closed end
@@ -267,7 +248,6 @@ end
 for _, event in ipairs({ "window.open", "window.move_to_workspace", "workspace.move_to_monitor", "config.reloaded" }) do
     hl.on(event, protect_edge)
 end
--- Also catches floating windows dragged across the output boundary.
 hl.timer(protect_edge, { timeout = 500, type = "repeat" })
 protect_edge()
 

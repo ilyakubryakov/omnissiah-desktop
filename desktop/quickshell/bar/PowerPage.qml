@@ -5,7 +5,6 @@ import QtQuick.Layouts
 import Quickshell
 import "../shared" as Shared
 
-// Power: keep awake, lock and sleep timers, laptop battery and profiles.
 ColumnLayout {
     id: root
     spacing: Shared.DesktopStyle.px(20)
