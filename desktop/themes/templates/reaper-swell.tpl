@@ -1,7 +1,5 @@
 ; theme:out=libSwell-user.colortheme
 ; theme:comment=;
-; REAPER's native Linux dialogs, menus and lists (SWELL); read when REAPER starts.
-; The arrange view, mixer and track panels come from the REAPER theme images.
 _3dface {{window_background}}
 _3dshadow {{dark_background}}
 _3dhilight {{light_background}}

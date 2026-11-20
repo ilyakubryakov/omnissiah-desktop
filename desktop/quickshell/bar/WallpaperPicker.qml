@@ -17,9 +17,8 @@ FloatingWindow {
     color: Colors.background
     onClosed: DesktopData.wallpapersOpen = false
     readonly property var wallpaper: DesktopData.appearance.wallpaper || ({})
-    readonly property bool forGreeter: DesktopData.wallpaperSlot === "greeter"
-    readonly property string slot: forGreeter ? "greeter" : wallpaper.mode !== "variant" ? "shared" : DesktopData.wallpaperSlot === "shared" ? activeVariant : DesktopData.wallpaperSlot
-    readonly property string selected: forGreeter ? (((DesktopData.appearance.greeter || {}).prefs || {}).image || "") : wallpaper[slot] || wallpaper.shared || ""
+    readonly property string slot: wallpaper.mode !== "variant" ? "shared" : DesktopData.wallpaperSlot === "shared" ? activeVariant : DesktopData.wallpaperSlot
+    readonly property string selected: wallpaper[slot] || wallpaper.shared || ""
     readonly property string activeVariant: (DesktopData.appearance.palettes.find(p => p.id === DesktopData.appearance.schedule.palette) || {}).mode || "dark"
     readonly property string directory: wallpaper.directory || ""
     property int generation: 0
@@ -113,15 +112,12 @@ FloatingWindow {
             }
             RowLayout {
                 Layout.fillWidth: true
-                UiLabel { visible: root.forGreeter; text: "Choosing the login screen image"; color: Colors.accent }
-                UiButton { visible: !root.forGreeter; text: "All themes"; selected: root.wallpaper.mode !== "variant"; enabled: !DesktopData.busy; onClicked: root.act(["wallpaper-mode", "shared"]) }
+                UiButton { text: "All themes"; selected: root.wallpaper.mode !== "variant"; enabled: !DesktopData.busy; onClicked: root.act(["wallpaper-mode", "shared"]) }
                 UiButton {
-                    visible: !root.forGreeter
                     text: "Light"; selected: root.wallpaper.mode === "variant" && root.slot === "light"; enabled: !DesktopData.busy
                     onClicked: { DesktopData.wallpaperSlot = "light"; if (root.wallpaper.mode !== "variant") root.act(["wallpaper-mode", "variant"]) }
                 }
                 UiButton {
-                    visible: !root.forGreeter
                     text: "Dark"; selected: root.wallpaper.mode === "variant" && root.slot === "dark"; enabled: !DesktopData.busy
                     onClicked: { DesktopData.wallpaperSlot = "dark"; if (root.wallpaper.mode !== "variant") root.act(["wallpaper-mode", "variant"]) }
                 }

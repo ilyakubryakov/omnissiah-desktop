@@ -20,14 +20,12 @@ Rectangle {
     signal actionInvoked()
     readonly property string summary: notification.summary || "Notification"
     readonly property var actions: notification.actions || ({})
-    readonly property bool canDiagnose: notification.app_name !== "OniNix Notebook"
-        && (notification.urgency === "critical" || /error|failed|failure|exception|ошибк|сбой/i.test(summary))
     Layout.fillWidth: true
     implicitHeight: contents.implicitHeight + 24
     radius: Shared.DesktopStyle.radiusCard
     color: mouse.containsMouse || activeFocus ? Colors.selection : Colors.lightBackground
     border.width: notification.urgency === "critical" || activeFocus ? 1 : 0
-    border.color: notification.urgency === "critical" && canDiagnose ? Colors.red : Colors.accent
+    border.color: notification.urgency === "critical" && notification.app_name !== "OniNix Notebook" ? Colors.red : Colors.accent
     opacity: tier === "quiet" && !mouse.containsMouse && !activeFocus ? 0.72 : 1
     Rectangle {
         visible: root.tier === "important" || root.tier === "critical"
@@ -116,7 +114,7 @@ Rectangle {
             }
         }
         Flow {
-            visible: (root.live && Object.keys(root.actions).length > 0) || (!root.compact && root.canDiagnose)
+            visible: root.live && Object.keys(root.actions).length > 0
             Layout.fillWidth: true; spacing: 6
             Repeater {
                 model: root.live ? Object.keys(root.actions) : []
@@ -127,7 +125,6 @@ Rectangle {
                     onClicked: { DesktopData.act("invoke", [String(root.notification.id), modelData]); root.actionInvoked() }
                 }
             }
-            UiButton { visible: root.canDiagnose; text: "Diagnose"; glyph: "\u{F0188}"; enabled: !DesktopData.busy; onClicked: { DesktopData.act("diagnose", [String(root.notification.id)]); root.actionInvoked() } }
         }
     }
 }

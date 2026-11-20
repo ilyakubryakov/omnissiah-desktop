@@ -16,27 +16,19 @@ active_tab_background   {{accent}}
 inactive_tab_foreground {{foreground}}
 inactive_tab_background {{light_background}}
 
-# black
 color0  {{dark_background}}
 color8  {{muted}}
-# red
 color1  {{red}}
 color9  {{bright_red}}
-# green
 color2  {{green}}
 color10 {{bright_green}}
-# yellow
 color3  {{yellow}}
 color11 {{bright_yellow}}
-# blue
 color4  {{blue}}
 color12 {{bright_blue}}
-# magenta
 color5  {{magenta}}
 color13 {{bright_magenta}}
-# cyan
 color6  {{cyan}}
 color14 {{bright_cyan}}
-# white
 color7  {{white}}
 color15 {{bright_white}}

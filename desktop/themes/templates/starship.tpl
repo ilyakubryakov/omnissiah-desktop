@@ -1,23 +1,10 @@
 # theme:out=starship.toml
-# The prompt follows the palette too: starship re-reads its config on every
-# prompt, so ~/.config/starship.toml pointing into the current palette means a
-# theme switch is visible on the next line, in shells that are already open.
-# Colours were on Kanagawa Wave here long after the terminals had moved to
-# Dragon - roles, not hex, is what stops that happening again.
-#
-# Starship prompt - чистый однострочный минимал, палитра Kanagawa.
-# Одна строка: directory · git · k8s · ❯. Без powerline-пилюль и фонов —
-# плоский цветной текст, максимум читаемости. cmd_duration уезжает вправо и
-# показывается только для команд дольше 2s. k8s-сегмент (☸ $K8S_ENV) ставит kswitch;
-# пуст -> скрыт. Языковые модули не в format -> не рисуются (минимализм by design).
 
-format = "$username$hostname$directory$git_branch$git_state$git_status${env_var.k8senv}${env_var.tfenv}$jobs$character"
+format = "$username$hostname$directory$git_branch$git_state$git_status$jobs$character"
 right_format = "$status$cmd_duration"
 
 add_newline = false
 
-# Локальная сессия рисует только путь. По ssh (и под root) впереди появляется
-# who@where - чтобы не выполнить в чужой машине то, что метил в свою.
 [username]
 show_always = false
 style_user = "fg:{{bright_yellow}}"
@@ -44,8 +31,6 @@ symbol = " "
 style = "fg:{{magenta}}"
 format = "[$symbol$branch]($style) "
 
-# Незакрытый rebase/merge/cherry-pick: состояние, из которого нельзя просто
-# уйти в другую ветку. Молчит, когда репо в покое.
 [git_state]
 style = "fg:{{bright_red}} bold"
 format = "[\\($state $progress_current/$progress_total\\)]($style) "
@@ -64,29 +49,12 @@ staged = "+ "
 renamed = "» "
 deleted = "✘ "
 
-# k8s-сегмент: активный кластер (его ставит kswitch). Пуст -> не рисуется.
-[env_var.k8senv]
-variable = "K8S_ENV"
-symbol = "☸ "
-style = "fg:{{bright_cyan}} bold"
-format = "[$symbol$env_value]($style) "
-
-# terraform/gcloud creds (их ставит tswitch) - парный к k8s-сегменту, чтобы
-# было видно, каким проектом ты сейчас ломаешь прод. Пуст -> не рисуется.
-[env_var.tfenv]
-variable = "TF_ENV"
-symbol = "󱁢 "
-style = "fg:{{bright_magenta}} bold"
-format = "[$symbol$env_value]($style) "
-
-# Фоновые задачи: только когда они есть.
 [jobs]
 symbol = "⏵"
 style = "fg:{{bright_yellow}}"
 number_threshold = 1
 format = "[$symbol$number]($style) "
 
-# Код возврата - только для ненулевого. Красный ❯ говорит «упало», а это - чем.
 [status]
 disabled = false
 style = "fg:{{red}}"

@@ -678,9 +678,6 @@ linux)
         hyprctl reload >/dev/null && echo "hyprland reloaded"
         oninix-shell ipc call colors reload >/dev/null 2>&1 && echo "reloaded bar" || true
     fi
-    if [ "$LAYER" != 1 ] && command -v oninix-desktop >/dev/null 2>&1; then
-        oninix-desktop greeter-sync >/dev/null 2>&1 || true
-    fi
     ;;
 macos)
     save_name "$name"

@@ -21,7 +21,6 @@ import oninix_gaming as gaming
 sys.path.insert(0, str(SHARE / 'themes'))
 import ui_metrics
 
-BIN = Path.home() / '.local/bin'
 ENV = {**os.environ, 'LC_ALL': 'C'}
 PPD = ['busctl', '--system']
 PPD_IFACE = ['net.hadess.PowerProfiles', '/net/hadess/PowerProfiles', 'net.hadess.PowerProfiles']
@@ -1113,113 +1112,6 @@ def wallpaper_command(command, *args):
             message = None
         raise ValueError(message or 'Could not update wallpaper settings') from None
 
-GREETER_PREFS = STATE_HOME / 'oninix/greeter.json'
-GREETER_REQUEST = Path('/var/lib/oninix/greeter.json')
-GREETER_IMAGE = Path('/var/lib/oninix/greeter-wallpaper')
-GREETER_STATUS = Path('/var/lib/oninix-greeter/status.json')
-GREETER_DEFAULTS = {'version': 1, 'palette': 'desktop', 'wallpaper': 'desktop', 'image': '', 'blur': 8, 'dim': 15,
-                    'cardOpacity': 92, 'radius': 8, 'border': True, 'greeting': 'ONINIX · Communing with the machine spirit',
-                    'clock': 'date', 'fontSize': 16, 'showSelectors': True}
-GREETER_RANGES = {'blur': (0, 40), 'dim': (0, 70), 'cardOpacity': (60, 100), 'radius': (0, 24), 'fontSize': (12, 22)}
-
-def greeter_prefs():
-    try:
-        stored = json.loads(GREETER_PREFS.read_text())
-    except (OSError, ValueError):
-        stored = {}
-    return {**GREETER_DEFAULTS, **{k: v for k, v in stored.items() if k in GREETER_DEFAULTS}}
-
-def greeter_set(key, value, palettes):
-    prefs = greeter_prefs()
-    if key in GREETER_RANGES:
-        low, high = GREETER_RANGES[key]
-        if not re.fullmatch(r'\d{1,3}', value) or not low <= int(value) <= high:
-            raise ValueError('Value is out of range')
-        value = int(value)
-    elif key in {'border', 'showSelectors'} and value in {'on', 'off'}:
-        value = value == 'on'
-    elif key == 'palette' and value in palettes | {'desktop'}:
-        pass
-    elif key == 'wallpaper' and value in {'desktop', 'artwork', 'image'}:
-        if value == 'image' and not prefs['image']:
-            raise ValueError('Choose an image in the gallery first')
-    elif key == 'clock' and value in {'date', 'time', 'seconds'}:
-        pass
-    elif key == 'greeting' and len(value) <= 80 and value.isprintable():
-        pass
-    elif key == 'reset' and value == 'all':
-        prefs = dict(GREETER_DEFAULTS)
-        key = None
-    else:
-        raise ValueError('Invalid login screen setting')
-    if key:
-        prefs[key] = value
-    GREETER_PREFS.parent.mkdir(parents=True, exist_ok=True)
-    save(GREETER_PREFS, prefs)
-    greeter_sync()
-
-def greeter_choose_image(value):
-    path = Path(urllib.parse.unquote(value[7:]) if value.startswith('file://') else value).expanduser().resolve()
-    if path.suffix.lower() not in {'.png', '.jpg', '.jpeg', '.webp'} or not path.is_file():
-        raise ValueError('Choose a PNG, JPEG or WebP image')
-    prefs = greeter_prefs()
-    prefs.update(image=str(path), wallpaper='image')
-    GREETER_PREFS.parent.mkdir(parents=True, exist_ok=True)
-    save(GREETER_PREFS, prefs)
-    greeter_sync()
-
-def greeter_sync():
-    if not GREETER_REQUEST.parent.is_dir():
-        return  # Host without the login-screen service.
-    prefs = greeter_prefs()
-    palette = prefs['palette']
-    if palette == 'desktop':
-        try:
-            palette = (STATE_HOME / 'theme/name').read_text().strip()
-        except OSError:
-            palette = 'omnissiah'
-    source = None
-    if prefs['wallpaper'] == 'desktop':
-        current = wallpaper_command('wallpaper-config').get('current', '')
-        source = Path(current) if current and Path(current).is_file() else None
-    elif prefs['wallpaper'] == 'image' and prefs['image'] and Path(prefs['image']).is_file():
-        source = Path(prefs['image'])
-    request = {k: prefs[k] for k in GREETER_DEFAULTS if k not in {'image', 'palette', 'wallpaper'}}
-    request.update(palette=palette, wallpaper='image' if source else 'artwork')
-    if source:
-        stat = source.stat()
-        if stat.st_size > 64 * 1024 * 1024:
-            raise ValueError('Images larger than 64 MiB are not supported')
-        request['imageKey'] = hashlib.sha256(f'{source}:{stat.st_size}:{stat.st_mtime_ns}'.encode()).hexdigest()[:16]
-    try:
-        if json.loads(GREETER_REQUEST.read_text()) == request:
-            return
-    except (OSError, ValueError):
-        pass
-    if source:
-        tmp = GREETER_IMAGE.with_name('.greeter-wallpaper.tmp')
-        shutil.copyfile(source, tmp)
-        tmp.chmod(0o644)
-        tmp.replace(GREETER_IMAGE)
-    tmp = GREETER_REQUEST.with_name('.greeter.json.tmp')
-    tmp.write_text(json.dumps(request))
-    tmp.chmod(0o644)
-    tmp.replace(GREETER_REQUEST)
-
-def greeter_data():
-    try:
-        status = json.loads(GREETER_STATUS.read_text())
-    except (OSError, ValueError):
-        status = {}
-    preview = ''
-    if status.get('ok') and status.get('background'):
-        try:
-            preview = wallpaper_thumbnail(status['background'])['url']
-        except ValueError:
-            pass
-    return {'available': GREETER_REQUEST.parent.is_dir(), 'prefs': greeter_prefs(), 'status': status,
-            'preview': preview}
-
 def appearance():
     palettes = []
     wallpaper = wallpaper_command('wallpaper-config')
@@ -1237,7 +1129,7 @@ def appearance():
     metric_settings, metric_values = ui_metrics.resolve(desktop_preferences())
     return {'desktop': desktop_preferences(), 'metrics': {'settings': metric_settings, 'effective': metric_values},
             'palettes': palettes, 'schedule': schedule,
-            'wallpaper': wallpaper, 'greeter': greeter_data()}
+            'wallpaper': wallpaper}
 
 def wallpaper_gallery():
     directory = wallpaper_command('wallpaper-config').get('directory', '')
@@ -1326,19 +1218,6 @@ def appearance_action(args):
     elif (kind == 'time' and len(values) == 2 and values[0] in {'light', 'dark'}
           and re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d', values[1])):
         run(['oninix-theme-schedule', '--time', *values], timeout=120)
-    elif kind == 'wallpaper' and len(values) == 2 and values[0] == 'greeter':
-        greeter_choose_image(values[1])
-    elif kind == 'greeter' and len(values) == 2:
-        greeter_set(values[0], values[1], valid_palettes)
-    elif kind == 'greeter-preview' and not values:
-        out = GREETER_STATUS.parent
-        if not (out / 'regreet.toml').is_file():
-            raise ValueError('The login screen has not been rendered yet')
-        log = Path(os.environ.get('XDG_RUNTIME_DIR', '/tmp')) / 'regreet-preview.log'
-        subprocess.Popen(['oninix-app', 'regreet', '--demo', '--logs', str(log),
-                          '--config', str(out / 'regreet.toml'), '--style', str(out / 'regreet.css')],
-                         env={**os.environ, 'GSK_RENDERER': 'cairo'}, start_new_session=True,
-                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     elif kind == 'wallpaper' and len(values) == 2 and values[0] in {'shared', 'light', 'dark'} | valid_palettes:
         wallpaper_command('wallpaper', *values)
     elif kind == 'wallpaper-directory' and len(values) == 1:
@@ -1418,13 +1297,6 @@ def action(command, args):
             raise RuntimeError('Could not change the global window mode')
     elif command == 'appearance':
         appearance_action(args)
-        if args and args[0] in {'palette', 'wallpaper', 'wallpaper-mode'}:
-            try:
-                greeter_sync()
-            except (OSError, ValueError, RuntimeError):
-                pass
-    elif command == 'greeter-sync' and not args:
-        greeter_sync()
     elif command == 'display' and len(args) == 1 and args[0] in {'desk', 'extended'}:
         run(['oninix-display', 'profile', args[0]])
     elif command == 'power-profile' and len(args) == 1 and args[0] in {'power-saver', 'balanced', 'performance'}:
@@ -1534,10 +1406,6 @@ def action(command, args):
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=ENV)
     elif command == 'notification-open' and len(args) == 1 and args[0].isdigit():
         notification_open(int(args[0]))
-    elif command == 'diagnose' and len(args) == 1 and args[0].isdigit():
-        subprocess.Popen([str(BIN / 'agent-crash'), '--notification', args[0]],
-                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                         stderr=subprocess.DEVNULL, start_new_session=True, env=ENV)
     elif command == 'invoke' and len(args) == 2 and args[0].isdigit():
         run(['makoctl', 'invoke', '-n', args[0], '--', args[1]])
     elif not settings_action(command, args):

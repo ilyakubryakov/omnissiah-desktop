@@ -116,7 +116,7 @@ HYPR_LABELS = {
     'brightness up': ('Session & displays', 'Increase brightness', 'brightness Увеличить яркость Сеанс и экраны'),
     'brightness down': ('Session & displays', 'Decrease brightness', 'brightness Уменьшить яркость Сеанс и экраны'),
     'capture: area / screen / video (bar menu), to clipboard': ('Capture & recording', 'Capture using the camera menu mode', 'screenshot capture скриншот снимок область видео Захват в буфер по режиму камеры Снимки и запись'),
-    'capture and save to ~/Pictures/Screenshots': ('Capture & recording', 'Capture and save to Nextcloud', 'screenshot save скриншот снимок Захват с сохранением в Nextcloud Снимки и запись'),
+    'capture and save to ~/Pictures/Screenshots': ('Capture & recording', 'Capture and save', 'screenshot save скриншот снимок Захват с сохранением Снимки и запись'),
     'screenshot to clipboard': ('Capture & recording', 'Screenshot all displays to the clipboard', 'screenshot print Снимок всех экранов в буфер Снимки и запись'),
     'pick a colour': ('Capture & recording', 'Pick a color from the screen', 'colour color Пипетка: цвет с экрана Снимки и запись'),
     'text from a region (OCR)': ('Capture & recording', 'Recognize text in a region', 'ocr text Распознать текст в области Снимки и запись'),
@@ -258,86 +258,9 @@ def zsh_shortcuts():
         rows.append({"keys": combo, "desc": widget})
     return rows
 
-def utilities():
-    try:
-        out = subprocess.run([str(HOME / '.local/bin/tools')], capture_output=True, text=True, timeout=10)
-    except (OSError, subprocess.TimeoutExpired):
-        return []
-    rows = []
-    for line in out.stdout.splitlines():
-        parts = line.split(None, 1)
-        if not parts:
-            continue
-        name = parts[0]
-        rows.append({
-            "keys": name,
-            "desc": parts[1].strip() if len(parts) > 1 else "",
-            "exec": None if name in NO_CLICK else name,
-        })
-    return rows
-
-NO_CLICK = {"crash-watch", "screenshot-cleanup", "toggle-tv", "ydotoold-wrapper",
-            "gamemoderun-host", "hypr-float-rules.sh", "lsfg-launch", "mako-launch"}
-
-REPO = HOME / "Projects/infrastructure/personal_config_agent"
-
-REPO_COMMANDS = [
-    ("scripts/migrate.sh --list", "what config migrations have run here"),
-    ("scripts/migrate.sh", "apply pending migrations"),
-    ("scripts/migrate.sh --new <slug>", "start a new migration"),
-    ("theme check", "are the generated theme files current"),
-    ("theme diff", "what a re-render would change"),
-    ("./link.sh", "recreate the repo -> $HOME symlinks"),
-    ("tools", "this machine's own commands"),
-]
-
-NVIM = [
-    ("<Space>", "leader"),
-    ("<Space><Space>", "find file in project"),
-    ("<Space>/", "grep across project"),
-    ("<Space>e", "file explorer"),
-    ("<Space>gg", "lazygit"),
-    ("<Space>bb", "switch buffer"),
-    ("<Space>sk", "search keymaps - the real cheatsheet"),
-    ("<Space>l", "Lazy plugin manager"),
-    ("gd / gr", "go to definition / references"),
-    ("<Space>ca", "code action"), ("<Space>cr", "rename symbol"),
-    ("]d / [d", "next / previous diagnostic"),
-    ("<Space>qq", "quit all"),
-]
-
-HOME_PICKS = [
-    ("Windows", "KDE", "Alt+Tab"), ("Windows", "KDE", "Alt+F4"),
-    ("Windows", "KDE", "Meta+PgUp"), ("Windows", "KDE", "Meta+PgDown"),
-    ("Windows", "KDE", "Meta+Left"), ("Windows", "KDE", "Meta+Right"),
-    ("Windows", "KDE", "Meta+Backspace"), ("Windows", "KDE", "Meta+Ctrl+Esc"),
-    ("Windows", "KDE", "Meta+T"), ("Windows", "KDE", "Meta+W"),
-    ("Windows", "KDE", "Meta+D"),
-
-    ("Desktops", "KDE", "Alt+1"), ("Desktops", "KDE", "Ctrl+Alt+1"),
-    ("Desktops", "KDE", "Meta+Ctrl+Left"), ("Desktops", "KDE", "Meta+Ctrl+Right"),
-    ("Desktops", "KDE", "Meta+Shift+Left"), ("Desktops", "KDE", "Meta+Shift+Right"),
-
-    ("Ours", "KDE", "Meta+Shift+H"), ("Ours", "KDE", "Meta+Shift+T"),
-    ("Ours", "KDE", "Ctrl+Shift+Space"),
-    ("Ours", "KDE", "Meta+V"), ("Ours", "KDE", "Ctrl+Alt+Del"),
-    ("Ours", "Utilities", "agent"), ("Ours", "Utilities", "theme"),
-    ("Ours", "Utilities", "tools"), ("Ours", "Repo", "scripts/migrate.sh --list"),
-
-    ("Windows", "Hyprland", "Meta+Q"), ("Windows", "Hyprland", "Meta+V"),
-    ("Windows", "Hyprland", "Meta+F"), ("Windows", "Hyprland", "Meta+T"),
-    ("Windows", "Hyprland", "Meta+Shift+Space"), ("Windows", "Hyprland", "Meta+W"),
-    ("Windows", "Hyprland", "Meta+Tab"),
-    ("Desktops", "Hyprland", "Meta+1"), ("Desktops", "Hyprland", "Meta+Shift+1"),
-    ("Ours", "Hyprland", "Meta+Space"), ("Ours", "Hyprland", "Meta+Shift+H"),
-    ("Ours", "Hyprland", "Meta+Shift+T"), ("Ours", "Hyprland", "Meta+Shift+V"),
-    ("Ours", "Hyprland", "Ctrl+Alt+Space"),
-]
-
 ICONS = {
     "Home": 0xF02DC, "KDE": 0xF0379, "Hyprland": 0xF0379, "kitty": 0xF018D,
-    "tmux": 0xF0564, "zsh": 0xF1183, "Neovim": 0xF0B1F,
-    "Utilities": 0xF1064, "Repo": 0xF062C,
+    "tmux": 0xF0564, "zsh": 0xF1183,
 }
 
 def home_section(sections):
@@ -350,36 +273,20 @@ def home_section(sections):
                    'maximize', 'float / tile window', 'go to workspace (1..0)',
                    'capture: area / screen / video (bar menu), to clipboard', 'lock']
         return [row for action in actions for row in hypr if row['action'] == action]
-    index, present = {}, {sec["name"] for sec in sections}
-    for sec in sections:
-        for row in sec["rows"]:
-            index[(sec["name"], row["keys"])] = row
-
-    rows, missing = [], []
-    for group, section, keys in HOME_PICKS:
-        if section not in present:
-            continue
-        row = index.get((section, keys))
-        if row is None:
-            missing.append(f"{section}:{keys}")
-            continue
-        rows.append(dict(row, group=group))
-    if missing:
-        print("home picks that no longer resolve: " + ", ".join(missing))
-    return rows
+    return []
 
 def guides(rows):
     def key(action):
         return next((r['keys'] for r in rows if r['action'] == action), '')
     topics = [
         ('Panels and popovers', 'Hover over the clock, sound, weather or resources to preview a card. Click to pin it. Click another applet to switch cards; Esc or a click outside closes it.', 'hover popup calendar weather погода звук календарь', ''),
-        ('Make the panels your own', 'Control Center > Panels & windows: drag groups between bars, reorder or hide them. Main and secondary screens have separate layouts. Right-click an empty area of the panel to open the editor.', 'panel editor панели порядок', 'control center'),
+        ('Make the panels your own', 'Control Station > Panels & windows: drag groups between bars, reorder or hide them. Main and secondary screens have separate layouts. Right-click an empty area of the panel to open the editor.', 'panel editor панели порядок', 'control center'),
         ('Three ways to float', 'One window: ' + key('float / tile window') + '. This workspace: ' + key('float / tile the whole workspace') + '. For the whole desktop, use Tiling / Floating in the center of the bottom bar. Global mode remembers which windows it changed.', 'floating тайлинг плавающий рабочий стол', 'float / tile window'),
         ('Maximize or go fullscreen', 'Maximize keeps the panels visible; Fullscreen uses the entire display. Tab groups share one window area, while ' + key('switch between all application windows') + ' switches windows across workspaces.', 'maximize fullscreen развернуть полный экран вкладки', 'maximize'),
         ('Bring a minimized window back', 'Click its app icon on the panel. Hover to preview minimized windows; right-click for a list. Show desktop temporarily hides your windows and restores them when used again.', 'minimize restore свернуть вернуть', 'show desktop / bring windows back'),
         ('Capture a thought', 'The side notebook saves Markdown in your selected Obsidian vault. It also has a calculator, reminders and timers. Pin it to keep writing while working in another window.', 'notes obsidian calculator timer блокнот заметки калькулятор таймер', 'notebook: notes, calculator and timers'),
-        ('Take a screenshot or record', 'Choose a region, screen or video in the panel camera menu. Capture follows that mode; Capture and save writes to Nextcloud/Img/Screenshots. Press the shortcut again to stop a recording.', 'capture record screenshot снимок видео запись', 'capture: area / screen / video (bar menu), to clipboard'),
-        ('Before a call, game or recording', 'Control Center > Work modes: Work, Call, Game and Recording set DND and your selected audio devices. Recording enables Music low latency; Game turns Night light off. Normal restores previous settings while respecting manual changes.', 'work call game music normal режим звонок игра запись', 'control center'),
+        ('Take a screenshot or record', 'Choose a region, screen or video in the panel camera menu. Capture follows that mode; Capture and save writes to ~/Pictures/Screenshots. Press the shortcut again to stop a recording.', 'capture record screenshot снимок видео запись', 'capture: area / screen / video (bar menu), to clipboard'),
+        ('Before a call, game or recording', 'Control Station > Work modes: Work, Call, Game and Recording set DND and your selected audio devices. Recording enables Music low latency; Game turns Night light off. Normal restores previous settings while respecting manual changes.', 'work call game music normal режим звонок игра запись', 'control center'),
         ('Keep a look you like', 'Themes & wallpapers > Saved looks stores your palette, schedule, icons and panel styling. Undo reverts the last change. Wallpapers are selected separately and can follow the light or dark theme.', 'theme wallpaper daily undo look обои тема оформление', 'appearance: palettes and wallpapers'),
         ('Notifications without the noise', 'Notification Center offers Clear all and DND. Choose Important, Normal, Quiet or Hidden for an app or an individual title. Quiet keeps messages in history without showing a popup.', 'notification dnd уведомления история тихий', 'notification history'),
     ]
@@ -389,14 +296,8 @@ def guides(rows):
 def main():
     sections = [
         {"name": "kitty", "hint": "from kitty.conf", "rows": kitty_shortcuts()},
-        {"name": "Utilities", "hint": "Installed commands; click to copy",
-         "rows": utilities()},
-        {"name": "tmux", "hint": "prefix C-a, from tmux.conf", "rows": tmux_shortcuts()},
+        {"name": "tmux", "hint": "from tmux.conf", "rows": tmux_shortcuts()},
         {"name": "zsh", "hint": "from .zshrc", "rows": zsh_shortcuts()},
-        {"name": "Repo", "hint": "Maintenance commands; click to copy only",
-         "rows": [{"keys": c, "desc": d, "exec": c} for c, d in REPO_COMMANDS]},
-        {"name": "Neovim", "hint": "LazyVim, curated", "curated": True,
-         "rows": [{"keys": k, "desc": d} for k, d in NVIM]},
         {"name": "Hyprland", "hint": "described binds, from hyprctl binds",
          "rows": hyprland_shortcuts()},
         {"name": "KDE", "hint": "global, from kglobalshortcutsrc",
@@ -412,8 +313,7 @@ def main():
             for group in categories] + [s for s in sections if s['name'] != 'Hyprland']
     else:
         sections.insert(0, home)
-    labels = {'Home': 'Essentials', 'Guide': 'How it works', 'kitty': 'Terminal · kitty',
-              'Utilities': 'Our tools', 'Repo': 'Configuration', 'Neovim': 'Editor · Neovim'}
+    labels = {'Home': 'Essentials', 'Guide': 'How it works', 'kitty': 'Terminal · kitty'}
     for sec in sections:
         sec['label'] = labels.get(sec['name'], sec['name'])
         sec["icon"] = ICONS.get(sec["name"], {'Guide': 0xF00BA, 'Launch & tools': 0xF04DE, 'Windows': 0xF05AF,
@@ -421,7 +321,6 @@ def main():
 
     out = {
         "ts": int(__import__("time").time()),
-        "repo": str(REPO),
         "sections": sections,
         "warning": 'Could not read Hyprland shortcuts. Showing the available application settings only.' if (os.environ.get('HYPRLAND_INSTANCE_SIGNATURE') or os.environ.get('WAYLAND_DISPLAY')) and not hypr else '',
     }

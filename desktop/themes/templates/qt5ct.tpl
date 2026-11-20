@@ -1,6 +1,5 @@
 # theme:out=qt5ct.colors
 # theme:comment=#
-# QPalette Qt5 role order, from WindowText through PlaceholderText.
 [ColorScheme]
 active_colors={{foreground}}, {{light_background}}, {{light_background}}, {{light_background}}, {{dark_background}}, {{muted}}, {{foreground}}, {{foreground}}, {{foreground}}, {{dark_background}}, {{window_background}}, {{dark_background}}, {{accent}}, {{dark_background}}, {{blue}}, {{magenta}}, {{light_background}}, {{foreground}}, {{light_background}}, {{foreground}}, {{muted}}
 inactive_colors={{foreground}}, {{light_background}}, {{light_background}}, {{light_background}}, {{dark_background}}, {{muted}}, {{foreground}}, {{foreground}}, {{foreground}}, {{dark_background}}, {{window_background}}, {{dark_background}}, {{accent}}, {{dark_background}}, {{blue}}, {{magenta}}, {{light_background}}, {{foreground}}, {{light_background}}, {{foreground}}, {{muted}}

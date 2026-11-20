@@ -17,14 +17,12 @@ default-timeout=7000
 on-button-left=invoke-default-action
 on-button-right=dismiss
 on-button-middle=exec makoctl menu -n "$id" -- fuzzel --dmenu --prompt='Action: '
-# Repeats of one title from one app stack into a single popup with a count.
 group-by=app-name,summary
 
 [grouped]
 format=<b>%s</b>  ×%g\n%b
 
 [urgency=critical]
-on-button-left=exec "$HOME/.local/bin/agent-crash" --notification "$id"
 border-color={{red}}
 default-timeout=0
 ignore-timeout=1
@@ -35,30 +33,21 @@ invisible=1
 [mode=do-not-disturb urgency=critical]
 invisible=0
 
-[app-name=crash-watch]
-on-button-left=invoke-default-action
-
-# A timer is urgent so it remains visible, but it is not an application failure.
 [app-name="OniNix Notebook"]
 on-button-left=dismiss
 border-color={{accent}}
 
-# Pairing and authorization prompts carry Confirm/Deny without a default action;
-# keep them until answered and open the action menu on click.
 [app-name=blueman actionable=1]
 on-button-left=exec makoctl menu -n "$id" -- fuzzel --dmenu --prompt='Bluetooth: '
 default-timeout=0
 ignore-timeout=1
 
-# Quickshell draws these with explicit action buttons; Mako retains IDs/callbacks.
 [actionable=1]
 invisible=1
 
-# Phone approval prompts must remain available until explicitly answered.
 [app-name="KDE Connect" actionable=1]
 default-timeout=0
 ignore-timeout=1
 
-# Gaming pauses every popup, including urgent ones. History remains available.
 [mode=gaming]
 invisible=1
