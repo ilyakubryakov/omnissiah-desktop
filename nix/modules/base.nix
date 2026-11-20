@@ -28,6 +28,8 @@ lib.mkIf cfg.enable {
   services.fwupd.enable = true;
   zramSwap.enable = true;
 
+  environment.etc."xdg/fastfetch/config.jsonc".source = ../../desktop/fastfetch/config.jsonc;
+
   environment.systemPackages = with pkgs; [
     google-chrome
     git curl wget jq ripgrep fd btop fastfetch unzip

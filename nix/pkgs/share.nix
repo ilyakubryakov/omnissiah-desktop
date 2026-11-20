@@ -20,7 +20,7 @@ stdenvNoCC.mkDerivation {
     runHook preInstall
     share=$out/share/oninix
     mkdir -p $share $out/bin
-    cp -r hypr quickshell bin lib themes $share/
+    cp -r hypr quickshell bin lib themes fastfetch $share/
     chmod -R u+w $share
     find $share -name '*.pyc' -delete
     patchShebangs $share/bin $share/hypr/scripts $share/themes
