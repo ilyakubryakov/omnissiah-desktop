@@ -11,6 +11,7 @@ in
     ./features.nix
     ./updates.nix
     ./voice.nix
+    ./spirit.nix
   ];
 
   options.oninix = {

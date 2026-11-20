@@ -1,0 +1,156 @@
+#!/usr/bin/env python3
+import difflib
+import json
+import os
+import shutil
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+FLAKE = Path(os.environ.get('ONINIX_FLAKE', '/etc/nixos'))
+STATE = Path(os.environ.get('XDG_STATE_HOME', Path.home() / '.local/state')) / 'oninix/spirit'
+CONFIG = Path(os.environ.get('XDG_CONFIG_HOME', Path.home() / '.config')) / 'oninix/spirit.json'
+WORK = STATE / 'work'
+HISTORY = STATE / 'history.jsonl'
+PREVIOUS = STATE / 'previous-settings.nix'
+EDITABLE = 'settings.nix'
+PROMPT = """You are the machine spirit of an OniNix computer (NixOS with the OniNix Hyprland desktop).
+The owner asks: {request}
+
+Fulfil it by editing only the file settings.nix in the current directory. It is the NixOS
+configuration of this machine; the flake around it imports the OniNix module, whose options
+live under `oninix.*` (oninix.features.gaming/coding/music/ai, oninix.voice.enable,
+oninix.hardware.*). Use ordinary NixOS options for everything else, for example
+environment.systemPackages = with pkgs; [ ... ] (add `pkgs` to the function arguments if the
+file needs it). Keep the file valid Nix and keep every existing setting unless the request
+changes it. Do not touch any other file, do not run commands that change the system.
+Finish with one short sentence describing the change, in the owner's language."""
+
+
+def say(text, color='212'):
+    subprocess.run(['gum', 'style', '--foreground', color, '--bold', text])
+
+
+def agent():
+    wanted = json.loads(CONFIG.read_text()).get('agent') if CONFIG.exists() else None
+    for name in ([wanted] if wanted else []) + ['claude', 'codex']:
+        if name and shutil.which(name):
+            return name
+    return None
+
+
+def run_agent(name, request):
+    prompt = PROMPT.format(request=request)
+    if name == 'claude':
+        command = ['claude', '-p', prompt, '--permission-mode', 'acceptEdits', '--allowedTools', 'Read,Edit,Write']
+    else:
+        command = ['codex', 'exec', '-s', 'workspace-write', '--skip-git-repo-check', '-C', str(WORK), prompt]
+    result = subprocess.run(command, cwd=WORK, capture_output=True, text=True, timeout=900)
+    if result.returncode != 0:
+        raise RuntimeError((result.stderr or result.stdout).strip()[-600:] or name + ' failed')
+    lines = [line for line in result.stdout.strip().splitlines() if line.strip()]
+    return lines[-1] if lines else 'Done.'
+
+
+def prepare():
+    if WORK.exists():
+        shutil.rmtree(WORK)
+    WORK.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(FLAKE, WORK, ignore=shutil.ignore_patterns('.git', 'result'))
+    for path in WORK.rglob('*'):
+        path.chmod(0o644 if path.is_file() else 0o755)
+
+
+def build():
+    out = STATE / 'result'
+    out.unlink(missing_ok=True)
+    say('Building the new system (nothing is applied yet)…', '245')
+    subprocess.run(['nix', '--extra-experimental-features', 'nix-command flakes', 'build', '--out-link', str(out),
+                    f'path:{WORK}#nixosConfigurations.oninix.config.system.build.toplevel'], check=True)
+    return out
+
+
+def record(entry):
+    HISTORY.parent.mkdir(parents=True, exist_ok=True)
+    with HISTORY.open('a') as f:
+        f.write(json.dumps({**entry, 'at': time.time()}) + '\n')
+
+
+def request_text(args):
+    if args:
+        return ' '.join(args)
+    return subprocess.run(['gum', 'write', '--header', 'Tell the machine spirit what you want',
+                           '--placeholder', 'Install Blender. Turn on the gaming set. Add the German layout.'],
+                          stdout=subprocess.PIPE, text=True).stdout.strip()
+
+
+def ask(args):
+    say('OniNix · the machine spirit listens')
+    name = agent()
+    if not name:
+        say('No agent is set up. Install and sign in to Claude Code or Codex (the AI set), then try again.', '196')
+        return 1
+    request = request_text(args)
+    if not request:
+        return 1
+    prepare()
+    before = (WORK / EDITABLE).read_text()
+    say(f'Asking {name.capitalize()}…', '245')
+    try:
+        summary = run_agent(name, request)
+    except (RuntimeError, subprocess.SubprocessError) as error:
+        say('The agent failed: ' + str(error), '196')
+        return 1
+    after = (WORK / EDITABLE).read_text()
+    if after == before:
+        say('Nothing to change. ' + summary, '214')
+        return 0
+    say(summary, '214')
+    print(''.join(difflib.unified_diff(before.splitlines(True), after.splitlines(True),
+                                       'settings.nix (now)', 'settings.nix (proposed)')))
+    try:
+        result = build()
+    except subprocess.CalledProcessError:
+        say('The proposed configuration does not build; nothing was changed.', '196')
+        return 1
+    subprocess.run(['nvd', 'diff', '/run/current-system', str(result)])
+    if subprocess.run(['gum', 'confirm', 'Apply this change?', '--default=false']).returncode != 0:
+        say('Kept as it was.', '245')
+        return 0
+    shutil.copyfile(FLAKE / EDITABLE, PREVIOUS)
+    subprocess.run(['sudo', 'install', '-m', '644', str(WORK / EDITABLE), str(FLAKE / EDITABLE)], check=True)
+    subprocess.run(['sudo', 'nixos-rebuild', 'switch', '--flake', f'{FLAKE}#oninix'], check=True)
+    record({'request': request, 'summary': summary, 'agent': name})
+    say('Applied. `oninix-spirit undo` brings back the previous system.')
+    return 0
+
+
+def undo():
+    say('Returning to the previous system…', '214')
+    if PREVIOUS.exists():
+        subprocess.run(['sudo', 'install', '-m', '644', str(PREVIOUS), str(FLAKE / EDITABLE)], check=True)
+        PREVIOUS.unlink()
+    subprocess.run(['sudo', 'nixos-rebuild', 'switch', '--rollback'], check=True)
+    record({'request': 'undo', 'summary': 'rolled back', 'agent': ''})
+    say('Done. The previous system and its settings are back.')
+    return 0
+
+
+def main(args):
+    if args[:1] == ['undo']:
+        return undo()
+    if args[:1] == ['ask'] and len(args) == 1 and not sys.stdin.isatty():
+        text = sys.stdin.read().strip()
+        subprocess.Popen(['kitty', '--class', 'oninix-spirit', '--title', 'Machine spirit',
+                          'bash', '-c', 'oninix-spirit "$1"; read -r -p "Press Enter to close" _', '_', text],
+                         start_new_session=True)
+        return 0
+    if args[:1] == ['ask']:
+        args = args[1:]
+    code = ask(args)
+    return code
+
+
+if __name__ == '__main__':
+    raise SystemExit(main(sys.argv[1:]))
