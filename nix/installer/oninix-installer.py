@@ -12,7 +12,7 @@ SOURCE = os.environ.get('ONINIX_SOURCE', '')
 TARGET = Path('/mnt')
 FEATURES = [
     ('gaming', 'Gaming: Steam, Proton, Game mode, launchers'),
-    ('coding', 'Coding: editors, toolchains, developer tools'),
+    ('coding', 'Coding: editors and developer tools'),
     ('music', 'Music: low-latency audio and a DAW'),
     ('ai', 'AI: Claude, Codex and local models'),
 ]
@@ -98,7 +98,7 @@ def disks():
     return result
 
 
-def disko_config(device, encrypt):
+def disko_config(device, encrypt, password_file=None):
     btrfs = '''{
           type = "btrfs";
           extraArgs = [ "-f" ];
@@ -108,11 +108,11 @@ def disko_config(device, encrypt):
             "@nix" = { mountpoint = "/nix"; mountOptions = [ "compress=zstd" "noatime" ]; };
           };
         }'''
+    password_line = f'        passwordFile = {nix_string(str(password_file))};\n' if password_file else ''
     root = btrfs if not encrypt else '''{
         type = "luks";
         name = "cryptroot";
-        passwordFile = "/tmp/oninix-luks";
-        settings.allowDiscards = true;
+''' + password_line + '''        settings.allowDiscards = true;
         content = ''' + btrfs + ''';
       }'''
     return '''{
@@ -139,7 +139,7 @@ def disko_config(device, encrypt):
 
 
 def nix_string(value):
-    return json.dumps(value)
+    return json.dumps(value, ensure_ascii=False).replace('${', r'\${')
 
 
 def settings(answers):
@@ -208,7 +208,7 @@ def collect():
     layout = choose('Keyboard layouts (switch with Caps Lock)', LAYOUTS)
     gpu, laptop, virt = detect_gpu(), detect_laptop(), detect_virt()
     gpu = choose(f'Graphics: detected {gpu}', ['nvidia', 'amd', 'intel', 'none'], selected=[gpu])
-    picked = choose('What should OniNix bring? Space toggles, Enter confirms.',
+    picked = choose('What should OniNix bring? X toggles, Enter confirms.',
                     [text for _, text in FEATURES], selected=[FEATURES[1][1]], many=True)
     features = [key for key, text in FEATURES if text in picked]
     return {'device': device, 'encrypt': encrypt, 'luks': luks, 'fullname': fullname, 'user': user,
@@ -219,18 +219,23 @@ def collect():
 def install(answers):
     with tempfile.TemporaryDirectory() as work:
         disko_file = Path(work) / 'disko.nix'
-        disko_file.write_text(disko_config(answers['device'], answers['encrypt']))
+        password_file = None
         if answers['encrypt']:
-            Path('/tmp/oninix-luks').write_text(answers['luks'])
-            os.chmod('/tmp/oninix-luks', 0o600)
-        run(['disko', '--mode', 'destroy,format,mount', '--yes-wipe-all-disks', str(disko_file)])
-        Path('/tmp/oninix-luks').unlink(missing_ok=True)
+            password_file = Path(work) / 'luks-passphrase'
+            with os.fdopen(os.open(password_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), 'w') as handle:
+                handle.write(answers['luks'])
+        disko_file.write_text(disko_config(answers['device'], answers['encrypt'], password_file))
+        try:
+            run(['disko', '--mode', 'destroy,format,mount', '--yes-wipe-all-disks', str(disko_file)])
+        finally:
+            if password_file:
+                password_file.unlink()
         etc = TARGET / 'etc/nixos'
         etc.mkdir(parents=True, exist_ok=True)
         run(['nixos-generate-config', '--no-filesystems', '--root', str(TARGET)])
         (etc / 'configuration.nix').unlink(missing_ok=True)
         shutil.copy(TEMPLATE / 'flake.nix', etc / 'flake.nix')
-        (etc / 'disko.nix').write_text(disko_file.read_text())
+        (etc / 'disko.nix').write_text(disko_config(answers['device'], answers['encrypt']))
     (etc / 'settings.nix').write_text(settings(answers))
     for name in ('flake.nix', 'disko.nix', 'settings.nix'):
         os.chmod(etc / name, 0o644)
