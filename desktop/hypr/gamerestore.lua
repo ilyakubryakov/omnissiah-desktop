@@ -161,6 +161,12 @@ local function build()
         move(w, target or tostring((hl.get_active_workspace() or { id = 1 }).id))
     end
     if active and win(active.address) then hl.dispatch(hl.dsp.focus({ window = active })) end
+    for _, s in ipairs(p.slots) do
+        if not s.address and not windows[s.id] then
+            report("Some windows could not be placed", "error")
+            return
+        end
+    end
     report("Desktop restored", "done")
 end
 
