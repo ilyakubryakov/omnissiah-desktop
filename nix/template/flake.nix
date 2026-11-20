@@ -7,6 +7,7 @@
       system = "x86_64-linux";
       modules = [
         oninix.nixosModules.default
+        { system.extraDependencies = [ oninix.outPath ]; }
         oninix.inputs.disko.nixosModules.disko
         ./disko.nix
         ./hardware-configuration.nix
