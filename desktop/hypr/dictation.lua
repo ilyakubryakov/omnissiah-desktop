@@ -6,9 +6,8 @@ local command = "oninix-dictation "
 hl.bind("Alt_R", function()
     if token then return end
     local window = hl.get_active_window()
-    if not window then return end
-    local address = tostring(window.address)
-    local pid = tonumber(window.pid)
+    local address = window and tostring(window.address) or "0x0"
+    local pid = window and tonumber(window.pid) or 0
     if not address:match("^0x%x+$") or not pid then return end
     sequence = sequence + 1
     token = prefix .. sequence

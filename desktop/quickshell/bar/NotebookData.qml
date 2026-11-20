@@ -73,7 +73,6 @@ Singleton {
     }
     function refresh() {
         call({op:"status"})
-        if (available) call({op:"list", query:query})
     }
     function adopt(value) {
         note = value; title = value.title || ""; body = value.body || ""
@@ -126,8 +125,9 @@ Singleton {
                     error = "Recovered an unsaved draft. Save a copy, or reload the original."
                     noteLoaded()
                 }
-                if (available) call({op:"list", query:query})
             }
+            if (available && opened) call({op:"list", query:query})
+            else if (!available) notes = []
         } else if (request.op === "list") {
             if (request.query === query) notes = value
         } else if (["read", "reload"].includes(request.op)) {

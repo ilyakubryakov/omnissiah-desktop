@@ -1,6 +1,19 @@
 #!/usr/bin/env bash
 set -eu
 
+if [[ ${1:-} == -h || ${1:-} == --help ]]; then
+    cat <<'USAGE'
+Usage: oninix-theme [render | render-only | check | diff | list | set PALETTE]
+       oninix-theme [metrics | metrics-apply | icons-resolve | icons FAMILY]
+       oninix-theme wallpaper <shared|light|dark|palette> PATH
+       oninix-theme wallpaper-path [PALETTE]
+       oninix-theme wallpaper-config
+       oninix-theme wallpaper-directory DIRECTORY
+       oninix-theme wallpaper-mode MODE
+USAGE
+    exit 0
+fi
+
 self=$(readlink -f "$0" 2>/dev/null || python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "$0")
 REPO="${ONINIX_THEME_ROOT:-${ONINIX_SHARE:-/run/current-system/sw/share/oninix}}"
 [ -d "$REPO/themes/templates" ] || { echo "Cannot find OniNix themes in $REPO" >&2; exit 1; }
@@ -13,7 +26,7 @@ esac
 
 STATE="${XDG_STATE_HOME:-$HOME/.local/state}/theme"
 needs_lock=yes
-case "${1:-render}" in icons-resolve | wallpaper-path | wallpaper-config | list | -h | --help) needs_lock=no ;; esac
+case "${1:-render}" in icons-resolve | wallpaper-path | wallpaper-config | list) needs_lock=no ;; esac
 if [ "$needs_lock" = yes ] && [ "${ONINIX_THEME_LOCKED:-}" != "$self" ]; then
     exec python3 - "$self" "$STATE" "$@" <<'PY'
 import fcntl, os, pathlib, subprocess, sys
@@ -546,10 +559,6 @@ sync)
     mode=set
     ;;
 render | render-only | check | diff) ;;
--h | --help)
-    sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
-    exit 0
-    ;;
 *)
     echo "Unknown command: $mode" >&2
     exit 1
