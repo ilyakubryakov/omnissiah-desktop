@@ -63,7 +63,7 @@ let
       PartOf=oninix-layer.target
 
       [Service]
-      ExecStart=${launch} mako
+      ExecStart=${launch} mako --config=%S/theme/mako.conf
     '';
     "oninix-idle.service" = service "OniNix idle and lock actions" "sh -c 'exec \"$$ONINIX_SHARE/hypr/scripts/idle.sh\"'" "";
     "oninix-dictation.service" = service "Hold-to-talk OniNix dictation" "oninix-dictation --serve" ''

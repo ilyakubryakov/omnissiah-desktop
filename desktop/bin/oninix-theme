@@ -74,6 +74,7 @@ with open(pathlib.Path(state) / 'apply.lock', 'a') as lock:
 PY
 fi
 unset ONINIX_THEME_LOCKED
+LAYER=${ONINIX_LAYER:-0}
 NAME_FILE="$STATE/name"
 CURRENT_LINK="$STATE/current"
 DEFAULT_THEME=kanagawa-dragon
@@ -213,6 +214,7 @@ install_state() {
     name=$1
     mkdir -p "$STATE"
     ln -sfn "$(out_dir "$name")" "$CURRENT_LINK"
+    if [ "$LAYER" = 1 ]; then return 0; fi
 
     # btop reads its themes out of its own directory, by name, so this one
     # needs a link of its own rather than a path it could be pointed at.
@@ -416,6 +418,13 @@ GTKCSS
 
 apply_desktop() {
     python3 "$REPO/themes/ui_metrics.py" apply
+    if [ "$LAYER" = 1 ]; then
+        icon_mode=$(sed -n 's/^mode *= *"\(.*\)"/\1/p' "$(palette_file "$1")")
+        icontheme=$(python3 "$REPO/themes/icons.py" variant "${icon_mode:-dark}")
+        printf '%s\n' "$icontheme" >"$STATE/icon-theme"
+        printf '[main]\nicon-theme=%s\n' "$icontheme" >"$STATE/fuzzel-icons.ini"
+        return 0
+    fi
     ui_font=$(sed -n 's/^font=//p' "$STATE/kde-fonts.ini")
     ui_small_font=$(sed -n 's/^smallestReadableFont=//p' "$STATE/kde-fonts.ini")
     ui_mono_font=$(sed -n 's/^fixed=//p' "$STATE/kde-fonts.ini")
@@ -773,8 +782,10 @@ fi
 
 name=${want:-$(current_name)}
 install_state "$name"
-reload_terminals
-reload_tmux
+if [ "$LAYER" != 1 ]; then
+    reload_terminals
+    reload_tmux
+fi
 case "$OS" in
 linux)
     # SSH and user timers may lack these even while the graphical session is
@@ -791,17 +802,18 @@ linux)
     apply_desktop "$name"
     save_name "$name"
     reload_wallpaper
-    restart_slack
-    reload_chrome
-    pkill -USR2 -x btop 2>/dev/null && echo "reloaded btop" || true
+    if [ "$LAYER" != 1 ]; then
+        restart_slack
+        reload_chrome
+        pkill -USR2 -x btop 2>/dev/null && echo "reloaded btop" || true
+    fi
     # GTK4/libadwaita apps and the portal read the dark preference, not the theme name.
-    if command -v gsettings >/dev/null 2>&1; then
+    if [ "$LAYER" != 1 ] && command -v gsettings >/dev/null 2>&1; then
         scheme=$(sed -n 's/^mode *= *"\(.*\)"/\1/p' "$(palette_file "$name")")
         gsettings set org.gnome.desktop.interface color-scheme "prefer-${scheme:-dark}" 2>/dev/null || true
     fi
     # Keep user-owned Mako configs and bootstrap the default on the first login.
     mako_dir="${XDG_CONFIG_HOME:-$HOME/.config}/mako"
-    mkdir -p "$mako_dir"
     rules="${XDG_STATE_HOME:-$HOME/.local/state}/oninix/notification-rules.conf"
     oninix-desktop notification-render >/dev/null 2>&1 || true
     {
@@ -809,7 +821,8 @@ linux)
         [ ! -f "$rules" ] || printf 'include=%s\n' "$rules"
     } >"$STATE/mako.conf.tmp"
     mv "$STATE/mako.conf.tmp" "$STATE/mako.conf"
-    if [ ! -e "$mako_dir/config" ] && [ ! -L "$mako_dir/config" ]; then
+    if [ "$LAYER" != 1 ] && [ ! -e "$mako_dir/config" ] && [ ! -L "$mako_dir/config" ]; then
+        mkdir -p "$mako_dir"
         ln -s "$STATE/mako.conf" "$mako_dir/config"
     fi
     if command -v makoctl >/dev/null 2>&1; then
@@ -823,7 +836,7 @@ linux)
     fi
     # The login screen follows the desktop palette/wallpaper when chosen in Control Station;
     # it publishes only when the resolved look changed.
-    if command -v oninix-desktop >/dev/null 2>&1; then
+    if [ "$LAYER" != 1 ] && command -v oninix-desktop >/dev/null 2>&1; then
         oninix-desktop greeter-sync >/dev/null 2>&1 || true
     fi
     ;;
