@@ -1,9 +1,11 @@
-__pycache__/
-*.pyc
-.DS_Store
-.venv/
-result
-themes/*/out/
 artifacts/
 .cache/
+desktop/themes/*/out/
+.DS_Store
 *.log
+*.pyc
+__pycache__/
+result
+result-*
+themes/*/out/
+.venv/
