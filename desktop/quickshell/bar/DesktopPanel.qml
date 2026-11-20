@@ -22,8 +22,7 @@ FloatingWindow {
     property var scrollPositions: ({})
     property string focusText: ""
     property real highlightY: -1
-    screen: Shared.Screens.main
-    visible: Shared.Screens.main !== null && presented
+    visible: presented
     implicitWidth: Math.min(1080, screen ? screen.width - 40 : 1080)
     implicitHeight: Math.min(900, screen ? screen.height - 80 : 900)
     minimumSize: Qt.size(Math.min(760, implicitWidth), Math.min(560, implicitHeight))
@@ -206,6 +205,16 @@ FloatingWindow {
                         Layout.fillWidth: true
                         UiLabel { text: ShellPrefs.undoLabel; color: Colors.muted; font.pixelSize: Shared.DesktopStyle.px(12); Layout.fillWidth: true }
                         UiButton { text: "Undo"; glyph: "\uf0e2"; enabled: !ShellPrefs.busy; onClicked: ShellPrefs.send("undo", null) }
+                    }
+                    SettingsGroup {
+                        Layout.fillWidth: true
+                        visible: root.page === "controls" && root.section === "displays" && DesktopData.displayRevertLeft > 0
+                        SettingsRow {
+                            title: "Keep these display settings?"
+                            subtitle: "Reverting in " + DesktopData.displayRevertLeft + " s."
+                            UiButton { text: "Keep"; selected: true; enabled: !DesktopData.displayBusy; onClicked: DesktopData.displayCommand(["confirm"]) }
+                            UiButton { text: "Revert"; enabled: !DesktopData.displayBusy; onClicked: DesktopData.displayCommand(["revert"]) }
+                        }
                     }
                     ScrollView {
                         id: scroll; Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumHeight: 0

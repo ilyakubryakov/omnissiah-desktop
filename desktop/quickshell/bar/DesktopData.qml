@@ -123,7 +123,9 @@ Singleton {
     readonly property bool displaysOpen: open && page === "controls" && controlTab === "displays"
     readonly property bool displayPending: displays.pending !== null && displays.pending !== undefined
     readonly property bool displayBusy: displayAct.running
+    property int displayRevertLeft: 0
     signal displaysApplied()
+    onDisplaysChanged: displayRevertLeft = displays.pending || 0
     onDisplaysOpenChanged: if (displaysOpen) readDisplays()
     function readDisplays() { if (!displayRead.running) displayRead.running = true }
     function displayCommand(args, input) {
@@ -135,6 +137,7 @@ Singleton {
         displayAct.running = true
     }
     Timer { interval: 3000; running: root.displaysOpen || root.displayPending; repeat: true; onTriggered: root.readDisplays() }
+    Timer { interval: 1000; running: root.displayRevertLeft > 0; repeat: true; onTriggered: root.displayRevertLeft-- }
     Process {
         id: displayRead; command: [root.displayHelper, "data"]
         stdout: StdioCollector { onStreamFinished: {

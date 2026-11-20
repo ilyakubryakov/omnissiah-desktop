@@ -11,23 +11,18 @@ ColumnLayout {
     property string primary: ""
     property string selectedKey: ""
     property bool dirty: false
-    property int revertLeft: 0
     readonly property var server: DesktopData.displays
     readonly property var selected: draft.find(d => d.key === selectedKey) || null
     readonly property var placed: draft.filter(d => d.enabled && !d.mirror)
     readonly property var scaleChoices: [1, 1.25, 4 / 3, 1.5, 1.6, 5 / 3, 1.75, 2, 2.25, 2.5, 3]
     readonly property var rotations: ["Normal", "90°", "180°", "270°"]
 
-    onServerChanged: {
-        if (!dirty) load()
-        revertLeft = server.pending === null || server.pending === undefined ? 0 : server.pending
-    }
+    onServerChanged: if (!dirty) load()
     Component.onCompleted: { load(); DesktopData.readDisplays() }
     Connections {
         target: DesktopData
         function onDisplaysApplied() { page.dirty = false }
     }
-    Timer { interval: 1000; repeat: true; running: page.revertLeft > 0; onTriggered: page.revertLeft = Math.max(0, page.revertLeft - 1) }
 
     function load() {
         draft = (server.displays || []).map(d => Object.assign({}, d, { sdrbrightness: d.sdrBrightness }))
@@ -118,16 +113,6 @@ ColumnLayout {
     }
 
     readonly property int controlWidth: Shared.DesktopStyle.px(220)
-
-    SettingsGroup {
-        visible: page.revertLeft > 0
-        SettingsRow {
-            title: "Keep these display settings?"
-            subtitle: "Reverting in " + page.revertLeft + " s."
-            UiButton { text: "Keep"; selected: true; enabled: !DesktopData.displayBusy; onClicked: DesktopData.displayCommand(["confirm"]) }
-            UiButton { text: "Revert"; enabled: !DesktopData.displayBusy; onClicked: { page.dirty = false; DesktopData.displayCommand(["revert"]) } }
-        }
-    }
 
     UiLabel {
         visible: DesktopData.displayError !== ""
