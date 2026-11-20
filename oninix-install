@@ -78,7 +78,6 @@ if ! compgen -G "$registry/[0-9]*" >/dev/null; then
         exit 1
     }
 fi
-touch "$registry/$uid"
 install -d -m 0755 /usr/local/libexec /usr/share/wayland-sessions
 install -m 0755 /dev/stdin "$launcher" <<'LAUNCHER'
 #!/bin/sh
@@ -93,6 +92,7 @@ Exec=/usr/local/libexec/oninix-layer-session
 Type=Application
 DesktopNames=Hyprland
 DESKTOP
+touch "$registry/$uid"
 ROOT
 }
 
@@ -196,6 +196,10 @@ if [[ ! -e $flake/flake.nix ]]; then
     };
 }
 FLAKE
+fi
+
+if [[ -n $source_ref ]] && [[ -f $flake/flake.lock ]]; then
+    log "Using the saved layer source in $flake/flake.nix"
 fi
 
 if [[ ! -x $profile/bin/oninix-layer-session ]]; then

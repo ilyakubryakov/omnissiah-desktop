@@ -3,7 +3,6 @@ import os
 import re
 import shutil
 import subprocess
-import sys
 import tempfile
 from pathlib import Path
 
@@ -34,8 +33,8 @@ LAYOUTS = ['us', 'us,ru', 'us,de', 'us,fr', 'us,es', 'us,ua', 'gb', 'de', 'fr']
 
 def gum(*args, stdin=None):
     result = subprocess.run(['gum', *args], input=stdin, stdout=subprocess.PIPE, text=True)
-    if result.returncode == 130:
-        raise SystemExit('Installation cancelled.')
+    if result.returncode != 0:
+        raise SystemExit('Installation cancelled.' if result.returncode == 130 else f'Installer prompt failed (exit {result.returncode}).')
     return result
 
 def say(text, color=GLOW):
@@ -58,7 +57,12 @@ def ask(header, value='', placeholder='', password=False):
 
 def confirm(text, default=True):
     args = ['confirm', text] + ([] if default else ['--default=false'])
-    return subprocess.run(['gum', *args]).returncode == 0
+    code = subprocess.run(['gum', *args]).returncode
+    if code == 130:
+        raise SystemExit('Installation cancelled.')
+    if code not in (0, 1):
+        raise SystemExit(f'Installer confirmation failed (exit {code}).')
+    return code == 0
 
 def run(args, **kwargs):
     print('$ ' + ' '.join(args), flush=True)
@@ -87,12 +91,13 @@ def detect_virt():
     return result.stdout.strip() if result.returncode == 0 else ''
 
 def disks():
-    data = json.loads(subprocess.run(['lsblk', '-J', '-d', '-b', '-o', 'NAME,PATH,SIZE,MODEL,TYPE,RM,RO'],
-                                     capture_output=True, text=True, check=True).stdout)
-    live = subprocess.run(['findmnt', '-n', '-o', 'SOURCE', '/iso'], capture_output=True, text=True).stdout.strip()
+    data = json.loads(subprocess.check_output(
+        ['lsblk', '-J', '-b', '-o', 'NAME,PATH,SIZE,MODEL,TYPE,RO,MOUNTPOINTS'], text=True))
+    def in_use(dev):
+        return any(dev['mountpoints'] or []) or any(in_use(child) for child in dev.get('children', []))
     result = []
     for dev in data['blockdevices']:
-        if dev['type'] != 'disk' or dev.get('ro') or (live and live.startswith(dev['path'])):
+        if dev['type'] != 'disk' or dev.get('ro') or in_use(dev):
             continue
         size = int(dev['size']) / 1e9
         if size < 32:
@@ -121,7 +126,7 @@ def disko_config(device, encrypt, password_file=None):
     return '''{
   disko.devices.disk.main = {
     type = "disk";
-    device = "''' + device + '''";
+    device = ''' + nix_string(device) + ''';
     content = {
       type = "gpt";
       partitions = {
@@ -183,17 +188,18 @@ def collect():
     say('OniNix installer · the machine spirit awaits')
     if not Path('/sys/firmware/efi').exists():
         raise SystemExit('OniNix needs a UEFI boot. Switch the firmware to UEFI and start again.')
-    if subprocess.run(['ping', '-c', '1', '-W', '3', 'cache.nixos.org'], capture_output=True).returncode != 0:
-        say('No network. Connect with the panel or `nmtui`, then press Enter.', BRASS)
+    if subprocess.run(['curl', '-fsS', '--max-time', '5', 'https://cache.nixos.org/nix-cache-info'],
+                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0:
+        say('Could not reach the NixOS binary cache. Connect with the panel or nmtui, then press Enter.', BRASS)
         input()
     targets = disks()
     if not targets:
-        raise SystemExit('No disk of 32 GB or more was found.')
+        raise SystemExit('No unused disk of 32 GB or more was found.')
     label = choose('Install OniNix on which disk? Everything on it will be erased.', [t[1] for t in targets])
     device = next(path for path, text in targets if text == label)
     encrypt = confirm('Encrypt the disk (LUKS)?', default=False)
     luks = ask_password('Disk encryption passphrase') if encrypt else ''
-    fullname = ask('Your name', placeholder='Ilya')
+    fullname = ask('Your name', placeholder='Alex Morgan')
     default_user = re.sub(r'[^a-z0-9_-]', '', fullname.lower().split(' ')[0]) or 'user'
     user = ask('Login name', value=default_user)
     while not re.fullmatch(r'[a-z_][a-z0-9_-]{0,31}', user):
@@ -201,7 +207,10 @@ def collect():
         user = ask('Login name', value=default_user)
     password = ask_password('Password for ' + user)
     hostname = ask('Computer name', value='oninix')
-    zones = subprocess.run(['timedatectl', 'list-timezones'], capture_output=True, text=True).stdout
+    while not re.fullmatch(r'[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?', hostname):
+        say('Use up to 63 letters, digits or hyphens. Start and end with a letter or digit.', CRIMSON)
+        hostname = ask('Computer name', value='oninix')
+    zones = subprocess.check_output(['timedatectl', 'list-timezones'], text=True)
     timezone = gum('filter', '--header', 'Time zone', '--placeholder', 'Type a city',
                    stdin=zones).stdout.strip() or 'UTC'
     layout = choose('Keyboard layouts (switch with Caps Lock)', LAYOUTS)
@@ -215,7 +224,9 @@ def collect():
             'gpu': gpu, 'laptop': laptop, 'virt': virt, 'features': features}
 
 def install(answers):
-    with tempfile.TemporaryDirectory() as work:
+    if answers['device'] not in dict(disks()):
+        raise SystemExit('The selected disk is no longer available or is in use.')
+    with tempfile.TemporaryDirectory(dir='/run', prefix='oninix-install-') as work:
         disko_file = Path(work) / 'disko.nix'
         password_file = None
         if answers['encrypt']:
@@ -247,7 +258,7 @@ def install(answers):
 
 def main():
     if os.geteuid() != 0:
-        os.execvp('sudo', ['sudo', '--preserve-env=ONINIX_TEMPLATE,ONINIX_SOURCE,PATH', sys.executable, *sys.argv])
+        raise SystemExit('Run the packaged oninix-installer to install OniNix.')
     answers = collect()
     say('Summary', BRASS)
     print(f"  Disk        {answers['device']} (erased{', encrypted' if answers['encrypt'] else ''})")

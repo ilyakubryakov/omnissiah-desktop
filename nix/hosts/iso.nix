@@ -29,8 +29,7 @@ in
   services.displayManager.autoLogin.user = "nixos";
   services.udisks2.enable = true;
 
-  environment.systemPackages = [ installerEntry ]
-    ++ lib.optional (builtins.pathExists ../installer/default.nix) installer;
+  environment.systemPackages = [ installerEntry installer ];
 
   image.baseName = lib.mkForce "oninix-${config.system.nixos.label}-${pkgs.stdenv.hostPlatform.system}";
   isoImage = {
