@@ -2,10 +2,7 @@
 let
   cfg = config.oninix;
   gpu = cfg.hardware.gpu;
-  acceleration = lib.optionalAttrs (gpu != "none") {
-    cudaSupport = gpu == "nvidia";
-    vulkanSupport = gpu == "amd" || gpu == "intel";
-  };
+  acceleration = lib.optionalAttrs (gpu != "none") { vulkanSupport = true; };
   path = [ "/run/wrappers" "/run/current-system/sw" ];
 in
 {
