@@ -54,7 +54,7 @@ ColumnLayout {
 
     SettingsGroup {
         title: root.selectedDefinition.title + " devices"
-        footer: "Device choices belong to this machine. On the station you can select Scarlett without overwriting the laptop's devices."
+        footer: "Device choices are saved separately on each computer."
         Repeater {
             model: ["sink", "source"]
             SettingsRow {

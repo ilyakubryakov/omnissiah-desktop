@@ -17,7 +17,7 @@ STATE = Path(os.environ.get('XDG_STATE_HOME', str(Path.home() / '.local/state'))
 CONFIG = STATE / 'wallpapers.json'
 EXTENSIONS = {'.png', '.jpg', '.jpeg', '.webp'}
 EMBLEM = REPO / 'dotfiles/.config/fastfetch/mechanicus.ans'
-FALLBACK = Path(os.environ.get('XDG_CACHE_HOME', str(Path.home() / '.cache'))) / 'station/fallback-wallpaper'
+FALLBACK = Path(os.environ.get('XDG_CACHE_HOME', str(Path.home() / '.cache'))) / 'oninix/fallback-wallpaper'
 ANSI = ['dark_background', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white',
         'muted', 'bright_red', 'bright_green', 'bright_yellow', 'bright_blue',
         'bright_magenta', 'bright_cyan', 'bright_white']

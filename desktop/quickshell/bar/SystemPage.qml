@@ -18,7 +18,7 @@ ColumnLayout {
     function gib(bytes) {
         return (bytes / 1073741824).toFixed(0);
     }
-    readonly property var targetTabs: ({ "NixOS": "software", "AI / GPU": "software", "Voice and machine spirit": "software" })
+    readonly property var targetTabs: ({ "NixOS": "software", "Local AI": "software", "Voice and machine spirit": "software" })
     function reveal(target) {
         const next = targetTabs[target]
         if (!next || root.tab === next) return false
@@ -220,10 +220,9 @@ ColumnLayout {
         active: !root.laptop
         visible: root.tab === "software" && !root.laptop
         sourceComponent: SettingsGroup {
-            title: "AI / GPU"
+            title: "Local AI"
             SettingsRow {
-                title: "Video memory"
-                subtitle: Shared.StationStatus.gpu.available && Shared.StationStatus.gpu.vramUsed !== null && Shared.StationStatus.gpu.vramTotal > 0 ? "VRAM " + (Shared.StationStatus.gpu.vramUsed / 1073741824).toFixed(1) + " / " + (Shared.StationStatus.gpu.vramTotal / 1073741824).toFixed(0) + " GiB" : "GPU telemetry unavailable"
+                title: "Ollama"
                 UiButton {
                     text: "AI actions…"
                     onClicked: root.launch(["oninix-launcher", "--show-actions"])

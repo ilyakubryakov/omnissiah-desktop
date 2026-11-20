@@ -1,8 +1,8 @@
-# theme:out=Station.colors
+# theme:out=OniNix.colors
 # theme:comment=#
 [General]
-Name=Station
-ColorScheme=Station
+Name=OniNix
+ColorScheme=OniNix
 
 [KDE]
 contrast=4

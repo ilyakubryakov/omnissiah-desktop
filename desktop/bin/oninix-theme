@@ -352,10 +352,10 @@ PY
     done <"$conf"
 
     mkdir -p "$HOME/.local/share/color-schemes"
-    colorscheme="Station-$1"
+    colorscheme="OniNix-$1"
     scheme_changed=0
-    cmp -s "$CURRENT_LINK/Station.colors" "$HOME/.local/share/color-schemes/$colorscheme.colors" || scheme_changed=1
-    install -m 0644 "$CURRENT_LINK/Station.colors" "$HOME/.local/share/color-schemes/$colorscheme.colors"
+    cmp -s "$CURRENT_LINK/OniNix.colors" "$HOME/.local/share/color-schemes/$colorscheme.colors" || scheme_changed=1
+    install -m 0644 "$CURRENT_LINK/OniNix.colors" "$HOME/.local/share/color-schemes/$colorscheme.colors"
     if command -v kwriteconfig6 >/dev/null 2>&1; then
         for font_key in font menuFont toolBarFont; do
             kwriteconfig6 --file kdeglobals --group General --key "$font_key" "$ui_font"

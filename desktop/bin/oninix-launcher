@@ -94,11 +94,9 @@ def workstation_actions() -> dict:
         })
     if shutil.which("ollama"):
         actions.update({
-            "webui": ("AI: Open WebUI", "applications-science", ["xdg-open", "http://127.0.0.1:8080"]),
-            "comfyui": ("AI: ComfyUI", "applications-graphics", ["xdg-open", "http://127.0.0.1:8188"]),
-            "ai-status": ("AI: service status", "utilities-system-monitor", ["kitty", "--hold", "-e", "systemctl", "--no-pager", "status", "ollama.service", "open-webui.service", "comfyui.service"]),
-            "ai-start": ("AI: start services", "media-playback-start", ["kitty", "--hold", "-e", "sudo", "systemctl", "start", "local-ai.target"]),
-            "ai-stop": ("AI: stop services (ends running jobs)", "media-playback-stop", ["kitty", "--hold", "-e", "sudo", "systemctl", "stop", "local-ai.target"]),
+            "ai-status": ("Ollama service status", "utilities-system-monitor", ["kitty", "--hold", "-e", "systemctl", "--no-pager", "status", "ollama.service"]),
+            "ai-start": ("Start Ollama", "media-playback-start", ["kitty", "--hold", "-e", "sudo", "systemctl", "start", "ollama.service"]),
+            "ai-stop": ("Stop Ollama (ends running jobs)", "media-playback-stop", ["kitty", "--hold", "-e", "sudo", "systemctl", "stop", "ollama.service"]),
         })
     if shutil.which("virt-manager"):
         actions["vms"] = ("Virtual machines", "computer", ["virt-manager", "--connect", "qemu:///system"])

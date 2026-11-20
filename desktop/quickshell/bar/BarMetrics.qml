@@ -15,23 +15,6 @@ RowLayout {
     signal openCalendar()
         spacing: 8
 
-        Seg {
-            id: gpuSeg
-            onClicked: resourcePopup.togglePinned()
-            readonly property var gpu: Shared.StationStatus.gpu
-            visible: gpu.temp !== undefined && gpu.temp !== null
-            glyph: "\u{F08AE}"
-            label: Math.round(gpu.temp) + "°C" + (gpu.vramPct != null ? " " + Math.round(gpu.vramPct) + "%" : "")
-            tint: gpu.temp >= 83 ? Colors.red : Colors.foreground
-        }
-        Seg {
-            id: modelsSeg
-            onClicked: resourcePopup.togglePinned()
-            readonly property var models: Shared.StationStatus.ollama.models || []
-            visible: models.length > 0
-            glyph: "\u{F06A9}"
-            tint: Colors.accent
-        }
         Seg { id: tempSeg; onClicked: resourcePopup.togglePinned(); glyph: "\u{F050F}"; label: Sys.temp < 0 ? "--" : Sys.temp + "°C"; tint: Sys.temp >= 85 ? Colors.red : Colors.foreground }
         Seg { id: cpuSeg; onClicked: resourcePopup.togglePinned(); glyph: "\u{F0EE0}"; label: Sys.cpu < 0 ? "--" : Sys.cpu + "%" }
         Seg { id: memSeg; onClicked: resourcePopup.togglePinned(); glyph: "\u{F035B}"; label: Sys.mem < 0 ? "--" : Sys.mem + "%" }
@@ -76,7 +59,7 @@ RowLayout {
     BarPopup {
         id: resourcePopup
         anchorItem: cpuSeg; barWindow: bar.barWindow; above: bar.barWindow.edge === "bottom"; cardWidth: Shared.DesktopStyle.px(440)
-        triggerHovered: tempSeg.hovered || cpuSeg.hovered || memSeg.hovered || diskSeg.hovered || gpuSeg.hovered || modelsSeg.hovered
+        triggerHovered: tempSeg.hovered || cpuSeg.hovered || memSeg.hovered || diskSeg.hovered
         ResourceCard { Layout.fillWidth: true }
     }
     BarPopup {

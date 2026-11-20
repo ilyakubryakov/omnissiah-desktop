@@ -56,7 +56,7 @@ ColumnLayout {
         Layout.fillWidth: true; spacing: 8
         Bar.UiButton { text: "REAPER"; onClicked: Quickshell.execDetached(["oninix-app", "reaper"]) }
         Bar.UiButton { text: "Routing"; onClicked: Quickshell.execDetached(["oninix-app", "qpwgraph"]) }
-        Bar.UiButton { text: "Scarlett mixer"; onClicked: Quickshell.execDetached(["oninix-app", "alsa-scarlett-gui"]) }
+        Bar.UiButton { visible: root.scarlett.length > 0; text: "Scarlett mixer"; onClicked: Quickshell.execDetached(["oninix-app", "alsa-scarlett-gui"]) }
         Bar.UiButton { text: "Live audio stats"; onClicked: Quickshell.execDetached(["oninix-app", "kitty", "--title", "PipeWire monitor", "pw-top"]) }
     }
 }
