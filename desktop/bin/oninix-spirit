@@ -67,6 +67,24 @@ def agent():
             return name
     return None
 
+def keep_refreshed_login(original, copy):
+    if copy.is_symlink() or not copy.is_file() or not original.is_file():
+        return
+    fresh = copy.read_bytes()
+    if fresh == original.read_bytes():
+        return
+    try:
+        json.loads(fresh)
+    except ValueError:
+        return
+    temporary = original.with_name(original.name + '.oninix-new')
+    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(descriptor, 'wb') as out:
+        out.write(fresh)
+        out.flush()
+        os.fsync(out.fileno())
+    os.replace(temporary, original)
+
 def run_agent(name, request, before):
     prompt = (LAYER_PROMPT if LAYER_PROFILE else PROMPT).format(request=request)
     executable = str(Path(shutil.which(name)).resolve())
@@ -113,8 +131,11 @@ def run_agent(name, request, before):
             if Path(executable).is_relative_to(home):
                 sandbox += ['--ro-bind', executable, '/tmp/agent-bin']
                 executable = '/tmp/agent-bin'
-        result = subprocess.run([*sandbox, '--', executable, *command], cwd=job,
-                                capture_output=True, text=True, timeout=900)
+        try:
+            result = subprocess.run([*sandbox, '--', executable, *command], cwd=job,
+                                    capture_output=True, text=True, timeout=900)
+        finally:
+            keep_refreshed_login(auth, auth_copy)
         if result.returncode != 0:
             detail = (result.stderr or result.stdout).strip()
             raise RuntimeError(detail[-600:] or f'{name} failed')
