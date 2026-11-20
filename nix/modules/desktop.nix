@@ -75,15 +75,13 @@ lib.mkIf cfg.enable {
   };
   services.greetd.settings.default_session.command = lib.concatStringsSep " " [
     "${lib.getExe' pkgs.coreutils "env"} XDG_DATA_DIRS=${greeterDataDirs}"
-    "GSK_RENDERER=cairo LIBSEAT_BACKEND=logind XKB_DEFAULT_OPTIONS=grp:caps_toggle"
+    "GTK_USE_PORTAL=0 GDK_DEBUG=no-portals GSK_RENDERER=cairo LIBSEAT_BACKEND=logind XKB_DEFAULT_OPTIONS=grp:caps_toggle"
     "XKB_DEFAULT_LAYOUT=${lib.escapeShellArg keyboardLayout}"
     "${lib.getExe' pkgs.dbus "dbus-run-session"} ${lib.getExe cage}"
     "${lib.escapeShellArgs greeter.cageArgs} -- ${lib.getExe greeter.package}"
   ];
-  systemd.services.greetd.serviceConfig = {
-    Restart = lib.mkForce (if autoLogin.enable then "no" else "always");
-    RestartSec = "1s";
-  };
+  services.greetd.restart = !autoLogin.enable;
+  systemd.services.greetd.serviceConfig.RestartSec = "1s";
 
   systemd.user.services.oninix-panel = {
     description = "OniNix panels, Control Station and desktop overlays";
@@ -190,6 +188,5 @@ lib.mkIf cfg.enable {
     glib
     cava
     swappy
-    jq
   ];
 }

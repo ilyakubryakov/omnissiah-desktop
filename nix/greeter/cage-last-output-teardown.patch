@@ -1,11 +1,10 @@
 diff -ru a/cage.c b/cage.c
 --- a/cage.c
 +++ b/cage.c
-@@ -627,6 +627,8 @@
+@@ -627,6 +627,7 @@
  
  	seat_center_cursor(server.seat);
  	wl_display_run(server.wl_display);
-+	/* Outputs destroyed during teardown must not be re-enabled. */
 +	server.terminated = true;
  
  #if CAGE_HAS_XWAYLAND
