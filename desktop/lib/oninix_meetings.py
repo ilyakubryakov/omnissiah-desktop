@@ -322,7 +322,7 @@ class Meetings:
                 body += f' Last time: {previous[1]} open task' + ('' if previous[1] == 1 else 's') + '.'
                 actions.append('--action=last=Last notes')
             p = subprocess.Popen(['notify-send', '--app-name=OniNix Meetings', '--urgency=critical', '--icon=media-record', '--print-id',
-                                  *actions, '--action=dismiss=Dismiss', event['title'], body],
+                                  *actions, '--action=dismiss=Dismiss', '--', event['title'], body],
                                  stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
             try:
                 lines = p.communicate(timeout=wait)[0].split()

@@ -991,9 +991,17 @@ def shelf_add(paths, copy=False):
             if not source.is_file():
                 raise ValueError('Not a file: ' + source.name)
             if copy:
-                target = shelf_dir() / source.name
-                shutil.copyfile(source, target)
-                target.chmod(0o600)
+                copies = shelf_dir() / 'files'
+                copies.mkdir(mode=0o700, exist_ok=True)
+                target = copies / source.name
+                fd, name = tempfile.mkstemp(prefix='.copy-', dir=copies)
+                temp = Path(name)
+                try:
+                    with os.fdopen(fd, 'wb') as out, source.open('rb') as stream:
+                        shutil.copyfileobj(stream, out)
+                    temp.replace(target)
+                finally:
+                    temp.unlink(missing_ok=True)
                 entry = {'path': str(target), 'owned': True}
             else:
                 entry = {'path': str(source.resolve()), 'owned': False}
