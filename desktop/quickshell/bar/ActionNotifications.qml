@@ -22,10 +22,35 @@ PanelWindow {
     WlrLayershell.namespace: "oninix-action-notifications"
     WlrLayershell.keyboardFocus: hover.hovered ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
-    function refresh() { if (!read.running) read.running = true }
+    function refresh() { if (!probe.running && !read.running) probe.running = true }
+    function clear() {
+        if (snapshot === "") return
+        snapshot = ""
+        rows = []
+    }
+    function hasAction(row) {
+        return row && row.actions && Object.keys(row.actions).length > 0
+    }
     Component.onCompleted: refresh()
     Timer { interval: 1000; running: true; repeat: true; onTriggered: root.refresh() }
     Connections { target: DesktopData; function onActionDone(name) { root.refresh() } }
+    Process {
+        id: probe
+        command: ["makoctl", "list", "-j"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    const data = JSON.parse(text)
+                    const rows = Array.isArray(data) ? data : data.data || []
+                    if (rows.some(row => (Array.isArray(row) ? row : [row]).some(root.hasAction))) {
+                        read.running = true
+                        return
+                    }
+                } catch (e) {}
+                root.clear()
+            }
+        }
+    }
     Process {
         id: read
         command: [DesktopData.helper, "data", "notification-popups"]
@@ -37,7 +62,7 @@ PanelWindow {
                         root.snapshot = text
                         root.rows = data.current || []
                     }
-                } catch (e) { root.snapshot = ""; root.rows = [] }
+                } catch (e) { root.clear() }
             }
         }
     }
