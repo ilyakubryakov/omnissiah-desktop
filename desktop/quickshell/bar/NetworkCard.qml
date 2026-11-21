@@ -7,7 +7,7 @@ ColumnLayout {
     id: root
     signal detailsRequested()
     spacing: 10
-    readonly property var network: DesktopData.controls.network || ({})
+    readonly property var network: DesktopData.network
     readonly property var links: network.links || []
     readonly property var primary: links.length ? links[0] : ({})
     readonly property string connectivity: network.connectivity || "unknown"
@@ -45,7 +45,6 @@ ColumnLayout {
                 color: root.connectivity === "full" ? Colors.green : Colors.yellow; font.pixelSize: Shared.DesktopStyle.px(12)
             }
         }
-        UiButton { text: "Wi-Fi"; selected: DesktopData.wifi.enabled; onClicked: root.detailsRequested() }
     }
     UiButton {
         visible: root.connectivity === "portal"
@@ -69,8 +68,12 @@ ColumnLayout {
             UiLabel { text: parent.modelData[1]; Layout.fillWidth: true; font.pixelSize: Shared.DesktopStyle.px(12); maximumLineCount: 2; elide: Text.ElideRight }
         }
     }
-    UiLabel { text: "DNS PROVIDER"; color: Colors.accent; font.pixelSize: Shared.DesktopStyle.px(11); font.letterSpacing: 1 }
+    UiLabel {
+        visible: !!root.primary.uuid
+        text: "DNS PROVIDER"; color: Colors.accent; font.pixelSize: Shared.DesktopStyle.px(11); font.letterSpacing: 1
+    }
     RowLayout {
+        visible: !!root.primary.uuid
         Layout.fillWidth: true
         Repeater {
             model: [{id: "dhcp", label: "DHCP"}, {id: "cloudflare", label: "Cloudflare"}, {id: "google", label: "Google"}]
@@ -82,6 +85,10 @@ ColumnLayout {
             }
         }
     }
-    UiLabel { text: "Traffic totals are since this interface started. DNS changes apply to this connection."; color: Colors.muted; font.pixelSize: Shared.DesktopStyle.px(10); Layout.fillWidth: true; wrapMode: Text.WordWrap }
-    UiButton { text: "Wi-Fi & connection settings"; Layout.fillWidth: true; onClicked: root.detailsRequested() }
+    UiLabel {
+        visible: !DesktopData.networkManager
+        text: DesktopData.networkManagement
+        color: Colors.muted; font.pixelSize: Shared.DesktopStyle.px(12); Layout.fillWidth: true; wrapMode: Text.WordWrap
+    }
+    UiButton { text: "Connection settings"; Layout.fillWidth: true; onClicked: root.detailsRequested() }
 }

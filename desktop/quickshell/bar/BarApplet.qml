@@ -157,11 +157,13 @@ Item {
         id: network
         Seg {
             id: networkSeg
-            readonly property var links: (DesktopData.controls.connections || []).filter(c => c.active === "yes")
-            readonly property bool wired: links.some(c => c.type === "802-3-ethernet")
-            readonly property bool wireless: links.some(c => c.type === "802-11-wireless")
+            readonly property var links: DesktopData.network.links || []
+            readonly property bool wired: links.some(c => c.type === "ethernet")
+            readonly property bool wireless: links.some(c => c.type === "wifi")
             glyph: wired ? "\u{F0200}" : wireless ? "\u{F05A9}" : "\u{F05AA}"
-            label: wired || wireless ? "" : Quickshell.env("ONINIX_LAPTOP") === "1" ? "No Wi-Fi" : "Offline"
+            label: wired || wireless ? "" : ({
+                full: "Connected", portal: "Sign-in required", limited: "Limited", none: "Offline"
+            })[DesktopData.network.connectivity] || "Network"
             tint: Colors.foreground
             onClicked: networkPopup.togglePinned()
             BarPopup {

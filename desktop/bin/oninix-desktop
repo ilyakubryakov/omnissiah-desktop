@@ -231,7 +231,16 @@ def laptop_state():
         pass
     return result
 
-def network_state():
+def network_counters(device):
+    stats = Path('/sys/class/net', device, 'statistics')
+    def counter(name):
+        try:
+            return int((stats / name).read_text())
+        except (OSError, ValueError):
+            return None
+    return {'received': counter('rx_bytes'), 'sent': counter('tx_bytes')}
+
+def networkmanager_state():
     links = []
     lines = run(['nmcli', '-t', '-f', 'DEVICE,TYPE,STATE,CONNECTION', 'device']).decode().splitlines()
     for fields in map(split_nm, lines):
@@ -245,20 +254,70 @@ def network_state():
             values.setdefault(key.split('[')[0], []).append(value.replace('\\:', ':'))
         def first(key):
             return next(iter(values.get(key, [])), '')
-        stats = Path('/sys/class/net') / device / 'statistics'
-        def counter(name):
-            try: return int((stats / name).read_text())
-            except (OSError, ValueError): return None
         links.append({'device': device, 'name': fields[3], 'type': fields[1],
                       'uuid': first('GENERAL.CON-UUID'), 'address': first('IP4.ADDRESS'),
                       'gateway': first('IP4.GATEWAY'), 'dns': values.get('IP4.DNS', []) + values.get('IP6.DNS', []),
-                      'received': counter('rx_bytes'), 'sent': counter('tx_bytes')})
+                      **network_counters(device)})
     connectivity = run(['nmcli', '-t', '-f', 'CONNECTIVITY', 'general']).decode().strip()
-    return {'connectivity': connectivity, 'links': links, 'timestamp': time.time()}
+    return {'manager': 'NetworkManager', 'editor': bool(shutil.which('nm-connection-editor')),
+            'connectivity': connectivity, 'links': links}
+
+def system_network_state():
+    try:
+        data = json.loads(run(['networkctl', '--json=short', '--no-pager', 'list'], timeout=2))
+        managed = {link['Name']: link for link in data['Interfaces'] if link.get('NetworkFile')}
+    except (OSError, ValueError, KeyError, subprocess.SubprocessError):
+        managed = {}
+    ip = shutil.which('ip') or '/usr/sbin/ip'
+    routes = {}
+    for family, flag in [('inet', '-4'), ('inet6', '-6')]:
+        rows = json.loads(run([ip, '-j', flag, 'route', 'show', 'default'], timeout=2))
+        for row in sorted(rows, key=lambda r: r.get('metric', 0)):
+            if row.get('dev') and 'linkdown' not in row.get('flags', []):
+                routes.setdefault((row['dev'], family), row.get('gateway', ''))
+    links = []
+    routed = set()
+    for link in json.loads(run([ip, '-j', 'address', 'show', 'up'], timeout=2)):
+        if {'LOOPBACK', 'NO-CARRIER'} & set(link['flags']):
+            continue
+        device = link['ifname']
+        addresses = [a for a in link.get('addr_info', []) if a['scope'] in {'global', 'site'} and not a.get('tentative')]
+        if not addresses:
+            continue
+        address = min(addresses, key=lambda a: ((device, a['family']) not in routes, a['family'] != 'inet'))
+        route = (device, address['family'])
+        if route in routes:
+            routed.add(device)
+        wireless = Path('/sys/class/net', device, 'phy80211').exists()
+        kind = 'wifi' if wireless else 'ethernet' if link['link_type'] == 'ether' else 'other'
+        links.append({'device': device, 'name': device, 'type': kind, 'uuid': '',
+                      'address': f"{address['local']}/{address['prefixlen']}", 'gateway': routes.get(route, ''),
+                      'dns': [server['AddressString'] for server in managed.get(device, {}).get('DNS', [])
+                              if server.get('AddressString')], **network_counters(device)})
+    links.sort(key=lambda link: link['device'] not in routed)
+    networkd = links[0]['device'] in managed if links else bool(managed)
+    return {'manager': 'systemd-networkd' if networkd else 'system',
+            'connectivity': 'full' if routed else 'limited' if links else 'none', 'links': links}
+
+def network_state():
+    try:
+        state = networkmanager_state()
+    except (OSError, subprocess.SubprocessError):
+        state = None
+    if state is None:
+        state = system_network_state()
+    elif not state['links']:
+        try:
+            fallback = system_network_state()
+            if fallback['links']:
+                state = fallback
+        except (OSError, ValueError, KeyError, subprocess.SubprocessError):
+            pass
+    return {**state, 'timestamp': time.time()}
 
 def network_dns(provider, uuid):
     state = network_state()
-    link = next((x for x in state['links'] if x['uuid'] == uuid), None)
+    link = next((x for x in state['links'] if uuid and x['uuid'] == uuid), None)
     if not link:
         raise ValueError('Connection is no longer active')
     servers = {'dhcp': '', 'cloudflare': '1.1.1.1,1.0.0.1', 'google': '8.8.8.8,8.8.4.4'}.get(provider)
@@ -343,8 +402,8 @@ def vpn_login():
             run(['systemctl', 'start', vpn['unit']], timeout=30)
 
 def wifi_device():
-    for fields in map(split_nm, run(['nmcli', '-t', '-f', 'DEVICE,TYPE', 'device']).decode().splitlines()):
-        if len(fields) >= 2 and fields[1] == 'wifi':
+    for fields in map(split_nm, run(['nmcli', '-t', '-f', 'DEVICE,TYPE,STATE', 'device']).decode().splitlines()):
+        if len(fields) >= 3 and fields[1] == 'wifi' and fields[2] != 'unmanaged':
             return fields[0]
     return None
 

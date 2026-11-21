@@ -11,8 +11,7 @@ ColumnLayout {
     spacing: Shared.DesktopStyle.px(20)
     property string tab: "network"
     readonly property bool laptop: Quickshell.env("ONINIX_LAPTOP") === "1"
-    readonly property var connections: DesktopData.controls.connections || []
-    readonly property var wired: connections.filter(c => c.type === "802-3-ethernet" && c.active === "yes")
+    readonly property var wired: (DesktopData.network.links || []).filter(c => c.type === "ethernet")
     readonly property var adapter: Bluetooth.defaultAdapter
     readonly property bool usable: !!adapter && adapter.enabled
     property var pairRequested: ({})
@@ -110,7 +109,7 @@ ColumnLayout {
     }
 
     SettingsGroup {
-        visible: root.tab === "network" && !!DesktopData.wifi.device
+        visible: root.tab === "network" && DesktopData.networkManager && !!DesktopData.wifi.device
         title: "Wi-Fi"
         SettingsRow {
             title: "Wi-Fi"
@@ -206,8 +205,14 @@ ColumnLayout {
         visible: root.tab === "network"
         SettingsRow {
             title: "Advanced network settings"
-            subtitle: "Profiles, addresses and DNS in the connection editor"
-            UiButton { glyph: "\u{F0493}"; text: "Open"; onClicked: root.launch(["nm-connection-editor"]) }
+            subtitle: DesktopData.networkManager
+                ? DesktopData.network.editor ? "Profiles, addresses and DNS in the connection editor"
+                    : "Managed by NetworkManager. Use nmcli to change settings."
+                : DesktopData.networkManagement
+            UiButton {
+                visible: DesktopData.networkManager && !!DesktopData.network.editor
+                glyph: "\u{F0493}"; text: "Open"; onClicked: root.launch(["nm-connection-editor"])
+            }
         }
     }
 

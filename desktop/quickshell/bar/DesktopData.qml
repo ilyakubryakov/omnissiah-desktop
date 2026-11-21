@@ -25,6 +25,11 @@ Singleton {
     function readAppearance() { if (!appearanceRead.running) appearanceRead.running = true }
     property bool choosingFile: false
     property var controls: ({})
+    readonly property var network: controls.network || ({})
+    readonly property bool networkManager: network.manager === "NetworkManager"
+    readonly property string networkManagement: network.manager === "systemd-networkd" ? "Managed by systemd-networkd"
+        : network.manager === "system" ? "Use your system network settings" : "Network settings unavailable"
+    onNetworkManagerChanged: if (networkOpen) readWifi()
     readonly property var vpnProfiles: controls.vpns || []
     readonly property var activeVpns: vpnProfiles.filter(c => c.active === "yes")
     readonly property string vpnStatus: controls.vpns === null ? "Unavailable" : activeVpns.length ? activeVpns.map(c => c.name).join(", ") : vpnProfiles.length ? "Disconnected" : "No profiles"
@@ -73,8 +78,8 @@ Singleton {
         askSsid = ""; wifiError = ""
         if (networkOpen) { readWifi(); if (wifi.enabled) scanWifi() }
     }
-    function readWifi() { if (!wifiRead.running) wifiRead.running = true }
-    function scanWifi() { scanning = true; act("wifi-scan"); scanDone.restart() }
+    function readWifi() { if (networkManager && !wifiRead.running) wifiRead.running = true }
+    function scanWifi() { if (!networkManager) return; scanning = true; act("wifi-scan"); scanDone.restart() }
     function connectWifi(ssid, password) {
         if (wifiJoin.running) return
         wifiError = ""; askSsid = ""
