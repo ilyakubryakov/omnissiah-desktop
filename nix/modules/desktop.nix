@@ -4,6 +4,20 @@ let
   share = pkgs.callPackage ../pkgs/share.nix { };
   autoLogin = config.services.displayManager.autoLogin;
   keyboardLayout = config.services.xserver.xkb.layout;
+  checkGraphics = pkgs.writeShellScript "oninix-check-graphics" ''
+    for attempt in 1 2 3 4 5 6; do
+      for card in /dev/dri/card[0-9]*; do
+        if [ -c "$card" ]; then exit 0; fi
+      done
+      if [ "$attempt" -lt 6 ]; then sleep 1; fi
+    done
+    message="OniNix: No DRM graphics device found. Use a text console (Ctrl+Alt+F2) or SSH if configured."
+    if [ -x /run/current-system/sw/bin/oninix-installer ]; then
+      message="$message Run oninix-installer to install OniNix."
+    fi
+    printf '%s\n' "$message" | tee /dev/console
+    exit 1
+  '';
   sessionCommand = "${lib.getExe config.programs.uwsm.package} start -F -e -D Hyprland -- /run/current-system/sw/bin/start-hyprland -- --config ${share}/share/oninix/hypr/hyprland.lua";
   session = pkgs.writeTextFile {
     name = "oninix-uwsm";
@@ -82,7 +96,13 @@ lib.mkIf cfg.enable {
     "${lib.escapeShellArgs greeter.cageArgs} -- ${lib.getExe greeter.package}"
   ];
   services.greetd.restart = !autoLogin.enable;
-  systemd.services.greetd.serviceConfig.RestartSec = "1s";
+  systemd.services.greetd = {
+    after = [ "systemd-udev-trigger.service" ];
+    serviceConfig = {
+      ExecCondition = checkGraphics;
+      RestartSec = "1s";
+    };
+  };
 
   systemd.user.services.oninix-panel = {
     description = "OniNix panels, Control Station and desktop overlays";
