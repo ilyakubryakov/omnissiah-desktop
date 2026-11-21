@@ -91,7 +91,18 @@ def detect_gpu():
     return 'none'
 
 def detect_laptop():
-    return any(Path('/sys/class/power_supply').glob('BAT*'))
+    if any(Path('/proc/acpi/button/lid').glob('*')):
+        return True
+    for supply in Path('/sys/class/power_supply').glob('*'):
+        try:
+            if (supply / 'type').read_text().strip() != 'Battery':
+                continue
+            scope = supply / 'scope'
+            if not scope.exists() or scope.read_text().strip() != 'Device':
+                return True
+        except OSError:
+            continue
+    return False
 
 def detect_virt():
     result = subprocess.run(['systemd-detect-virt'], capture_output=True, text=True)
