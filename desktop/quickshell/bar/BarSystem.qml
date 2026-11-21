@@ -25,7 +25,14 @@ RowLayout {
             id: updatesPopup
             anchorItem: updatesSeg; barWindow: root.barWindow; above: true; cardWidth: Shared.DesktopStyle.px(500)
             triggerHovered: updatesSeg.hovered
-            UpdatesCard { Layout.fillWidth: true; maxHeight: (root.barWindow.screen ? root.barWindow.screen.height : 1080) * 0.6 }
+            UpdatesCard {
+                Layout.fillWidth: true
+                maxHeight: (root.barWindow.screen ? root.barWindow.screen.height : 1080) * 0.6
+                onUpdateRequested: {
+                    updatesPopup.dismiss()
+                    updatesSeg.updates.launch()
+                }
+            }
         }
     }
 

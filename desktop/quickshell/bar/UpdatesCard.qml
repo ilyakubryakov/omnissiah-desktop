@@ -7,6 +7,7 @@ import "../shared" as Shared
 
 ColumnLayout {
     id: root
+    signal updateRequested()
     property real maxHeight: 600
     property bool details: false
     readonly property bool layerMode: Quickshell.env("ONINIX_LAYER") === "1"
@@ -84,7 +85,7 @@ ColumnLayout {
         glyph: "\u{F06B0}"
         text: root.updates.sessionOpen ? "Update session open" : root.layerMode ? "Update OniNix layer" : "Update OniNix"
         enabled: !root.busy
-        onClicked: root.updates.launch()
+        onClicked: root.updateRequested()
     }
 
     Flickable {
