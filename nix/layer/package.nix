@@ -38,7 +38,7 @@ let
       Description=OniNix desktop layer
       PartOf=graphical-session.target
       Wants=oninix-theme.service oninix-panel.service oninix-wallpaper.service oninix-notifications.service
-      Wants=oninix-idle.service oninix-dictation.service oninix-voice-profile.service
+      Wants=oninix-idle.service oninix-dictation.service oninix-voice-profile.service oninix-notebook-reminders.service
       Wants=oninix-update-check.timer oninix-theme-schedule.timer caldash.timer
     '';
     "oninix-panel.service" = service "OniNix panels and Control Station" "oninix-shell -n" ''
@@ -99,6 +99,10 @@ let
       OnActiveSec=15min
       OnUnitActiveSec=1h
       RandomizedDelaySec=10min
+    '';
+    "oninix-notebook-reminders.service" = service "Deliver OniNix Notebook reminders and timers" "oninix-notebook --watch" ''
+      Restart=on-failure
+      RestartSec=2
     '';
     "caldash.service" = service "Sync OniNix calendars" "oninix-calendar --sync" "Type=oneshot";
     "caldash.timer" = ''

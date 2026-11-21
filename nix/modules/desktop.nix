@@ -130,6 +130,17 @@ lib.mkIf cfg.enable {
       oninix-theme-schedule
     '';
   };
+  systemd.user.services.oninix-notebook-reminders = {
+    description = "Deliver OniNix Notebook reminders and timers";
+    wantedBy = [ "graphical-session.target" ];
+    partOf = [ "graphical-session.target" ];
+    path = [ pkgs.libnotify ];
+    serviceConfig = {
+      ExecStart = "${share}/bin/oninix-notebook --watch";
+      Restart = "on-failure";
+      RestartSec = "2s";
+    };
+  };
   systemd.user.services.caldash = {
     description = "Sync OniNix calendars";
     partOf = [ "graphical-session.target" ];
