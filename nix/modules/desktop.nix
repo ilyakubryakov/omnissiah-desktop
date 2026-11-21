@@ -54,7 +54,10 @@ lib.mkIf cfg.enable {
   };
   services.displayManager.sessionPackages = [ session ];
   services.xserver.xkb.layout = lib.mkDefault "us,ru";
-  environment.pathsToLink = [ "/share/oninix" "/share/hunspell" ];
+  environment.pathsToLink = [ "/share/oninix" "/share/hunspell" "/share/gsettings-schemas" ];
+  environment.profileRelativeSessionVariables.XDG_DATA_DIRS = [
+    "/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.name}"
+  ];
   environment.sessionVariables = {
     ONINIX_SHARE = "/run/current-system/sw/share/oninix";
     DICPATH = "/run/current-system/sw/share/hunspell";
@@ -62,6 +65,7 @@ lib.mkIf cfg.enable {
     ONINIX_LAPTOP = if cfg.hardware.laptop then "1" else "0";
   };
   programs.hyprlock.enable = true;
+  programs.dconf.enable = lib.mkDefault true;
   systemd.user.services.hypridle = {
     environment.ONINIX_LAPTOP = if cfg.hardware.laptop then "1" else "0";
     path = [ config.services.hypridle.package pkgs.python3 pkgs.util-linux "/run/current-system/sw" ];
@@ -113,7 +117,7 @@ lib.mkIf cfg.enable {
   systemd.user.services.oninix-panel = {
     description = "OniNix panels, Control Station and desktop overlays";
     partOf = [ "graphical-session.target" ];
-    after = [ "graphical-session.target" ];
+    after = [ "graphical-session.target" "oninix-theme.service" ];
     wants = [ "oninix-theme.service" ];
     path = [ "/run/wrappers" "/run/current-system/sw" ];
     serviceConfig = {
@@ -312,6 +316,7 @@ lib.mkIf cfg.enable {
     rofi
     libnotify
     glib
+    gsettings-desktop-schemas
     cava
     swappy
     wf-recorder
