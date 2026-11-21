@@ -82,13 +82,20 @@ def set_audio_default(kind, name):
     else:
         run(command + ['0', key, json.dumps({'name': name}), 'Spa:String:JSON'])
 
-def profile(name):
+def profile(name, *, game_prompt=False):
     if name not in {'normal', 'work', 'call', 'game', 'music'}:
         raise ValueError('Unknown desktop mode')
     path = runtime() / 'mode.json'
     with (runtime() / 'mode.lock').open('w') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         old = read_json(path, {})
+        if game_prompt:
+            entering = name == 'game'
+            if (old.get('name') == 'game') == entering:
+                return
+            guard = 'assert(require("gaming").has_games() == ' + str(entering).lower() + ')'
+            if run(['hyprctl', 'eval', guard]).strip() != b'ok':
+                return
         audio, available = audio_defaults()
         current = {'dnd': 'do-not-disturb' in modes(), 'nightlight': nightlight(),
                    **{'audio_' + k: v for k, v in audio.items()}}
@@ -156,16 +163,21 @@ def profile(name):
             except (OSError, subprocess.SubprocessError):
                 pass
 
-def game_offer():
-    if read_json(runtime() / 'mode.json', {}).get('name') == 'game':
+def game_offer(target):
+    entering = target == 'game'
+    if (read_json(runtime() / 'mode.json', {}).get('name') == 'game') == entering:
         return
+    if entering:
+        action, title = 'Enable Game mode', 'Game started'
+        body = 'Click to enable Game mode and free resources by pausing local AI and selected apps.'
+    else:
+        action, title = 'Return to Normal', 'Game closed'
+        body = 'Click to return to Normal and restore paused apps and services.'
     chosen = subprocess.run(['notify-send', '--app-name=Game mode', '--icon=input-gaming', '--wait',
-                             '--action=enable=Enable Game mode', 'Game started',
-                             'Free VRAM: close Chrome, Telegram, Thunderbird and Slack, pause local AI '
-                             'and background jobs. Everything comes back when you turn it off.'],
+                             '--expire-time=15000', '--action=default=' + action, title, body],
                             capture_output=True, text=True, env=ENV).stdout.strip()
-    if chosen == 'enable':
-        profile('game')
+    if chosen == 'default':
+        profile(target, game_prompt=True)
 
 def split_nm(line):
     fields, field, escaped = [], '', False
@@ -1305,8 +1317,8 @@ def action(command, args):
         run(['brightnessctl', '-c', 'backlight', 'set', args[0] + '%'])
     elif command == 'mode' and len(args) == 1:
         profile(args[0])
-    elif command == 'game-offer' and not args:
-        game_offer()
+    elif command == 'game-offer' and args in ([], ['normal']):
+        game_offer(args[0] if args else 'game')
     elif command == 'dnd' and not args:
         set_dnd('do-not-disturb' not in modes())
     elif command == 'nightlight' and not args:

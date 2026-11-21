@@ -34,6 +34,9 @@ invisible=1
 
 [mode=gaming]
 invisible=1
+
+[app-name="Game mode" actionable=1]
+invisible=0
 """
 
 def state():
