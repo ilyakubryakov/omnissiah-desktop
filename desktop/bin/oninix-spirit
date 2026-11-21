@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 import difflib
 import fcntl
+import ipaddress
 import json
 import os
 import re
+import resource
 import shutil
 import stat
 import subprocess
@@ -41,6 +43,14 @@ PACKAGE_NAME = re.compile(r"[a-zA-Z_][a-zA-Z0-9_'-]*(?:\.[a-zA-Z_][a-zA-Z0-9_'-]
 EDITABLE = 'flake.nix' if LAYER_PROFILE else 'settings.nix'
 PROPOSAL_LIMIT = 256 * 1024
 AUTH_LIMIT = 1024 * 1024
+AGENT_FILE_LIMIT = 16 * 1024 * 1024
+RUNTIME_PATHS = (
+    '/bin', '/sbin', '/lib', '/lib64', '/usr', '/nix/store', '/run/current-system/sw',
+)
+SYSTEM_FILES = (
+    'ca-certificates', 'group', 'host.conf', 'hosts', 'ld.so.cache', 'localtime',
+    'nsswitch.conf', 'os-release', 'passwd', 'pki', 'ssl', 'static/ssl',
+)
 PROMPT = """You are the machine spirit of an OniNix computer (NixOS with the OniNix Hyprland desktop).
 The owner asks: {request}
 
@@ -62,7 +72,7 @@ Keep existing packages unless the request changes them. You cannot change the ho
 or its package manager. Do not apply the change. Finish with a short summary in the owner's language."""
 
 def say(text, color=GLOW):
-    subprocess.run(['gum', 'style', '--foreground', color, '--bold', text])
+    subprocess.run(['gum', 'style', '--foreground', color, '--bold', '--', text])
 
 def agent():
     wanted = json.loads(CONFIG.read_text()).get('agent') if CONFIG.exists() else None
@@ -116,6 +126,39 @@ def keep_refreshed_login(original, copy, initial):
         finally:
             temporary.unlink(missing_ok=True)
 
+def agent_network(root):
+    options = ['pasta', '--config-net', '--no-map-gw', '--map-guest-addr', 'none',
+               '-t', 'none', '-u', 'none', '-T', 'none', '-U', 'none']
+    resolver = root / 'resolv.conf'
+    addresses = {}
+    lines = Path('/etc/resolv.conf').read_text().splitlines()
+    for index, line in enumerate(lines):
+        fields = line.split()
+        if len(fields) < 2 or fields[0] != 'nameserver':
+            continue
+        address = ipaddress.ip_address(fields[1].split('%', 1)[0])
+        if not address.is_loopback:
+            continue
+        if address.version not in addresses:
+            alias = '169.254.53.53' if address.version == 4 else 'fd00::53'
+            options += ['--dns-host', str(address), '--dns-forward', alias]
+            addresses[address.version] = alias
+        lines[index] = 'nameserver ' + addresses[address.version]
+    resolver.write_text('\n'.join(lines) + '\n')
+    return options, resolver
+
+def limit_agent_files():
+    soft, hard = resource.getrlimit(resource.RLIMIT_FSIZE)
+    if hard == resource.RLIM_INFINITY or hard > AGENT_FILE_LIMIT:
+        hard = AGENT_FILE_LIMIT
+        soft = hard if soft == resource.RLIM_INFINITY else min(soft, hard)
+        resource.setrlimit(resource.RLIMIT_FSIZE, (soft, hard))
+
+def output_tail(stream):
+    size = stream.seek(0, os.SEEK_END)
+    stream.seek(max(0, size - 4096))
+    return stream.read().decode('utf-8', errors='replace').strip()
+
 def run_agent(name, request, before):
     prompt = (LAYER_PROMPT if LAYER_PROFILE else PROMPT).format(request=request)
     executable = str(Path(shutil.which(name)).resolve())
@@ -130,55 +173,70 @@ def run_agent(name, request, before):
         auth = (Path(os.environ.get('CLAUDE_CONFIG_DIR', home / '.claude')) / '.credentials.json'
                 if name == 'claude' else Path(os.environ.get('CODEX_HOME', home / '.codex')) / 'auth.json')
         auth_copy = agent_home / f'.{name}' / auth.name
-        initial = auth.read_bytes() if auth.is_file() else None
+        initial = read_regular(auth.resolve(), AUTH_LIMIT) if auth.is_file() else None
         if initial is not None:
             auth_copy.parent.mkdir(mode=0o700)
             with os.fdopen(os.open(auth_copy, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), 'wb') as handle:
                 handle.write(initial)
         if name == 'claude':
-            command = ['-p', prompt, '--permission-mode', 'acceptEdits', '--tools', 'Read,Edit,Write',
+            command = ['-p', '--permission-mode', 'acceptEdits', '--tools', 'Read,Edit,Write',
                        '--strict-mcp-config', '--setting-sources', '']
         else:
-            command = ['exec', '-s', 'workspace-write', '--skip-git-repo-check', '-C', '/tmp/proposal', prompt]
+            command = ['exec', '-s', 'workspace-write', '--skip-git-repo-check', '-C', '/tmp/proposal', '-']
         bubblewrap = '/usr/bin/bwrap' if LAYER_PROFILE and os.access('/usr/bin/bwrap', os.X_OK) else 'bwrap'
+        if LAYER_PROFILE:
+            network, resolver = [], Path('/etc/resolv.conf')
+        else:
+            network, resolver = agent_network(root)
+            network.append('--')
         sandbox = [
-            bubblewrap, '--new-session', '--die-with-parent', '--unshare-pid', '--unshare-ipc', '--clearenv',
-            '--ro-bind', '/', '/', '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp',
+            '--new-session', '--die-with-parent', '--unshare-pid', '--unshare-ipc', '--clearenv', '--cap-drop', 'ALL',
+            '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp',
             '--bind', str(agent_home), '/tmp/agent-home', '--bind', str(job), '/tmp/proposal', '--chdir', '/tmp/proposal',
+            '--ro-bind', str(resolver), '/etc/resolv.conf',
             '--setenv', 'HOME', '/tmp/agent-home', '--setenv', 'CODEX_HOME', '/tmp/agent-home/.codex',
             '--setenv', 'CLAUDE_CONFIG_DIR', '/tmp/agent-home/.claude',
             '--setenv', 'XDG_CONFIG_HOME', '/tmp/agent-home/.config', '--setenv', 'XDG_CACHE_HOME', '/tmp/agent-home/.cache',
             '--setenv', 'XDG_DATA_HOME', '/tmp/agent-home/.local/share', '--setenv', 'XDG_STATE_HOME', '/tmp/agent-home/.local/state',
             '--setenv', 'PATH', os.environ.get('PATH', os.defpath),
         ]
+        if not LAYER_PROFILE:
+            sandbox += ['--unshare-user', '--uid', str(os.getuid()), '--gid', str(os.getgid())]
+        for directory in RUNTIME_PATHS:
+            sandbox += ['--ro-bind-try', directory, directory]
+        for name_in_etc in SYSTEM_FILES:
+            path = '/etc/' + name_in_etc
+            sandbox += ['--ro-bind-try', path, path]
         for key in ('LANG', 'LC_ALL', 'SSL_CERT_FILE', 'SSL_CERT_DIR', 'NIX_SSL_CERT_FILE',
                     'HTTPS_PROXY', 'HTTP_PROXY', 'NO_PROXY', 'https_proxy', 'http_proxy', 'no_proxy',
                     'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'OPENAI_API_KEY'):
             if key in os.environ:
                 sandbox += ['--setenv', key, os.environ[key]]
-        for directory in ('/run/user', '/run/dbus', '/run/wrappers', '/nix/var/nix/daemon-socket'):
-            if Path(directory).is_dir():
-                sandbox += ['--tmpfs', directory]
-        if home.is_relative_to('/home'):
-            sandbox += ['--tmpfs', str(home)]
-            if Path(executable).is_relative_to(home):
-                sandbox += ['--ro-bind', executable, '/tmp/agent-bin']
-                executable = '/tmp/agent-bin'
+        if not any(Path(executable).is_relative_to(directory) for directory in RUNTIME_PATHS):
+            sandbox += ['--ro-bind', executable, '/tmp/agent-bin']
+            executable = '/tmp/agent-bin'
         try:
-            result = subprocess.run([*sandbox, '--', executable, *command], cwd=job,
-                                    capture_output=True, text=True, timeout=900)
+            args = root / 'sandbox.args'
+            with os.fdopen(os.open(args, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), 'wb') as handle:
+                handle.write(b'\0'.join(os.fsencode(part) for part in sandbox) + b'\0')
+            with tempfile.TemporaryFile(dir=root) as stdout, tempfile.TemporaryFile(dir=root) as stderr:
+                result = subprocess.run([*network, 'sh', '-c', 'wrapper=$1; shift; exec "$wrapper" --args 3 -- "$@" 3<"$0"',
+                                         str(args), bubblewrap, executable, *command], cwd=job, input=prompt,
+                                        stdout=stdout, stderr=stderr, encoding='utf-8', timeout=900,
+                                        preexec_fn=limit_agent_files)
+                detail = output_tail(stderr)
+                message = output_tail(stdout)
         finally:
             try:
                 keep_refreshed_login(auth, auth_copy, initial)
             except (OSError, RuntimeError):
                 say('Could not save the agent login refresh. Sign in again if the next request fails.', CRIMSON)
         if result.returncode != 0:
-            detail = (result.stderr or result.stdout).strip()
-            raise RuntimeError(terminal_text(detail[-600:]) or f'{name} failed')
+            raise RuntimeError(terminal_text((detail or message)[-600:]) or f'{name} failed')
         proposal = read_regular(job / EDITABLE, PROPOSAL_LIMIT).decode('utf-8')
         if '\0' in proposal:
             raise RuntimeError(f'{EDITABLE} must be UTF-8 text without NUL bytes.')
-        lines = [line for line in result.stdout.strip().splitlines() if line.strip()]
+        lines = [line for line in message.splitlines() if line.strip()]
         return proposal, terminal_text(lines[-1][-600:]) if lines else 'Done.'
 
 def prepare():
