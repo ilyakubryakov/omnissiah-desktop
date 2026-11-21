@@ -1,6 +1,16 @@
 { config, lib, pkgs, ... }:
 let
   cfg = config.oninix;
+  fastfetch = pkgs.symlinkJoin {
+    name = "oninix-fastfetch";
+    paths = [ pkgs.fastfetch ];
+    nativeBuildInputs = [ pkgs.makeWrapper ];
+    postBuild = ''
+      rm "$out/bin/fastfetch"
+      makeWrapper ${lib.getExe pkgs.python3} "$out/bin/fastfetch" \
+        --add-flags "${../../desktop/fastfetch/fit.py} ${lib.getExe pkgs.fastfetch} ${../../desktop/fastfetch/config.jsonc} ${../../desktop/quickshell/assets/mechanicus.png}"
+    '';
+  };
 in
 lib.mkIf cfg.enable {
   nix.settings = {
