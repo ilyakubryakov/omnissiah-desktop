@@ -309,7 +309,7 @@ def network_state():
     elif not state['links']:
         try:
             fallback = system_network_state()
-            if fallback['links']:
+            if fallback['connectivity'] == 'full':
                 state = fallback
         except (OSError, ValueError, KeyError, subprocess.SubprocessError):
             pass
