@@ -3,19 +3,36 @@ let
   cfg = config.oninix.hardware;
 in
 lib.mkIf config.oninix.enable (lib.mkMerge [
-  { hardware.graphics.enable = true; }
+  {
+    hardware.graphics.enable = true;
+    hardware.enableRedistributableFirmware = lib.mkDefault true;
+  }
 
   (lib.mkIf (cfg.gpu == "nvidia") {
     services.xserver.videoDrivers = [ "nvidia" ];
     hardware.nvidia = {
-      open = true;
+      open = lib.mkDefault true;
+      videoAcceleration = lib.mkDefault true;
       modesetting.enable = true;
-      powerManagement.enable = true;
+      powerManagement.enable = lib.mkDefault true;
+    };
+    environment.sessionVariables.NVD_BACKEND = lib.mkDefault "direct";
+    environment.systemPackages = with pkgs; [ vulkan-tools libva-utils ];
+    environment.etc."nvidia/nvidia-application-profiles-rc.d/50-oninix-desktop.json".text = builtins.toJSON {
+      profiles = [{
+        name = "OniNixDesktopBuffers";
+        settings = [ "GLVidHeapReuseRatio" 0 ];
+      }];
+      rules = map (name: {
+        pattern = { feature = "procname"; matches = name; };
+        profile = "OniNixDesktopBuffers";
+      }) [ ".Hyprland-wrapped" ".quickshell-wrapped" ".kitty-wrapped" ];
     };
   })
 
   (lib.mkIf (cfg.gpu == "amd") {
     services.xserver.videoDrivers = [ "amdgpu" ];
+    environment.systemPackages = with pkgs; [ vulkan-tools libva-utils ];
   })
 
   (lib.mkIf cfg.laptop {
