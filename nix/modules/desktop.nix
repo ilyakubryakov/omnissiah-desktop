@@ -67,6 +67,11 @@ lib.mkIf cfg.enable {
     path = [ config.services.hypridle.package pkgs.python3 pkgs.util-linux "/run/current-system/sw" ];
     serviceConfig.ExecStart = [ "" "${share}/share/oninix/hypr/scripts/idle.sh" ];
   };
+  qt = {
+    enable = lib.mkDefault true;
+    platformTheme = lib.mkDefault "qt5ct";
+    style = lib.mkDefault "breeze";
+  };
   xdg.portal.extraPortals = [ pkgs.xdg-desktop-portal-gtk ];
   xdg.mime.defaultApplications."inode/directory" = "org.kde.dolphin.desktop";
 
@@ -301,8 +306,9 @@ lib.mkIf cfg.enable {
     kdePackages.kio-extras
     kdePackages.breeze
     kdePackages.breeze-icons
+    kdePackages.breeze-gtk
+    kdePackages.kconfig
     papirus-icon-theme
-    qt6Packages.qt6ct
     rofi
     libnotify
     glib

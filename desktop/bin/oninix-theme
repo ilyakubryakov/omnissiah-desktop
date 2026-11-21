@@ -171,7 +171,11 @@ install_state() {
     fi
 
     mkdir -p "$HOME/.config"
-    ln -sfn "$CURRENT_LINK/starship.toml" "$HOME/.config/starship.toml"
+    starship_config="${XDG_CONFIG_HOME:-$HOME/.config}/starship.toml"
+    if [ ! -e "$starship_config" ] && [ ! -L "$starship_config" ]; then
+        mkdir -p "$(dirname "$starship_config")"
+        ln -s "$CURRENT_LINK/starship.toml" "$starship_config"
+    fi
 
     if [ "$OS" != macos ]; then
         mkdir -p "$HOME/.config/MangoHud"
@@ -428,14 +432,13 @@ PY
     fi
     if [ -n "$icontheme" ] && command -v kwriteconfig6 >/dev/null 2>&1; then
         kwriteconfig6 --file kdeglobals --group Icons --key Theme "$icontheme"
-        qt5conf="${XDG_CONFIG_HOME:-$HOME/.config}/qt5ct/qt5ct.conf"
-        mkdir -p "$(dirname "$qt5conf")"
-        kwriteconfig6 --file "$qt5conf" --group Appearance --key style Breeze
-        kwriteconfig6 --file "$qt5conf" --group Appearance --key custom_palette true
-        kwriteconfig6 --file "$qt5conf" --group Appearance --key color_scheme_path "$CURRENT_LINK/qt5ct.colors"
-        kwriteconfig6 --file "$qt5conf" --group Appearance --key icon_theme "$icontheme"
-        kwriteconfig6 --file "$qt5conf" --group Fonts --key general "$qt_ui_font"
-        kwriteconfig6 --file "$qt5conf" --group Fonts --key fixed "$qt_mono_font"
+        for qt_version in qt5ct qt6ct; do
+            qt_conf="${XDG_CONFIG_HOME:-$HOME/.config}/$qt_version/$qt_version.conf"
+            kwriteconfig6 --file "$qt_conf" --group Appearance --key style Breeze
+            kwriteconfig6 --file "$qt_conf" --group Appearance --key custom_palette true
+            kwriteconfig6 --file "$qt_conf" --group Appearance --key color_scheme_path "$(out_dir "$1")/qt5ct.colors"
+            kwriteconfig6 --file "$qt_conf" --group Appearance --key icon_theme "$icontheme"
+        done
         printf '%s\n' "$icontheme" >"$STATE/icon-theme"
         printf '[main]\nicon-theme=%s\n' "$icontheme" >"$STATE/fuzzel-icons.ini"
         if command -v dbus-send >/dev/null 2>&1; then
