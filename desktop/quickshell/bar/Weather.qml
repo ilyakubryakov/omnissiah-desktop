@@ -20,17 +20,54 @@ Singleton {
     readonly property bool stale: checkedAt > 0 && clock - checkedAt > 45 * 60 * 1000
     readonly property string localHour: new Date(clock + utcOffset * 1000).toISOString().slice(0, 13)
     readonly property var hours: forecast.filter(h => h.time.slice(0, 13) >= localHour).slice(0, 12)
-    readonly property string url: "https://api.open-meteo.com/v1/forecast?latitude=54.69&longitude=25.28"
-        + "&current=temperature_2m,weather_code,is_day&hourly=temperature_2m,weather_code,precipitation_probability,wind_speed_10m,is_day"
-        + "&daily=sunrise,sunset&timezone=auto&forecast_days=2&wind_speed_unit=ms"
-    function refresh() { if (!fetch.running) fetch.running = true }
+    property string location: ""
+    readonly property bool configured: location !== ""
+    readonly property string url: {
+        if (!configured) return ""
+        const [latitude, longitude] = location.split(",")
+        return "https://api.open-meteo.com/v1/forecast?latitude=" + latitude + "&longitude=" + longitude
+            + "&current=temperature_2m,weather_code,is_day&hourly=temperature_2m,weather_code,precipitation_probability,wind_speed_10m,is_day"
+            + "&daily=sunrise,sunset&timezone=auto&forecast_days=2&wind_speed_unit=ms"
+    }
+    function coordinates(value) {
+        const parts = value.split(",").map(part => part.trim())
+        if (parts.length !== 2 || parts.some(part => !/^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/.test(part)))
+            return null
+        const [latitude, longitude] = parts.map(Number)
+        if (Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return null
+        return latitude.toFixed(4) + "," + longitude.toFixed(4)
+    }
+    function setLocation(value) {
+        const next = value.trim() === "" ? "" : coordinates(value)
+        if (next === null) return false
+        store.setText(next + "\n")
+        location = next
+        return true
+    }
+    function refresh() {
+        if (!configured || fetch.running) return
+        fetch.request = url
+        fetch.running = true
+    }
+    onUrlChanged: {
+        now = ""; next = ""; sun = ""; forecast = []; checkedAt = 0; code = -1; error = ""
+        refresh()
+    }
+    FileView {
+        id: store
+        path: (Quickshell.env("XDG_STATE_HOME") || Quickshell.env("HOME") + "/.local/state") + "/oninix-weather"
+        printErrors: false
+        onLoaded: root.location = root.coordinates(text().trim()) || ""
+    }
     Timer { interval: 60000; running: true; repeat: true; onTriggered: root.clock = Date.now() }
-    Timer { interval: 15 * 60 * 1000; running: true; repeat: true; triggeredOnStart: true; onTriggered: root.refresh() }
+    Timer { interval: 15 * 60 * 1000; running: root.configured; repeat: true; onTriggered: root.refresh() }
     Process {
         id: fetch
-        command: ["curl", "-sf", "--max-time", "10", root.url]
+        property string request: ""
+        command: ["curl", "-sf", "--max-time", "10", request]
         stdout: StdioCollector {
             onStreamFinished: {
+                if (fetch.request !== root.url) return
                 try {
                     const d = JSON.parse(text)
                     if (!d.current || !d.hourly || !Array.isArray(d.hourly.time)) throw new Error("Incomplete forecast")
@@ -57,7 +94,12 @@ Singleton {
                 } catch (_) { root.error = "Forecast unavailable. Please try again." }
             }
         }
-        onExited: code => { if (code !== 0) root.error = "Could not update. Showing the last available forecast." }
+        onExited: code => {
+            if (request !== root.url) Qt.callLater(root.refresh)
+            else if (code !== 0) root.error = root.checkedAt
+                ? "Could not update. Showing the last available forecast."
+                : "Forecast unavailable. Please try again."
+        }
     }
     function description(c) {
         if (c === null || c < 0) return "Unknown conditions"
