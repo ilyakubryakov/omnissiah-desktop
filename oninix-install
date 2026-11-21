@@ -195,7 +195,7 @@ case "$ID" in
     arch)
         if ((${#display_manager[@]})); then display_manager+=(xorg-server); fi
         sudo pacman -Syu --needed --noconfirm "${system_packages[@]}" "${display_manager[@]}" uwsm pipewire-pulse \
-            mesa vulkan-swrast xorg-xwayland
+            mesa vulkan-swrast xorg-xwayland polkit
         ;;
 esac
 
