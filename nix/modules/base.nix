@@ -17,11 +17,32 @@ lib.mkIf cfg.enable {
   users.users.${cfg.user.name} = {
     isNormalUser = true;
     description = cfg.user.description;
+    shell = lib.mkOverride 900 pkgs.zsh;
     extraGroups = [ "wheel" "networkmanager" "audio" "video" ];
   };
 
+  programs.zsh = {
+    enable = true;
+    enableCompletion = true;
+    autosuggestions.enable = true;
+    syntaxHighlighting.enable = true;
+    interactiveShellInit = ''
+      if [[ -n "$TERM" && "$TERM" != dumb ]]; then
+        eval "$(${lib.getExe pkgs.starship} init zsh)"
+      fi
+    '';
+  };
+  programs.zoxide.enable = true;
+
+  boot.kernel.sysctl."kernel.sysrq" = lib.mkDefault 176;
+
   services.fstrim.enable = true;
   services.fwupd.enable = true;
+  services.smartd.enable = lib.mkDefault true;
+  systemd.services.smartd.unitConfig.ConditionVirtualization =
+    lib.mkIf config.services.smartd.enable false;
+  services.journald.settings.Journal.SystemMaxUse = lib.mkDefault "2G";
+  systemd.coredump.enable = lib.mkDefault true;
   zramSwap.enable = true;
 
   environment.etc."xdg/fastfetch/config.jsonc".source = ../../desktop/fastfetch/config.jsonc;
@@ -29,5 +50,8 @@ lib.mkIf cfg.enable {
   environment.systemPackages = with pkgs; [
     google-chrome
     git curl wget jq ripgrep fd btop fastfetch unzip
+    rsync file p7zip unrar zstd htop
+    pciutils usbutils lm_sensors nvme-cli smartmontools
+    tmux mc starship fzf bat eza delta ncdu tree
   ];
 }

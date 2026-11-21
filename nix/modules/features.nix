@@ -104,7 +104,12 @@ lib.mkIf cfg.enable (lib.mkMerge [
       UV_PYTHON_PREFERENCE = "only-system";
     };
     environment.systemPackages = with pkgs; [
-      vscode neovim gh git-lfs lazygit
+      vscode neovim gh git-lfs lazygit lazydocker
+      ninja clang-tools gdb lldb bear
+      yq-go kustomize kubectl kubernetes-helm sops age
+      docker-compose docker-buildx
+      nixd statix deadnix shfmt stylua lua-language-server
+      bash-language-server yaml-language-server taplo
       gcc gnumake cmake pkg-config
       python3 uv ruff
       nodejs
@@ -115,7 +120,13 @@ lib.mkIf cfg.enable (lib.mkMerge [
 
   (lib.mkIf cfg.features.music {
     services.pipewire.extraConfig.pipewire."92-oninix-low-latency" = {
-      "context.properties"."default.clock.min-quantum" = 64;
+      "context.properties" = {
+        "default.clock.rate" = 48000;
+        "default.clock.allowed-rates" = [ 44100 48000 96000 ];
+        "default.clock.quantum" = 256;
+        "default.clock.min-quantum" = 64;
+        "default.clock.max-quantum" = 1024;
+      };
       "context.properties.rules" = [
         {
           matches = [ { "cpu.vm.name" = "!null"; } ];
@@ -128,8 +139,6 @@ lib.mkIf cfg.enable (lib.mkMerge [
       (reaper.override { jackLibrary = config.services.pipewire.package.jack; })
       qpwgraph
       pwvucontrol
-      alsa-utils
-      alsa-scarlett-gui
     ];
   })
 

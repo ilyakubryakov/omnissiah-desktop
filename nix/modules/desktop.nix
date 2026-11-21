@@ -54,9 +54,10 @@ lib.mkIf cfg.enable {
   };
   services.displayManager.sessionPackages = [ session ];
   services.xserver.xkb.layout = lib.mkDefault "us,ru";
-  environment.pathsToLink = [ "/share/oninix" ];
+  environment.pathsToLink = [ "/share/oninix" "/share/hunspell" ];
   environment.sessionVariables = {
     ONINIX_SHARE = "/run/current-system/sw/share/oninix";
+    DICPATH = "/run/current-system/sw/share/hunspell";
     ONINIX_XKB_LAYOUT = keyboardLayout;
     ONINIX_LAPTOP = if cfg.hardware.laptop then "1" else "0";
   };
@@ -195,8 +196,45 @@ lib.mkIf cfg.enable {
   security.rtkit.enable = true;
   services.pipewire = {
     enable = true;
-    alsa.enable = true;
+    alsa = {
+      enable = true;
+      support32Bit = lib.mkDefault pkgs.stdenv.hostPlatform.isx86_64;
+    };
     pulse.enable = true;
+  };
+
+  security.polkit.enable = true;
+  systemd.user.services.oninix-polkit-agent = {
+    description = "OniNix desktop authorization prompts";
+    wantedBy = [ "graphical-session.target" ];
+    partOf = [ "graphical-session.target" ];
+    after = [ "wayland-session-waitenv.service" ];
+    serviceConfig = {
+      ExecStart = "${pkgs.kdePackages.polkit-kde-agent-1}/libexec/polkit-kde-authentication-agent-1";
+      Restart = "on-failure";
+      RestartSec = "2s";
+    };
+  };
+
+  services.avahi = {
+    enable = lib.mkDefault true;
+    nssmdns4 = lib.mkDefault true;
+  };
+  services.printing.enable = lib.mkDefault true;
+  programs.system-config-printer.enable = lib.mkDefault config.services.printing.enable;
+  hardware.sane = {
+    enable = lib.mkDefault true;
+    extraBackends = [ pkgs.sane-airscan ];
+  };
+  services.udisks2.enable = lib.mkDefault true;
+  services.gvfs.enable = lib.mkDefault true;
+  services.flatpak.enable = lib.mkDefault true;
+  programs.chromium = {
+    enable = true;
+    extraOptsRecommended = {
+      SpellcheckEnabled = true;
+      SpellcheckLanguage = [ "en-US" "ru" ];
+    };
   };
 
   hardware.bluetooth.enable = true;
@@ -204,12 +242,24 @@ lib.mkIf cfg.enable {
   services.power-profiles-daemon.enable = true;
   services.upower.enable = true;
 
-  fonts.packages = with pkgs; [
-    inter
-    nerd-fonts.jetbrains-mono
-    nerd-fonts.symbols-only
-    noto-fonts-color-emoji
-  ];
+  fonts = {
+    packages = with pkgs; [
+      inter
+      nerd-fonts.jetbrains-mono
+      nerd-fonts.symbols-only
+      noto-fonts
+      noto-fonts-cjk-sans
+      noto-fonts-color-emoji
+      carlito
+      caladea
+      liberation_ttf
+    ];
+    fontconfig.defaultFonts = {
+      sansSerif = [ "Inter" "Noto Sans" ];
+      monospace = [ "JetBrainsMono Nerd Font" ];
+      emoji = [ "Noto Color Emoji" ];
+    };
+  };
 
   environment.systemPackages = with pkgs; [
     session
@@ -228,7 +278,13 @@ lib.mkIf cfg.enable {
     zbar
     brightnessctl
     playerctl
+    alsa-utils
+    pipewire.jack
     pavucontrol
+    hunspell
+    hunspellDicts.en_US
+    hunspellDicts.ru_RU
+    hyphenDicts.en_US
     networkmanagerapplet
     kdePackages.dolphin
     kdePackages.kio-extras
@@ -242,5 +298,5 @@ lib.mkIf cfg.enable {
     cava
     swappy
     wf-recorder
-  ];
+  ] ++ lib.optional config.hardware.sane.enable pkgs.kdePackages.skanpage;
 }
