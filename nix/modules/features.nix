@@ -2,6 +2,15 @@
 let
   cfg = config.oninix;
   scx = config.services.scx-loader;
+  mangohud = if cfg.hardware.gpu != "nvidia" then pkgs.mangohud else pkgs.symlinkJoin {
+    name = "mangohud-oninix";
+    paths = [ pkgs.mangohud ];
+    nativeBuildInputs = [ pkgs.makeWrapper ];
+    postBuild = ''
+      wrapProgram "$out/bin/mangohud" \
+        --suffix LD_LIBRARY_PATH : /run/opengl-driver/lib:/run/opengl-driver-32/lib
+    '';
+  };
   scxState = pkgs.writeShellScript "oninix-scx-state" ''
     set -eu
     prop() { ${pkgs.systemd}/bin/busctl --system get-property org.scx.Loader /org/scx/Loader org.scx.Loader "$1"; }
@@ -20,7 +29,7 @@ lib.mkIf cfg.enable (lib.mkMerge [
     programs.steam = {
       enable = true;
       extraCompatPackages = [ pkgs.proton-ge-bin ];
-      extraPackages = with pkgs; [ mangohud gamescope ];
+      extraPackages = [ mangohud pkgs.gamescope ];
     };
     programs.gamescope.enable = true;
     programs.gamemode = {
@@ -29,7 +38,7 @@ lib.mkIf cfg.enable (lib.mkMerge [
     };
     users.users.${cfg.user.name}.extraGroups = [ "gamemode" ];
     boot.kernelModules = [ "ntsync" ];
-    environment.systemPackages = with pkgs; [ mangohud protonplus protontricks lutris heroic umu-launcher ];
+    environment.systemPackages = [ mangohud ] ++ (with pkgs; [ protonplus protontricks lutris heroic umu-launcher ]);
 
     services.scx-loader = {
       enable = true;
