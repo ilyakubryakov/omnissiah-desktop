@@ -64,7 +64,18 @@ if profile_file then
     if by_name.tv and profile:match("^profile=extended%s*$") then
         local tv = by_name.tv
         tv.disabled = false
-        tv.position = tv.position or "auto-up"
+        local main = by_name.main or {}
+        local mw = tonumber(tostring(main.mode):match("^(%d+)x"))
+        local mx, my = tostring(main.position):match("^(%-?%d+)x(%-?%d+)$")
+        local w, h = tostring(tv.mode):match("^(%d+)x(%d+)@")
+        local ms, ts = tonumber(main.scale), tonumber(tv.scale)
+        if mw and mx and w and ms and ms > 0 and ts and ts > 0 then
+            local x = math.floor(tonumber(mx) + (mw / ms - tonumber(w) / ts) / 2)
+            local y = math.floor(tonumber(my) - tonumber(h) / ts)
+            tv.position = x .. "x" .. y
+        else
+            tv.position = "auto-up"
+        end
     end
 end
 
