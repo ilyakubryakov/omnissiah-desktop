@@ -31,6 +31,12 @@ lib.mkIf cfg.enable {
         function zsh-newuser-install() { unfunction zsh-newuser-install; }
       fi
     '';
+    promptInit = lib.mkDefault "";
+    shellAliases = {
+      ls = "eza --icons=auto --group-directories-first";
+      ll = "eza -la --icons=auto --group-directories-first --git";
+      l = "eza -l --icons=auto --group-directories-first --git";
+    };
     interactiveShellInit = ''
       source /etc/oninix/zshrc
     '';
