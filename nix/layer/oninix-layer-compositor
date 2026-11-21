@@ -15,12 +15,12 @@ cleanup() {
 trap cleanup EXIT
 trap 'kill -TERM "$compositor" 2>/dev/null || :' HUP INT TERM
 config=$(realpath "$ONINIX_SHARE/hypr/hyprland.lua")
-if [ -x /usr/bin/start-hyprland ]; then
-    /usr/bin/start-hyprland -- --config "$config" &
-elif [ -x /usr/bin/Hyprland ]; then
+if [ -x /usr/bin/Hyprland ]; then
     /usr/bin/Hyprland --config "$config" &
-else
+elif [ -x /usr/bin/hyprland ]; then
     /usr/bin/hyprland --config "$config" &
+else
+    /usr/bin/start-hyprland -- --config "$config" &
 fi
 compositor=$!
 wait "$compositor"

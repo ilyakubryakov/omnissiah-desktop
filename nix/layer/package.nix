@@ -26,6 +26,7 @@ let
     [Unit]
     Description=${description}
     PartOf=oninix-layer.target
+    After=graphical-session.target
 
     [Service]
     ExecStart=${launch} ${command}
@@ -35,6 +36,7 @@ let
     "oninix-layer.target" = ''
       [Unit]
       Description=OniNix desktop layer
+      PartOf=graphical-session.target
       Wants=oninix-theme.service oninix-panel.service oninix-wallpaper.service oninix-notifications.service
       Wants=oninix-idle.service oninix-dictation.service oninix-voice-profile.service
       Wants=oninix-update-check.timer oninix-theme-schedule.timer
