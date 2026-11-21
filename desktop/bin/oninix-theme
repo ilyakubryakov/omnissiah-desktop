@@ -377,8 +377,8 @@ PY
         for qt_version in qt5ct qt6ct; do
             qt_font_conf="${XDG_CONFIG_HOME:-$HOME/.config}/$qt_version/$qt_version.conf"
             mkdir -p "$(dirname "$qt_font_conf")"
-            kwriteconfig6 --file "$qt_font_conf" --group Fonts --key general "$qt_ui_font"
-            kwriteconfig6 --file "$qt_font_conf" --group Fonts --key fixed "$qt_mono_font"
+            kwriteconfig6 --file "$qt_font_conf" --group Fonts --key general "\"$qt_ui_font\""
+            kwriteconfig6 --file "$qt_font_conf" --group Fonts --key fixed "\"$qt_mono_font\""
         done
     fi
     gtk3_named=""
