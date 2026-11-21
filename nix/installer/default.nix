@@ -1,4 +1,4 @@
-{ lib, stdenvNoCC, makeWrapper, python3, gum, disko, pciutils, util-linux, curl, networkmanager, nixos-install-tools, source ? "" }:
+{ lib, stdenvNoCC, makeWrapper, python3, gum, disko, pciutils, util-linux, cryptsetup, curl, networkmanager, nixos-install-tools, source ? "" }:
 stdenvNoCC.mkDerivation {
   pname = "oninix-installer";
   version = "0.1";
@@ -13,7 +13,7 @@ stdenvNoCC.mkDerivation {
       --add-flags "-I $out/share/oninix-installer/oninix-installer.py" \
       --set ONINIX_TEMPLATE $out/share/oninix-installer/template \
       --set ONINIX_SOURCE "${source}" \
-      --prefix PATH : ${lib.makeBinPath [ gum disko pciutils util-linux curl networkmanager nixos-install-tools ]}
+      --prefix PATH : ${lib.makeBinPath [ gum disko pciutils util-linux cryptsetup curl networkmanager nixos-install-tools ]}
   '';
   meta.mainProgram = "oninix-installer";
 }
