@@ -64,13 +64,7 @@ if profile_file then
     if by_name.tv and profile:match("^profile=extended%s*$") then
         local tv = by_name.tv
         tv.disabled = false
-        local main = by_name.main
-        local mw = tonumber(main.mode:match("^(%d+)x"))
-        local mx, my = main.position:match("^(%-?%d+)x(%-?%d+)$")
-        local w, h = tv.mode:match("^(%d+)x(%d+)@")
-        if mw and mx and w and h then
-            tv.position = math.floor(tonumber(mx) + (mw / main.scale - tonumber(w) / tv.scale) / 2) .. "x" .. math.floor(tonumber(my) - tonumber(h) / tv.scale)
-        else tv.position = "auto-up" end
+        tv.position = tv.position or "auto-up"
     end
 end
 
@@ -248,6 +242,7 @@ local function fit_control_station()
 end
 
 return {
+    has_tv_role = function() return by_name.tv ~= nil end,
     tv_monitor = function() return by_name.tv and hl.get_monitor(by_name.tv.output) end,
     main_monitor = main_monitor,
     fit_control_station = fit_control_station,

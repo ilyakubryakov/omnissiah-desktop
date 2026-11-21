@@ -77,8 +77,11 @@ local function tv_workspace(move)
     end
     hl.dispatch(move and hl.dsp.window.move({ workspace = "11", follow = false }) or hl.dsp.focus({ workspace = "11" }))
 end
-bind("SUPER + CTRL + T", function() tv_workspace(false) end, "TV workspace")
-bind("SUPER + CTRL + SHIFT + T", function() tv_workspace(true) end, "send window to TV workspace")
+if require("outputs").has_tv_role() then
+    bind("SUPER + SHIFT + T", hl.dsp.exec_cmd("oninix-display toggle-tv || notify-send 'TV display' 'Check that the main display and TV are connected'"), "TV on / off")
+    bind("SUPER + CTRL + T", function() tv_workspace(false) end, "TV workspace")
+    bind("SUPER + CTRL + SHIFT + T", function() tv_workspace(true) end, "send window to TV workspace")
+end
 
 bind("SUPER + L", hl.dsp.exec_cmd("loginctl lock-session"), "lock")
 bind("SUPER + SHIFT + E", hl.dsp.exec_cmd(scripts .. "power-menu.sh --logout"), "log out (confirm)")
