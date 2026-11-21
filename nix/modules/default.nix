@@ -11,6 +11,7 @@ in
     ./features.nix
     ./updates.nix
     ./maintenance.nix
+    ./backup.nix
     ./voice.nix
     ./spirit.nix
   ];
