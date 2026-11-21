@@ -70,7 +70,11 @@ The screenshots use a demo account. [Desktop layer on Arch](docs/screenshots/arc
 
 ## Install
 
-Grab the ISO from [Releases](https://github.com/ilyakubryakov/omnissiah-desktop/releases). GitHub caps files at 2 GiB, so it comes in two parts. Download both parts and `SHA256SUMS` into one folder, then:
+### Get the ISO
+
+Grab it from [Releases](https://github.com/ilyakubryakov/omnissiah-desktop/releases). GitHub caps files at 2 GiB, so the ISO comes in two parts. Download both parts and `SHA256SUMS` into one folder and join them.
+
+On Linux:
 
 ```sh
 sha256sum --ignore-missing -c SHA256SUMS
@@ -78,17 +82,67 @@ cat oninix-*.iso.part1 oninix-*.iso.part2 > oninix.iso
 sha256sum oninix.iso
 ```
 
-The last hash should match the `.iso` line in `SHA256SUMS`.
+On Windows, paste this into PowerShell in that folder:
 
-Or build it yourself from a checkout on x86-64 Linux with Nix. Access to this repository is required.
+```powershell
+$iso = Join-Path $PWD 'oninix.iso'
+$out = [IO.File]::Create($iso)
+Get-ChildItem oninix-*.iso.part? | Sort-Object Name | ForEach-Object { $in = [IO.File]::OpenRead($_.FullName); $in.CopyTo($out); $in.Close() }
+$out.Close()
+(Get-FileHash $iso).Hash
+```
+
+The last hash should match the `.iso` line in `SHA256SUMS` (PowerShell prints it in capitals, that's fine).
+
+### Or build it
+
+You need access to this repository, an SSH key on GitHub, about 25 GB of free disk. The first build downloads around 15 GB.
+
+On Linux, install Git and Nix, then build:
+
+```sh
+sh <(curl -L https://nixos.org/nix/install) --daemon
+```
+
+Open a new terminal so Nix is on your path:
 
 ```sh
 git clone git@github.com:ilyakubryakov/omnissiah-desktop.git
 cd omnissiah-desktop
 nix --extra-experimental-features 'nix-command flakes' build .#iso
+cp -L result/iso/*.iso .
 ```
 
-Write the ISO as a disk image to a USB stick. Boot in UEFI mode with Secure Boot disabled. The live desktop has an **Install OniNix** button. Have an internet connection and an available target disk of at least 32 GB.
+On Windows, build inside WSL2. In an admin PowerShell:
+
+```powershell
+wsl --install -d Ubuntu
+```
+
+Reboot if it asks, open **Ubuntu** from the Start menu and create a user. Then run the same Linux commands above inside Ubuntu, and copy the ISO to your Windows Downloads folder:
+
+```sh
+cp -L result/iso/*.iso "$(wslpath "$(cmd.exe /c 'echo %USERPROFILE%' 2>/dev/null | tr -d '\r')")/Downloads/"
+```
+
+### Write it to a USB stick
+
+This wipes the stick.
+
+On Windows, use [Rufus](https://rufus.ie). Pick the stick under **Device**, the ISO under **Boot selection**, leave **GPT** and **UEFI**, press **START**. When Rufus asks about an ISOHybrid image, choose **Write in DD Image mode**. ISO mode copies files and the stick won't boot.
+
+On Linux, find the stick and write the image to the whole device, not a partition:
+
+```sh
+lsblk -d -o NAME,SIZE,MODEL,TRAN
+sudo dd if=oninix.iso of=/dev/sdX bs=4M status=progress conv=fsync
+```
+
+Replace `sdX` with your stick. Get it wrong and you erase another disk. GNOME Disks with **Restore Disk Image** or Fedora Media Writer do the same with a window.
+
+### Boot and install
+
+Boot the stick in UEFI mode with Secure Boot disabled. The live desktop has an **Install OniNix** button. Have an internet connection and an available target disk of at least 32 GB.
 
 I tested the base desktop with two x86-64 CPU cores, 2 GiB of RAM and a graphics adapter that Hyprland can use through DRM/KMS. I use 2 GiB as the minimum and recommend 4 GiB for installation and running several apps. The installer filled swap at 2 GiB, and the system killed a process under memory pressure at 1 GiB.
 
