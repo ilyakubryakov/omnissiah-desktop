@@ -11,10 +11,6 @@ from oninix_shell import atomic
 TIERS = ('important', 'quiet', 'hidden')
 KEEP_DAYS = 21
 URGENCY = ('low', 'normal', 'critical')
-DEFAULT_RULES = [
-    {'app': 'KDE Connect', 'summary': 'Revolut', 'tier': 'important'},
-    {'app': 'KDE Connect', 'summary': 'Swedbank', 'tier': 'important'},
-]
 STYLE = {
     'important': ['invisible=0', 'history=1', 'default-timeout=0', 'ignore-timeout=1'],
     'quiet': ['invisible=1', 'history=1', 'default-timeout=1', 'ignore-timeout=1'],
@@ -70,8 +66,6 @@ def valid(rule):
 def load_rules():
     try:
         data = json.loads(rules_path().read_text())
-    except FileNotFoundError:
-        return [dict(r) for r in DEFAULT_RULES]
     except (OSError, ValueError):
         return []
     rows = data.get('rules', []) if isinstance(data, dict) else []
