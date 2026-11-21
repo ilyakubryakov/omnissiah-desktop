@@ -267,7 +267,7 @@ lib.mkIf cfg.enable {
   systemd.services.oninix-browser-theme = {
     description = "Publish the desktop palette as a recommended Chrome theme";
     wantedBy = [ "multi-user.target" ];
-    path = [ pkgs.coreutils pkgs.jq pkgs.util-linux ];
+    path = [ pkgs.coreutils pkgs.diffutils pkgs.jq pkgs.util-linux ];
     serviceConfig = {
       Type = "oneshot";
       RuntimeDirectory = "oninix-browser-theme";
@@ -276,7 +276,7 @@ lib.mkIf cfg.enable {
     };
     script = ''
       input=$(timeout 2 runuser -u ${lib.escapeShellArg cfg.user.name} -- head -c 512 -- ${lib.escapeShellArg browserThemeInput} 2>/dev/null) || exit 0
-      color=$(printf '%s' "$input" | jq -er '.BrowserThemeColor | strings | select(test("^#[0-9A-Fa-f]{6}$"))') || exit 0
+      color=$(printf '%s' "$input" | jq -esr 'select(length == 1) | .[0].BrowserThemeColor | strings | select(test("^#[0-9A-Fa-f]{6}$"))') || exit 0
       file="$RUNTIME_DIRECTORY/theme.json"
       temp=$(mktemp "$RUNTIME_DIRECTORY/.theme.XXXXXX")
       trap 'rm -f "$temp"' EXIT
