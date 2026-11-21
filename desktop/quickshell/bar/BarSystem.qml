@@ -11,6 +11,27 @@ RowLayout {
     Layout.fillHeight: true
 
     StatusChip {
+        id: doctorSeg
+        glyph: "\u{F1663}"
+        badge: DoctorData.report.level === "fail" ? Colors.statusUrgent
+            : DoctorData.issues.length ? Colors.statusWarning : "transparent"
+        Accessible.name: "Doctor · " + DoctorData.label
+        onClicked: doctorPopup.togglePinned()
+
+        BarPopup {
+            id: doctorPopup
+            anchorItem: doctorSeg; barWindow: root.barWindow; above: true
+            triggerHovered: doctorSeg.hovered
+            cardWidth: Shared.DesktopStyle.px(500)
+            DoctorCard {
+                Layout.fillWidth: true
+                maxHeight: (root.barWindow.screen ? root.barWindow.screen.height : 1080) * 0.6
+                onRepairRequested: doctorPopup.dismiss()
+            }
+        }
+    }
+
+    StatusChip {
         id: updatesSeg
         readonly property var updates: Shared.UpdatesData
         readonly property string level: updates.level

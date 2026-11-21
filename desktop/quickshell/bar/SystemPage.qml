@@ -18,7 +18,7 @@ ColumnLayout {
     function gib(bytes) {
         return (bytes / 1073741824).toFixed(0);
     }
-    readonly property var targetTabs: ({ "NixOS": "software", "Local AI": "software", "Voice and machine spirit": "software" })
+    readonly property var targetTabs: ({ "Doctor": "general", "NixOS": "software", "Local AI": "software", "Voice and machine spirit": "software" })
     function reveal(target) {
         const next = targetTabs[target]
         if (!next || root.tab === next) return false
@@ -37,6 +37,11 @@ ColumnLayout {
         model: [{id: "general", title: "General"}, {id: "software", title: "Software"}]
         current: root.tab
         onChosen: id => root.tab = id
+    }
+
+    DoctorCard {
+        Layout.fillWidth: true
+        visible: root.tab === "general"
     }
 
     SettingsGroup {

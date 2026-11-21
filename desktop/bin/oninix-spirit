@@ -344,6 +344,8 @@ def ask(args):
         return 0
     apply_system(before, after, result, original_hash)
     record({'request': request, 'summary': summary, 'agent': name})
+    subprocess.run(['systemctl', '--user', 'start', '--no-block', 'oninix-doctor.service'],
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     say('Applied. `oninix-spirit undo` brings back the previous system.')
     return 0
 
