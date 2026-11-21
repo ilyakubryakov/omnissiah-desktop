@@ -38,6 +38,7 @@ in
         description = "Graphics driver profile, detected by the installer.";
       };
       laptop = lib.mkEnableOption "laptop power, lid and backlight handling";
+      autoMount = lib.mkEnableOption "automatically mounting removable media in the desktop session";
     };
 
     features = {

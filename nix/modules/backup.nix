@@ -23,7 +23,7 @@ let
       esac
       die() { printf '%s\n' "$1" >&2; exit 1; }
       if (( EUID != 0 )); then die 'Run oninix-backup with sudo.'; fi
-      unset RESTIC_REPOSITORY_FILE RESTIC_PASSWORD RESTIC_PASSWORD_COMMAND RESTIC_CACHE_DIR
+      unset RESTIC_REPOSITORY_FILE RESTIC_PASSWORD RESTIC_PASSWORD_COMMAND
       umask 077
       exec 9>/run/lock/oninix-backup.lock
       flock 9
@@ -45,6 +45,8 @@ let
         die 'Set the password file permissions to 0600 or 0400.'
       fi
       export RESTIC_REPOSITORY="$PWD/oninix-restic"
+      export RESTIC_CACHE_DIR=/var/cache/oninix-backup
+      install -d -m 0700 "$RESTIC_CACHE_DIR"
       if [[ -L "$RESTIC_REPOSITORY" ]]; then die 'The backup repository cannot be a symlink.'; fi
       if [[ "$action" != init && ! -f "$RESTIC_REPOSITORY/config" ]]; then
         die 'Initialize the backup repository on this disk with sudo oninix-backup init.'

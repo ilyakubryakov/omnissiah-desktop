@@ -228,6 +228,17 @@ lib.mkIf cfg.enable {
   };
   services.udisks2.enable = lib.mkDefault true;
   services.gvfs.enable = lib.mkDefault true;
+  systemd.user.services.oninix-automount = lib.mkIf (cfg.hardware.autoMount && config.services.udisks2.enable) {
+    description = "Mount removable media in the OniNix session";
+    wantedBy = [ "graphical-session.target" ];
+    partOf = [ "graphical-session.target" ];
+    after = [ "wayland-session-waitenv.service" ];
+    serviceConfig = {
+      ExecStart = "${lib.getExe pkgs.udiskie} --automount --no-notify --no-tray";
+      Restart = "on-failure";
+      RestartSec = "2s";
+    };
+  };
   services.flatpak.enable = lib.mkDefault true;
   programs.chromium = {
     enable = true;

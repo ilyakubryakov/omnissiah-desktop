@@ -26,6 +26,11 @@ lib.mkIf cfg.enable {
     enableCompletion = true;
     autosuggestions.enable = true;
     syntaxHighlighting.enable = true;
+    shellInit = ''
+      if [[ -o interactive ]]; then
+        function zsh-newuser-install() { unfunction zsh-newuser-install; }
+      fi
+    '';
     interactiveShellInit = ''
       if [[ -n "$TERM" && "$TERM" != dumb ]]; then
         eval "$(${lib.getExe pkgs.starship} init zsh)"

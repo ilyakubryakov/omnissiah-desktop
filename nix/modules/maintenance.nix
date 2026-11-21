@@ -26,10 +26,6 @@ lib.mkIf config.oninix.enable {
     enable = lib.mkDefault btrfsPresent;
     interval = lib.mkDefault "Sun *-*-01..07 04:00:00";
   };
-  systemd.services."btrfs-scrub@".serviceConfig = lib.mkIf config.services.btrfs.autoScrub.enable {
-    Nice = 15;
-    IOSchedulingClass = "idle";
-  };
 
   systemd.user.services.oninix-doctor = background "Refresh OniNix Doctor" "${doctor} --cache";
   systemd.user.services.oninix-crash-watch = background "Report recent application coredumps" crashWatch;
