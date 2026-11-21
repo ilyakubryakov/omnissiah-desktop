@@ -21,15 +21,19 @@ ColumnLayout {
         if (value < 1073741824) return (value / 1048576).toFixed(1) + " MiB"
         return (value / 1073741824).toFixed(2) + " GiB"
     }
+    function rate(before, after, seconds) {
+        return Number.isFinite(before) && Number.isFinite(after) ? Math.max(0, (after - before) / seconds) : -1
+    }
     onNetworkChanged: {
         const now = network.timestamp || 0
-        const delta = now - (previous.timestamp || 0)
-        const old = previous.link || ({})
-        receiving = delta > 0 && old.device === primary.device && old.received !== null && primary.received !== null
-            ? Math.max(0, (primary.received - old.received) / delta) : -1
-        sending = delta > 0 && old.device === primary.device && old.sent !== null && primary.sent !== null
-            ? Math.max(0, (primary.sent - old.sent) / delta) : -1
-        previous = {timestamp: now, link: primary}
+        const sample = previous || ({})
+        const delta = now - (sample.timestamp || 0)
+        const old = sample.link || ({})
+        const link = (network.links || [])[0] || ({})
+        const sameDevice = delta > 0 && link.device && old.device === link.device
+        receiving = sameDevice ? rate(old.received, link.received, delta) : -1
+        sending = sameDevice ? rate(old.sent, link.sent, delta) : -1
+        previous = {timestamp: now, link: link}
     }
     RowLayout {
         Layout.fillWidth: true
