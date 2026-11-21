@@ -55,7 +55,7 @@ else
     else
         set -- -o "$monitor"
     fi
-    set -- wf-recorder --no-dmabuf -f "$out" "$@"
+    set -- wf-recorder --no-dmabuf --no-damage --framerate 30 -f "$out" "$@"
     if [ "$audio" = yes ]; then
         sink=$(wpctl inspect @DEFAULT_AUDIO_SINK@ | awk -F '"' '/node.name = / {print $2; exit}')
         if [ -n "$sink" ]; then set -- "$@" "--audio=$sink.monitor"; fi
