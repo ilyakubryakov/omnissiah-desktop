@@ -34,13 +34,14 @@ def read(path, default):
     except (OSError, ValueError):
         return deepcopy(default)
 
-def atomic(path, data):
+def atomic(path, data, *, mode=None):
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(prefix='.' + path.name, dir=path.parent)
     try:
-        mode = 'wb' if isinstance(data, bytes) else 'w'
-        with os.fdopen(fd, mode) as stream:
+        with os.fdopen(fd, 'wb' if isinstance(data, bytes) else 'w') as stream:
             stream.write(data)
+            if mode is not None:
+                os.fchmod(stream.fileno(), mode)
         os.replace(tmp, path)
     finally:
         Path(tmp).unlink(missing_ok=True)
