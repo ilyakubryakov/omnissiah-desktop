@@ -70,7 +70,17 @@ The screenshots use a demo account. [Desktop layer on Arch](docs/screenshots/arc
 
 ## Install
 
-Build from a checkout on x86-64 Linux with Nix. Access to this repository is required.
+Grab the ISO from [Releases](https://github.com/ilyakubryakov/omnissiah-desktop/releases). GitHub caps files at 2 GiB, so it comes in two parts. Download both parts and `SHA256SUMS` into one folder, then:
+
+```sh
+sha256sum --ignore-missing -c SHA256SUMS
+cat oninix-*.iso.part1 oninix-*.iso.part2 > oninix.iso
+sha256sum oninix.iso
+```
+
+The last hash should match the `.iso` line in `SHA256SUMS`.
+
+Or build it yourself from a checkout on x86-64 Linux with Nix. Access to this repository is required.
 
 ```sh
 git clone git@github.com:ilyakubryakov/omnissiah-desktop.git
@@ -78,7 +88,7 @@ cd omnissiah-desktop
 nix --extra-experimental-features 'nix-command flakes' build .#iso
 ```
 
-Write the ISO in `result/iso/` as a disk image to a USB stick. Boot in UEFI mode with Secure Boot disabled. The live desktop has an **Install OniNix** button. Have an internet connection and an available target disk of at least 32 GB.
+Write the ISO as a disk image to a USB stick. Boot in UEFI mode with Secure Boot disabled. The live desktop has an **Install OniNix** button. Have an internet connection and an available target disk of at least 32 GB.
 
 I tested the base desktop with two x86-64 CPU cores, 2 GiB of RAM and a graphics adapter that Hyprland can use through DRM/KMS. I use 2 GiB as the minimum and recommend 4 GiB for installation and running several apps. The installer filled swap at 2 GiB, and the system killed a process under memory pressure at 1 GiB.
 
