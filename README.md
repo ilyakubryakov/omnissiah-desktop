@@ -117,6 +117,12 @@ To remove the layer, sign out and run `./oninix-install uninstall` from the clon
 
 The panel checks the OniNix input about once a day. **Update** opens a terminal to update that input and rebuild. While the upstream is private, Nix needs authenticated access to it, including for the sudo update command. If a rebuild changes the system, the previous generation remains in GRUB until you remove it.
 
+I use `oninix-doctor` to check failed services, disk health, crashes and backups. `oninix-doctor --events` shows the last day of activity, and `/var/lib/oninix-maintenance/last-rebuild.txt` shows the package changes from my last switch.
+
+I can enable local backups with `oninix.backup.enable = true;` in `settings.nix`. I mount a root-owned backup disk at `/mnt/oninix-backup` (or set `oninix.backup.mountPoint`), create a root-owned password file at `/etc/oninix/backup-password` with mode 0600, and keep a separate copy of the password. After a rebuild, `sudo oninix-backup init` creates the encrypted restic repository. OniNix backs up my home and `/etc/nixos` daily and tests a restore weekly. I can run `sudo oninix-backup snapshots` or `sudo oninix-backup restore latest /path/to/empty-directory` whenever I need it.
+
+I can also set `oninix.hardware.autoMount = true;` to mount removable media automatically when my desktop session is active.
+
 ## Keys worth knowing
 
 | Keys | Action |
