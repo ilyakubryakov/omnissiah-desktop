@@ -141,7 +141,7 @@ case "$ID" in
         uwsm=()
         if apt-cache show uwsm >/dev/null 2>&1; then uwsm=(uwsm); fi
         sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "${system_packages[@]}" "${display_manager[@]}" "${uwsm[@]}" \
-            pipewire-audio hyprland-guiutils libgl1-mesa-dri mesa-vulkan-drivers dbus-user-session xwayland
+            pipewire-audio hyprland-guiutils libgl1-mesa-dri mesa-vulkan-drivers dbus-user-session xwayland bubblewrap
         ;;
     fedora)
         if ((${#display_manager[@]})); then display_manager+=(xorg-x11-server-Xorg); fi

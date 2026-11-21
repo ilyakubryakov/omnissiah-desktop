@@ -114,8 +114,9 @@ def run_agent(name, request, before):
                        '--strict-mcp-config', '--setting-sources', '']
         else:
             command = ['exec', '-s', 'workspace-write', '--skip-git-repo-check', '-C', '/tmp/proposal', prompt]
+        bubblewrap = '/usr/bin/bwrap' if LAYER_PROFILE and os.access('/usr/bin/bwrap', os.X_OK) else 'bwrap'
         sandbox = [
-            'bwrap', '--new-session', '--die-with-parent', '--unshare-pid', '--unshare-ipc', '--clearenv',
+            bubblewrap, '--new-session', '--die-with-parent', '--unshare-pid', '--unshare-ipc', '--clearenv',
             '--ro-bind', '/', '/', '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp',
             '--bind', str(agent_home), '/tmp/agent-home', '--bind', str(job), '/tmp/proposal', '--chdir', '/tmp/proposal',
             '--setenv', 'HOME', '/tmp/agent-home', '--setenv', 'CODEX_HOME', '/tmp/agent-home/.codex',
@@ -181,15 +182,18 @@ def record(entry):
 def request_text(args):
     if args:
         return ' '.join(args)
+    example = ('Install Blender. Add Git.' if LAYER_PROFILE else
+               'Install Blender. Turn on the gaming set. Add the German layout.')
     return subprocess.run(['gum', 'write', '--header', 'Tell the machine spirit what you want',
-                           '--placeholder', 'Install Blender. Turn on the gaming set. Add the German layout.'],
+                           '--placeholder', example],
                           stdout=subprocess.PIPE, text=True).stdout.strip()
 
 def ask(args):
     say('OniNix · the machine spirit listens')
     name = agent()
     if not name:
-        say('No agent is set up. Install and sign in to Claude Code or Codex (the AI set), then try again.', CRIMSON)
+        setup = 'Claude Code or Codex' if LAYER_PROFILE else 'Claude Code or Codex (the AI set)'
+        say(f'No agent is set up. Install and sign in to {setup}, then try again.', CRIMSON)
         return 1
     request = request_text(args)
     if not request:
