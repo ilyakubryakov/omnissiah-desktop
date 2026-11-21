@@ -1,5 +1,6 @@
 import json
 import os
+import pwd
 import re
 import shutil
 import subprocess
@@ -29,7 +30,8 @@ FEATURES = [
     ('music', 'Music: low-latency audio and a DAW'),
     ('ai', 'AI: Claude, Codex and local models'),
 ]
-LAYOUTS = ['us', 'us,ru', 'us,de', 'us,fr', 'us,es', 'us,ua', 'gb', 'de', 'fr']
+LAYOUTS = ['us', 'us,ru', 'us,de', 'us,ru,de', 'us,fr', 'us,es', 'us,ua', 'gb', 'de', 'fr']
+LOGIN = re.compile(r'[a-z_][a-z0-9_-]{0,31}')
 
 def gum(*args, stdin=None):
     result = subprocess.run(['gum', *args], input=stdin, stdout=subprocess.PIPE, text=True)
@@ -52,7 +54,8 @@ def choose(header, options, selected=None, many=False):
 def ask(header, value='', placeholder='', password=False):
     args = ['input', '--header', header, '--value', value, '--placeholder', placeholder]
     if password:
-        args.append('--password')
+        args += ['--password', '--char-limit', '0']
+        return gum(*args).stdout.removesuffix('\n')
     return gum(*args).stdout.strip()
 
 def confirm(text, default=True):
@@ -209,6 +212,9 @@ def ask_password(label):
         if len(first) < 4:
             say('Use at least 4 characters.', CRIMSON)
             continue
+        if len(first.encode()) > 511:
+            say('Use a password of at most 511 UTF-8 bytes.', CRIMSON)
+            continue
         if first == ask('Repeat ' + label.lower(), password=True):
             return first
         say('The passwords do not match.', CRIMSON)
@@ -232,11 +238,18 @@ def collect():
     encrypt = confirm('Encrypt the disk (LUKS)?', default=False)
     luks = ask_password('Disk encryption passphrase') if encrypt else ''
     fullname = ask('Your name', placeholder='Alex Morgan')
-    default_user = re.sub(r'[^a-z0-9_-]', '', fullname.lower().split(' ')[0]) or 'user'
-    user = ask('Login name', value=default_user)
-    while not re.fullmatch(r'[a-z_][a-z0-9_-]{0,31}', user):
-        say('Use lowercase letters, digits, - or _.', CRIMSON)
+    reserved_users = {entry.pw_name for entry in pwd.getpwall() if entry.pw_name != 'nixos'}
+    default_user = re.sub(r'[^a-z0-9_-]', '', fullname.lower().split(' ')[0])[:32]
+    if not LOGIN.fullmatch(default_user) or default_user in reserved_users:
+        default_user = 'user'
+    while True:
         user = ask('Login name', value=default_user)
+        if user in reserved_users:
+            say('This login name is reserved by the system. Choose another.', CRIMSON)
+        elif not LOGIN.fullmatch(user):
+            say('Use lowercase letters, digits, - or _. Start with a lowercase letter or _. Use up to 32 characters.', CRIMSON)
+        else:
+            break
     password = ask_password('Password for ' + user)
     hostname = ask('Computer name', value='oninix')
     while not re.fullmatch(r'[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?', hostname):
