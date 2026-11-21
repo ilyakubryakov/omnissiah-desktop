@@ -1,0 +1,16 @@
+@define-color theme_bg_color @background@;
+@define-color theme_fg_color @foreground@;
+@define-color theme_base_color @dark_background@;
+@define-color theme_text_color @foreground@;
+@define-color theme_selected_bg_color @accent@;
+@define-color theme_selected_fg_color @dark_background@;
+window { color: @foreground@; background-color: @dark_background@; }
+frame.background { background-color: alpha(@background@, 0.96); border: 1px solid alpha(@accent@, 0.6); border-radius: 8px; padding: 22px; animation: arrive 280ms ease-out; }
+entry, dropdown button, combobox button { min-height: 38px; color: @foreground@; background: @light_background@; border: 1px solid @selection@; border-radius: 4px; box-shadow: none; }
+entry:focus { border-color: @accent@; box-shadow: 0 0 0 1px alpha(@accent@, 0.25); }
+button { color: @foreground@; background: @light_background@; border-radius: 4px; padding: 10px 16px; border: 1px solid @selection@; transition: background-color 120ms ease-out; }
+button:hover { background: @selection@; }
+button.suggested-action { background: @accent@; color: @dark_background@; border-color: @accent@; }
+button.destructive-action { color: @red@; }
+label { color: @foreground@; }
+@keyframes arrive { from { opacity: 0; } to { opacity: 1; } }

@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+. "${XDG_STATE_HOME:-$HOME/.local/state}/oninix/layer/profile/share/oninix-layer/environment"
+exec "$@"

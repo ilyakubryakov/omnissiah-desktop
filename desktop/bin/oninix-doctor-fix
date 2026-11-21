@@ -1,0 +1,87 @@
+#!/usr/bin/env python3
+import fcntl
+import json
+from pathlib import Path
+import shutil
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
+from oninix_health import CACHE, command, failed_units
+from oninix_shell import atomic
+
+STATE = CACHE / 'doctor-fix.json'
+REPAIRABLE = {
+    'oninix-notebook-reminders.service',
+    'oninix-polkit-agent.service',
+    'oninix-wallpaper.service',
+}
+
+
+def read():
+    try:
+        return json.loads(STATE.read_text())
+    except (OSError, ValueError):
+        return {'status': 'idle'}
+
+
+def write(status, **fields):
+    atomic(STATE, json.dumps(dict(status=status, agent='oninix', **fields)))
+
+
+def diagnose():
+    failed = failed_units('--user')
+    if failed is None:
+        write('failed', result='Cannot contact the user service manager.')
+        return
+    units = sorted(REPAIRABLE.intersection(failed))
+    if not units:
+        write('done', result='No supported session repairs found. Review the checks or ask the machine spirit for a configuration change.')
+        return
+    write('ready', units=units, resolution='Restart these failed session services: ' + ', '.join(units))
+
+
+def fix():
+    plan = read()
+    if plan.get('status') != 'ready':
+        raise ValueError('Run Diagnose before fixing a service.')
+    failed = failed_units('--user')
+    if failed is None:
+        write('failed', result='Cannot contact the user service manager.')
+        return
+    units = sorted(REPAIRABLE.intersection(plan.get('units', []), failed))
+    if not units:
+        write('done', result='The services in the repair plan are now healthy.')
+        return
+    restart = command('systemctl', '--user', 'restart', *units, timeout=20)
+    remaining = failed_units('--user')
+    if restart.returncode or remaining is None or REPAIRABLE.intersection(units, remaining):
+        write('failed', result=restart.stderr.strip() or 'One of the session services is still failing.')
+    else:
+        write('done', result='Restarted ' + ', '.join(units))
+    doctor = shutil.which('oninix-doctor') or str(Path(__file__).with_name('oninix-doctor'))
+    command(doctor, '--cache', timeout=90)
+
+
+def main():
+    actions = {'diagnose': diagnose, 'fix': fix, 'stop': lambda: write('idle'),
+               'dismiss': lambda: write('idle')}
+    if len(sys.argv) != 2 or sys.argv[1] not in (*actions, 'status'):
+        sys.exit('Usage: oninix-doctor-fix status|diagnose|fix|stop|dismiss')
+    action = sys.argv[1]
+    if action == 'status':
+        print(json.dumps(read()))
+        return
+    CACHE.mkdir(parents=True, exist_ok=True)
+    with (CACHE / 'doctor-fix.lock').open('a') as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            sys.exit('A Doctor action is already running.')
+        try:
+            actions[action]()
+        except ValueError as error:
+            sys.exit(str(error))
+
+
+if __name__ == '__main__':
+    main()

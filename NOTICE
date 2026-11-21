@@ -1,27 +1,15 @@
 Licenses and credits
 
-My desktop code and the original SVG artwork in this repository use the MIT license. See LICENSE (LICENSE).
+My desktop code in this repository uses the MIT license. See LICENSE.
 
-The Kanagawa Dragon and Lotus palettes are based on kanagawa.nvim (https://github.com/rebelot/kanagawa.nvim) by Tommaso Laurenzi, under MIT. Its full notice is in licenses/kanagawa.txt (licenses/kanagawa.txt).
+Several palettes and theme templates started from Omarchy (https://github.com/basecamp/omarchy) by David Heinemeier Hansson, under MIT. Its notice is in desktop/themes/OMARCHY-LICENSE.
+
+The Kanagawa Dragon and Lotus palettes are based on kanagawa.nvim (https://github.com/rebelot/kanagawa.nvim) by Tommaso Laurenzi, under MIT. Its full notice is in licenses/kanagawa.txt.
 
 The Tesla Day and Night palettes are inspired by the car UI. They contain my color choices, not Tesla code or artwork. This project has no connection with Tesla.
 
-I took ideas from Omarchy (https://github.com/basecamp/omarchy), Sweeteh (https://github.com/Aarav2709/Sweeteh) and the Linux desktop community. Their full repositories and artwork are not bundled here.
+OniNix is an unofficial fan project. Warhammer 40,000, Adeptus Mechanicus, Dark Angels, Black Legion and the Omnissiah are trademarks of Games Workshop Limited. This project is not made, endorsed or supported by Games Workshop. The Mechanicus mark and the wallpapers in desktop/themes/wallpapers depict this setting. The artwork is outside the code license. Its attribution and redistribution rights are pending verification before publication.
 
-Hyprland, Quickshell, Qt, GTK, KDE tools, Papirus, the fonts and other applications are separate projects with their own licenses. The native package manager installs them. Their licenses do not change because this desktop uses them.
+I also took ideas from Sweeteh (https://github.com/Aarav2709/Sweeteh) and the Linux desktop community.
 
-The compatibility packages use these upstream sources:
-
-| Package | Upstream license |
-|---|---|
-| Microsoft Authentication Library for Python | MIT |
-| icalendar | BSD-2-Clause |
-| x-wr-timezone | GPL-3.0-or-later |
-| recurring-ical-events | GPL-3.0-or-later |
-| tzdata Python package | Apache-2.0 |
-| hypridle | BSD-3-Clause |
-| Nerd Fonts symbols | Upstream font and icon licenses, preserved in the package |
-
-Source URLs and checksums are in packaging/. The packages keep upstream license files. Building a package does not make its source part of this project's MIT license.
-
-The private workstation's wallpaper collection, paid assets and application licenses are not included.
+NixOS, Nixpkgs, Hyprland, Quickshell, Qt, GTK, KDE tools, whisper.cpp and the Whisper models, Papirus, the fonts and every other program are separate projects with their own licenses. Nix installs them from their upstream sources. Their licenses do not change because this desktop uses them.

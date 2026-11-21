@@ -1,0 +1,21 @@
+# Palette-independent logical pixels; font sizes are points.
+font_family = "Inter"
+font_size = 11
+mono_family = "JetBrainsMono Nerd Font"
+mono_size = 10
+radius_small = 10
+radius_control = 10
+radius_card = 16
+radius_window = 10
+radius_panel = 22
+space_unit = 4
+control_height = 36
+focus_width = 1
+
+# Preserve the established native shell geometry before opting into unified metrics.
+[legacy]
+combo_radius = 8
+row_radius = 6
+popup_radius = 9
+slider_height = 32
+border_width = 1

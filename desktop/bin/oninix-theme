@@ -1,0 +1,702 @@
+#!/usr/bin/env bash
+set -eu
+
+if [[ ${1:-} == -h || ${1:-} == --help ]]; then
+    cat <<'USAGE'
+Usage: oninix-theme [render | render-only | check | diff | list | set PALETTE]
+       oninix-theme [metrics | metrics-apply | icons-resolve | icons FAMILY]
+       oninix-theme wallpaper <shared|light|dark|palette> PATH
+       oninix-theme wallpaper-path [PALETTE]
+       oninix-theme wallpaper-config
+       oninix-theme wallpaper-directory DIRECTORY
+       oninix-theme wallpaper-mode MODE
+USAGE
+    exit 0
+fi
+
+self=$(readlink -f "$0" 2>/dev/null || python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "$0")
+REPO="${ONINIX_THEME_ROOT:-${ONINIX_SHARE:-/run/current-system/sw/share/oninix}}"
+[ -d "$REPO/themes/templates" ] || { echo "Cannot find OniNix themes in $REPO" >&2; exit 1; }
+
+case "$(uname -s)" in
+Darwin) OS=macos ;;
+Linux) OS=linux ;;
+*) OS=other ;;
+esac
+
+STATE="${XDG_STATE_HOME:-$HOME/.local/state}/theme"
+needs_lock=yes
+case "${1:-render}" in icons-resolve | wallpaper-path | wallpaper-config | list) needs_lock=no ;; esac
+if [ "$needs_lock" = yes ] && [ "${ONINIX_THEME_LOCKED:-}" != "$self" ]; then
+    exec python3 - "$self" "$STATE" "$@" <<'PY'
+import fcntl, os, pathlib, subprocess, sys
+script, state, *args = sys.argv[1:]
+pathlib.Path(state).mkdir(parents=True, exist_ok=True)
+with open(pathlib.Path(state) / 'apply.lock', 'a') as lock:
+    fcntl.flock(lock, fcntl.LOCK_EX)
+    raise SystemExit(subprocess.call(['bash', script, *args], env={**os.environ, 'ONINIX_THEME_LOCKED': script}))
+PY
+fi
+unset ONINIX_THEME_LOCKED
+LAYER=${ONINIX_LAYER:-0}
+NAME_FILE="$STATE/name"
+CURRENT_LINK="$STATE/current"
+DEFAULT_THEME=kanagawa-dragon
+
+LIGHT_THEME=kanagawa-lotus
+DARK_THEME=kanagawa-dragon
+[ "$OS" = linux ] && DARK_THEME=omnissiah
+DEFAULT_THEME=$DARK_THEME
+
+current_name() {
+    n=""
+    [ -r "$NAME_FILE" ] && read -r n <"$NAME_FILE" 2>/dev/null || true
+    [ -n "$n" ] && printf '%s' "$n" || printf '%s' "$DEFAULT_THEME"
+}
+
+save_name() {
+    mkdir -p "$STATE"
+    name_tmp=$(mktemp "$STATE/.name.XXXXXX")
+    printf '%s\n' "$1" >"$name_tmp"
+    mv "$name_tmp" "$NAME_FILE"
+}
+
+palette_file() { printf '%s/themes/%s/colors.toml' "$REPO" "$1"; }
+out_dir() { printf '%s/themes/%s/out' "$REPO" "$1"; }
+
+PAL=""
+load_palette() {
+    _file=$1
+    [ -r "$_file" ] || { echo "No such palette: $_file" >&2; exit 1; }
+    PAL=":$(sed -e 's/^#.*//' -e 's/[[:space:]]#.*//' -e 's/"//g' -e 's/[[:space:]]//g' \
+             -e '/^$/d' "$_file" | tr '\n' ':')"
+}
+
+color() {
+    _rest=${PAL#*:"$1"=}
+    if [ "$_rest" = "$PAL" ]; then
+        case "$1" in
+            status_warning) color yellow; return ;;
+            status_available) color green; return ;;
+            status_urgent) color red; return ;;
+        esac
+        return 1
+    fi
+    printf '%s' "${_rest%%:*}"
+}
+
+hex_to_rgb() {
+    _h=${1#\#}
+    printf '%d,%d,%d' "0x${_h:0:2}" "0x${_h:2:2}" "0x${_h:4:2}"
+}
+
+hex_to_sgr() {
+    _h=${1#\#}
+    printf '%d;%d;%d' "0x${_h:0:2}" "0x${_h:2:2}" "0x${_h:4:2}"
+}
+
+hex_to_iterm() {
+    _h=${1#\#}
+    awk -v r=$((0x${_h:0:2})) -v g=$((0x${_h:2:2})) -v b=$((0x${_h:4:2})) 'BEGIN {
+        printf "{ \"Red Component\": %.6f, \"Green Component\": %.6f, \"Blue Component\": %.6f, \"Color Space\": \"sRGB\" }", r/255, g/255, b/255 }'
+}
+
+render() {
+    _tpl=$1
+    _metrics_block=no
+    while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in
+            '/* theme:metrics-begin */') _metrics_block=yes; continue ;;
+            '/* theme:metrics-end */') _metrics_block=no; continue ;;
+        esac
+        [ "$_metrics_block" = no ] || continue
+        case "$line" in *theme:out=* | *theme:comment=*) continue ;; esac
+        while [[ $line =~ \{\{([a-z_]+)(:rgb|:sgr|:iterm|:hex)?\}\} ]]; do
+            key=${BASH_REMATCH[1]}
+            rest=${BASH_REMATCH[2]:-}
+            value=$(color "$key") \
+                || { echo "Template $_tpl wants an undefined colour: $key" >&2; exit 1; }
+            case "$rest" in
+            :rgb) value=$(hex_to_rgb "$value") ;;
+            :sgr) value=$(hex_to_sgr "$value") ;;
+            :iterm) value=$(hex_to_iterm "$value") ;;
+            :hex) value=${value#\#} ;;
+            esac
+            line=${line/"${BASH_REMATCH[0]}"/$value}
+        done
+        printf '%s\n' "$line"
+    done <"$_tpl"
+}
+
+template_out() { sed -n 's|^[#;]* *theme:out= *||p' "$1" | head -1; }
+
+template_comment() {
+    _c=$(sed -n 's|^[#;]* *theme:comment= *||p' "$1" | head -1)
+    printf '%s' "${_c:-#}"
+}
+
+wallpaper_settings() {
+    python3 "$REPO/lib/oninix_wallpaper.py" "$1" "$(current_name)" "${@:2}"
+}
+
+wallpaper_path() {
+    python3 "$REPO/lib/oninix_wallpaper.py" path "${1:-$(current_name)}"
+}
+
+reload_wallpaper() {
+    if [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
+        systemctl --user restart --no-block oninix-wallpaper.service
+    fi
+}
+
+install_policy() (
+    local temp
+    temp=$(mktemp "$2.XXXXXX")
+    trap 'rm -f -- "$temp"' EXIT
+    tail -n +2 "$1" >"$temp"
+    if ! cmp -s "$temp" "$2"; then
+        mv -f -- "$temp" "$2"
+    fi
+)
+
+install_state() {
+    name=$1
+    mkdir -p "$STATE"
+    ln -sfn "$(out_dir "$name")" "$CURRENT_LINK"
+    if [ "$LAYER" = 1 ]; then return 0; fi
+
+    if [ -d "$HOME/.config/btop" ] || command -v btop >/dev/null 2>&1; then
+        mkdir -p "$HOME/.config/btop/themes"
+        ln -sfn "$CURRENT_LINK/btop.theme" "$HOME/.config/btop/themes/kanagawa.theme"
+    fi
+
+    mkdir -p "$HOME/.config"
+    starship_config="${XDG_CONFIG_HOME:-$HOME/.config}/starship.toml"
+    if [ ! -e "$starship_config" ] && [ ! -L "$starship_config" ]; then
+        mkdir -p "$(dirname "$starship_config")"
+        ln -s "$CURRENT_LINK/starship.toml" "$starship_config"
+    fi
+
+    if [ "$OS" != macos ]; then
+        mkdir -p "$HOME/.config/MangoHud"
+        hud="$HOME/.config/MangoHud/MangoHud.conf"
+        if [ -e "$hud" ] && [ ! -L "$hud" ]; then
+            mv "$hud" "$hud.bak-$(date +%Y%m%d-%H%M%S)"
+        fi
+        ln -sfn "$CURRENT_LINK/MangoHud.conf" "$hud"
+        mkdir -p "$HOME/.config/REAPER"
+        ln -sfn "$CURRENT_LINK/libSwell-user.colortheme" "$HOME/.config/REAPER/libSwell-user.colortheme"
+        install_policy "$CURRENT_LINK/chrome-policy.json" "$STATE/chrome-policy.json"
+        if [ -L /etc/opt/chrome/policies/recommended/oninix-theme.json ] && [ "$STATE" != "$HOME/.local/state/theme" ]; then
+            mkdir -p "$HOME/.local/state/theme"
+            install_policy "$CURRENT_LINK/chrome-policy.json" "$HOME/.local/state/theme/chrome-policy.json"
+        fi
+    fi
+
+    if [ "$OS" = macos ] && [ -d /Applications/iTerm.app ]; then
+        profiles="$HOME/Library/Application Support/iTerm2/DynamicProfiles"
+        mkdir -p "$profiles"
+        install_policy "$CURRENT_LINK/iterm2.json" "$profiles/oninix.json"
+    fi
+}
+
+reload_terminals() {
+    for proc in kitty .kitty-wrapped; do
+        pkill -USR1 -x "$proc" 2>/dev/null && printf 'reloaded %s\n' "$proc" || true
+    done
+}
+
+reload_tmux() {
+    command -v tmux >/dev/null 2>&1 || return 0
+    tmux has-session >/dev/null 2>&1 || return 0
+    tmux source-file "$CURRENT_LINK/tmux-theme.conf" >/dev/null 2>&1 \
+        && echo "reloaded tmux" || true
+}
+
+reload_chrome() {
+    pgrep -x chrome >/dev/null 2>&1 || return 0
+    command -v google-chrome-stable >/dev/null 2>&1 || return 0
+    google-chrome-stable --refresh-platform-policy --no-startup-window >/dev/null 2>&1 \
+        && echo "reloaded chrome policy" || true
+}
+
+restart_slack() {
+    pgrep -x slack >/dev/null 2>&1 || return 0
+    slack_pid=$(pgrep -o -x slack) || return 0
+    kill -TERM "$slack_pid" 2>/dev/null || true
+    i=0
+    while [ "$i" -lt 20 ] && kill -0 "$slack_pid" 2>/dev/null; do
+        sleep 0.5
+        i=$((i + 1))
+    done
+    if kill -0 "$slack_pid" 2>/dev/null; then
+        echo "Slack is still closing; leaving it to finish" >&2
+        return 0
+    fi
+    if command -v uwsm >/dev/null 2>&1 && uwsm check is-active >/dev/null 2>&1; then
+        uwsm app -t service -- slack --gtk-version=3 -s >/dev/null 2>&1 &
+    else
+        setsid nohup slack --gtk-version=3 -s >/dev/null 2>&1 &
+    fi
+    echo "restarted slack"
+}
+
+build_folder_icons() {
+    base=$1; palette=$2; src=""
+    for d in "$HOME/.local/share/icons/$base" "/run/current-system/sw/share/icons/$base" "/usr/share/icons/$base"; do
+        [ -r "$d/index.theme" ] && { src=$(readlink -f "$d"); break; }
+    done
+    [ -n "$src" ] || return 1
+    load_palette "$(palette_file "$palette")"
+    front=$(color accent); back=$(color orange); emblem=$(color selection)
+    name="$base-$palette"
+    dest="$HOME/.local/share/icons/$name"
+    stamp="v2 $src $front $back $emblem"
+    if [ "$(cat "$dest/.stamp" 2>/dev/null)" != "$stamp" ]; then
+        rm -rf "$dest"
+        dirs=""
+        for pdir in "$src"/*/places; do
+            sub=${pdir#"$src"/}
+            case "$sub" in *@*) continue ;; esac
+            mkdir -p "$dest/$sub"
+            for f in "$pdir"/*.svg; do
+                [ -L "$f" ] || continue
+                n=${f##*/}
+                case "$n" in *-blue*) continue ;; esac
+                t=$(readlink -f "$f")
+                case "${t##*/}" in *-blue-* | *-blue.svg) ;; *) continue ;; esac
+                sed -e "s/#5294e2/$front/g" -e "s/#4877b1/$back/g" -e "s/#1d344f/$emblem/g" "$f" >"$dest/$sub/$n"
+            done
+            dirs="$dirs${dirs:+,}$sub"
+        done
+        {
+            printf '[Icon Theme]\nName=%s\nInherits=%s\nDirectories=%s\n\n' "$name" "$base" "$dirs"
+            for sub in ${dirs//,/ }; do
+                sed -n "\\|^\\[$sub\\]|,/^\$/p" "$src/index.theme"
+            done
+        } >"$dest/index.theme"
+        printf '%s\n' "$stamp" >"$dest/.stamp"
+    fi
+    printf '%s' "$name"
+}
+
+install_gtk3_theme() {
+    gtk_base=""
+    for d in "${XDG_DATA_HOME:-$HOME/.local/share}/themes" "$HOME/.themes" /run/current-system/sw/share/themes /usr/share/themes; do
+        if [ -r "$d/$2/gtk-3.0/gtk.css" ]; then gtk_base="$d/$2/gtk-3.0/gtk.css"; break; fi
+    done
+    [ -n "$gtk_base" ] || return 1
+    gtk_source="$(out_dir "$1")/gtk.css"
+    gtk_revision=$(cat "$gtk_source" "$STATE/gtk-metrics.css" | cksum | awk '{print $1}')
+    gtk_mode=$(sed -n 's/^mode *= *"\(.*\)"/\1/p' "$(palette_file "$1")")
+    gtk_name="OniNix-$1-$gtk_revision-$gtk_mode"
+    gtk_target="${XDG_DATA_HOME:-$HOME/.local/share}/themes/$gtk_name/gtk-3.0"
+    mkdir -p "$gtk_target"
+    python3 - "$gtk_base" "$gtk_source" "$STATE/gtk-metrics.css" >"$gtk_target/gtk.css" <<'GTKCSS'
+from pathlib import Path
+import sys
+for source in sys.argv[1:]:
+    print(f'@import url("{Path(source).absolute().as_uri()}");')
+GTKCSS
+    ln -sf gtk.css "$gtk_target/gtk-dark.css"
+    gtk_root=${gtk_target%/gtk-3.0}
+    gtk_base_root=${gtk_base%/gtk-3.0/gtk.css}
+    if [ -d "$gtk_base_root/gtk-2.0" ]; then
+        ln -sfn "$gtk_base_root/gtk-2.0" "$gtk_root/gtk-2.0"
+    fi
+    if [ -r "$gtk_base_root/gtk-4.0/gtk.css" ]; then
+        mkdir -p "$gtk_root/gtk-4.0"
+        python3 - "$gtk_base_root/gtk-4.0/gtk.css" "$(out_dir "$1")/gtk4.css" "$STATE/gtk4-metrics.css" >"$gtk_root/gtk-4.0/gtk.css" <<'GTKCSS'
+from pathlib import Path
+import sys
+for source in sys.argv[1:]:
+    print(f'@import url("{Path(source).absolute().as_uri()}");')
+GTKCSS
+        ln -sf gtk.css "$gtk_root/gtk-4.0/gtk-dark.css"
+    fi
+    printf '%s' "$gtk_name"
+}
+
+apply_desktop() {
+    python3 "$REPO/themes/ui_metrics.py" apply
+    if [ "$LAYER" = 1 ]; then
+        icon_mode=$(sed -n 's/^mode *= *"\(.*\)"/\1/p' "$(palette_file "$1")")
+        icontheme=$(python3 "$REPO/themes/icons.py" variant "${icon_mode:-dark}")
+        printf '%s\n' "$icontheme" >"$STATE/icon-theme"
+        printf '[main]\nicon-theme=%s\n' "$icontheme" >"$STATE/fuzzel-icons.ini"
+        return 0
+    fi
+    ui_font=$(sed -n 's/^font=//p' "$STATE/kde-fonts.ini")
+    ui_small_font=$(sed -n 's/^smallestReadableFont=//p' "$STATE/kde-fonts.ini")
+    ui_mono_font=$(sed -n 's/^fixed=//p' "$STATE/kde-fonts.ini")
+    qt_ui_font=$(sed -n 's/^general=//p' "$STATE/qt-fonts.ini")
+    qt_mono_font=$(sed -n 's/^fixed=//p' "$STATE/qt-fonts.ini")
+    ui_gtk_font=$(python3 - "$STATE/ui-metrics.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+print(f"{d['font_family']} {d['font_size']}")
+PY
+)
+    ui_gtk_mono=$(python3 - "$STATE/ui-metrics.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+print(f"{d['mono_family']} {d['mono_size']}")
+PY
+)
+    if [ "$OS" = linux ]; then
+        fontconfig_dir="${XDG_CONFIG_HOME:-$HOME/.config}/fontconfig/conf.d"
+        mkdir -p "$fontconfig_dir"
+        ln -sfn "$STATE/ui-fontconfig.conf" "$fontconfig_dir/50-oninix-ui.conf"
+    fi
+    conf="$REPO/themes/$1/desktop.conf"
+    [ -r "$conf" ] || return 0
+
+    colorscheme=""; icontheme=""; folders=""; plasmatheme=""; gtktheme=""; keepawake_icon=""
+    while IFS='=' read -r k v; do
+        case "$k" in
+        \#* | "") continue ;;
+        icontheme) icontheme=$v ;;
+        folders) folders=$v ;;
+        plasmatheme) plasmatheme=$v ;;
+        gtktheme) gtktheme=$v ;;
+        keepawake_icon) keepawake_icon=$v ;;
+        esac
+    done <"$conf"
+
+    mkdir -p "$HOME/.local/share/color-schemes"
+    colorscheme="OniNix-$1"
+    scheme_changed=0
+    cmp -s "$CURRENT_LINK/OniNix.colors" "$HOME/.local/share/color-schemes/$colorscheme.colors" || scheme_changed=1
+    install -m 0644 "$CURRENT_LINK/OniNix.colors" "$HOME/.local/share/color-schemes/$colorscheme.colors"
+    if command -v kwriteconfig6 >/dev/null 2>&1; then
+        for font_key in font menuFont toolBarFont; do
+            kwriteconfig6 --file kdeglobals --group General --key "$font_key" "$ui_font"
+        done
+        kwriteconfig6 --file kdeglobals --group General --key smallestReadableFont "$ui_small_font"
+        kwriteconfig6 --file kdeglobals --group General --key fixed "$ui_mono_font"
+        for qt_version in qt5ct qt6ct; do
+            qt_font_conf="${XDG_CONFIG_HOME:-$HOME/.config}/$qt_version/$qt_version.conf"
+            mkdir -p "$(dirname "$qt_font_conf")"
+            kwriteconfig6 --file "$qt_font_conf" --group Fonts --key general "\"$qt_ui_font\""
+            kwriteconfig6 --file "$qt_font_conf" --group Fonts --key fixed "\"$qt_mono_font\""
+        done
+    fi
+    gtk3_named=""
+    if [ -n "$gtktheme" ]; then gtk3_named=$(install_gtk3_theme "$1" "$gtktheme") || true; fi
+    for gtk_version in 3.0 4.0; do
+        gtk_dir="${XDG_CONFIG_HOME:-$HOME/.config}/gtk-$gtk_version"
+        mkdir -p "$gtk_dir"
+        css="$gtk_dir/gtk.css"
+        if [ "$gtk_version" = 3.0 ] && [ -n "$gtk3_named" ]; then
+            if [ -L "$css" ]; then
+                case "$(readlink "$css")" in
+                    "$REPO"/themes/*/out/gtk.css|"$CURRENT_LINK"/gtk.css) rm -- "$css" ;;
+                esac
+            fi
+            if [ -f "$css" ]; then
+                css_tmp=$(mktemp)
+                sed '/\/\* oninix-theme \*\//d' "$css" >"$css_tmp"
+                [ ! -L "$css" ] || rm -- "$css"
+                cat "$css_tmp" >"$css"
+                rm -f "$css_tmp"
+            fi
+            continue
+        fi
+        gtk_palette=gtk.css
+        [ "$gtk_version" = 4.0 ] && gtk_palette=gtk4.css
+        gtk_import="@import url(\"$CURRENT_LINK/$gtk_palette\"); /* oninix-theme */
+@import url(\"$STATE/${gtk_palette%.css}-metrics.css\"); /* oninix-theme */"
+        if [ -L "$css" ]; then
+            case "$(readlink "$css")" in
+                "$REPO"/themes/*/out/gtk*.css|"$CURRENT_LINK"/gtk*.css)
+                    rm -- "$css" ;;
+            esac
+        fi
+        css_tmp=$(mktemp)
+        printf '%s\n' "$gtk_import" >"$css_tmp"
+        if [ -f "$css" ]; then sed '/\/\* oninix-theme \*\//d' "$css" >>"$css_tmp"; fi
+        [ ! -L "$css" ] || rm -- "$css"
+        cat "$css_tmp" >"$css"
+        rm -f "$css_tmp"
+    done
+    if [ -n "$colorscheme" ] && command -v plasma-apply-colorscheme >/dev/null 2>&1; then
+        if [ "$scheme_changed" = 1 ] && command -v kwriteconfig6 >/dev/null 2>&1; then
+            kwriteconfig6 --file kdeglobals --group General --key ColorScheme ''
+        fi
+        QT_QPA_PLATFORM=offscreen plasma-apply-colorscheme "$colorscheme" >/dev/null 2>&1 \
+            && printf 'colour scheme %s\n' "$colorscheme" \
+            || printf 'colour scheme %s FAILED\n' "$colorscheme" >&2
+    fi
+
+    icon_mode=$(sed -n 's/^mode *= *"\(.*\)"/\1/p' "$(palette_file "$1")")
+    icontheme=$(python3 "$REPO/themes/icons.py" variant "${icon_mode:-dark}")
+    if [ "$icontheme" != Papirus-Light ] && [ "$icontheme" != Papirus-Dark ]; then folders=""; fi
+    if [ -n "$icontheme" ] && [ "$folders" = palette ]; then
+        built=$(build_folder_icons "$icontheme" "$1") && icontheme=$built
+    fi
+    if [ -n "$icontheme" ] && command -v kwriteconfig6 >/dev/null 2>&1; then
+        kwriteconfig6 --file kdeglobals --group Icons --key Theme "$icontheme"
+        for qt_version in qt5ct qt6ct; do
+            qt_conf="${XDG_CONFIG_HOME:-$HOME/.config}/$qt_version/$qt_version.conf"
+            kwriteconfig6 --file "$qt_conf" --group Appearance --key style Breeze
+            kwriteconfig6 --file "$qt_conf" --group Appearance --key custom_palette true
+            kwriteconfig6 --file "$qt_conf" --group Appearance --key color_scheme_path "$(out_dir "$1")/qt5ct.colors"
+            kwriteconfig6 --file "$qt_conf" --group Appearance --key icon_theme "$icontheme"
+        done
+        printf '%s\n' "$icontheme" >"$STATE/icon-theme"
+        printf '[main]\nicon-theme=%s\n' "$icontheme" >"$STATE/fuzzel-icons.ini"
+        if command -v dbus-send >/dev/null 2>&1; then
+            dbus-send --session --type=signal /KIconLoader org.kde.KIconLoader.iconChanged int32:0 2>/dev/null || true
+        fi
+        printf 'icon theme %s\n' "$icontheme"
+    fi
+
+    if [ -n "$plasmatheme" ]; then
+        if command -v plasma-apply-desktoptheme >/dev/null 2>&1; then
+            QT_QPA_PLATFORM=offscreen plasma-apply-desktoptheme "$plasmatheme" >/dev/null 2>&1 \
+                && printf 'plasma theme %s\n' "$plasmatheme" \
+                || printf 'plasma theme %s FAILED\n' "$plasmatheme" >&2
+        elif command -v kwriteconfig6 >/dev/null 2>&1; then
+            kwriteconfig6 --file plasmarc --group Theme --key name "$plasmatheme"
+            printf 'plasma theme %s (written, no live reload)\n' "$plasmatheme"
+        fi
+    fi
+
+    if [ -n "$gtktheme" ]; then
+        [ -z "$gtk3_named" ] || gtktheme=$gtk3_named
+        sleep 1
+        for v in 3.0 4.0; do
+            ini="${XDG_CONFIG_HOME:-$HOME/.config}/gtk-$v/settings.ini"
+            if [ ! -f "$ini" ]; then
+                mkdir -p "${ini%/*}"
+                printf '[Settings]\ngtk-theme-name=%s\n' "$gtktheme" >"$ini"
+            fi
+            if grep -q '^gtk-theme-name=' "$ini"; then
+                sed -i.bak -e "s|^gtk-theme-name=.*|gtk-theme-name=$gtktheme|" "$ini" && rm -f "$ini.bak"
+            else
+                printf 'gtk-theme-name=%s\n' "$gtktheme" >>"$ini"
+            fi
+            if grep -q '^gtk-font-name=' "$ini"; then
+                sed -i.bak "s/^gtk-font-name=.*/gtk-font-name=$ui_gtk_font/" "$ini" && rm -f "$ini.bak"
+            else
+                printf 'gtk-font-name=%s\n' "$ui_gtk_font" >>"$ini"
+            fi
+            if [ -n "$icontheme" ]; then
+                grep -q '^gtk-icon-theme-name=' "$ini" \
+                    && sed -i.bak -e "s|^gtk-icon-theme-name=.*|gtk-icon-theme-name=$icontheme|" "$ini" && rm -f "$ini.bak" \
+                    || printf 'gtk-icon-theme-name=%s\n' "$icontheme" >>"$ini"
+            fi
+        done
+        command -v gsettings >/dev/null 2>&1 && \
+            { gsettings set org.gnome.desktop.interface font-name "$ui_gtk_font" &&
+              gsettings set org.gnome.desktop.interface monospace-font-name "$ui_gtk_mono" &&
+              gsettings set org.gnome.desktop.interface gtk-theme "$gtktheme" &&
+              { [ -z "$icontheme" ] || gsettings set org.gnome.desktop.interface icon-theme "$icontheme"; }; } 2>/dev/null || true
+        printf 'gtk theme %s\n' "$gtktheme"
+    fi
+
+    if [ -n "$keepawake_icon" ] && [ -f "$REPO/themes/icons/$keepawake_icon" ]; then
+        dest="$HOME/.local/share/icons/hicolor/scalable/apps/keepawake.svg"
+        mkdir -p "$(dirname "$dest")"
+        install -m 0644 "$REPO/themes/icons/$keepawake_icon" "$dest"
+        printf 'keepawake icon %s\n' "$keepawake_icon"
+        command -v kbuildsycoca6 >/dev/null 2>&1 && kbuildsycoca6 --noincremental >/dev/null 2>&1
+        touch "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
+    fi
+}
+
+macos_variant() {
+    if [ "$(defaults read -g AppleInterfaceStyle 2>/dev/null || echo Light)" = Dark ]; then
+        printf '%s' "$DARK_THEME"
+    else
+        printf '%s' "$LIGHT_THEME"
+    fi
+}
+
+mode=${1:-render}
+case "$mode" in
+metrics)
+    python3 "$REPO/themes/ui_metrics.py" status
+    exit 0
+    ;;
+metrics-apply)
+    apply_desktop "$(current_name)" metrics-only
+    exit 0
+    ;;
+icons-resolve)
+    python3 "$REPO/themes/icons.py" catalog
+    exit 0
+    ;;
+icons)
+    python3 "$REPO/themes/icons.py" select "${2:?Choose an icon family}"
+    apply_desktop "$(current_name)"
+    exit 0
+    ;;
+wallpaper-path)
+    wallpaper_path "${2:-$(current_name)}"
+    exit 0
+    ;;
+wallpaper-config)
+    wallpaper_settings config
+    exit 0
+    ;;
+wallpaper-directory | wallpaper-mode)
+    wallpaper_settings "${mode#wallpaper-}" "${2:?Choose a wallpaper setting}"
+    [ "$mode" = wallpaper-directory ] || reload_wallpaper
+    exit 0
+    ;;
+wallpaper)
+    wallpaper_settings set "${2:?usage: theme wallpaper <shared|light|dark|palette> PATH}" "${3:?Choose an image}"
+    reload_wallpaper
+    exit 0
+    ;;
+list)
+    for d in "$REPO"/themes/*/; do
+        n=$(basename "$d")
+        [ -f "$d/colors.toml" ] || continue
+        [ "$n" = "$(current_name)" ] && printf '=> %s\n' "$n" || printf '   %s\n' "$n"
+    done
+    exit 0
+    ;;
+set)
+    want=${2:?usage: theme set <name>}
+    case "$want" in *[!a-z0-9-]*) echo "Invalid palette name: $want" >&2; exit 1 ;; esac
+    [ -f "$(palette_file "$want")" ] || { echo "No palette: $want (see: oninix-theme list)" >&2; exit 1; }
+    mode='set'
+    ;;
+sync)
+    [ "$OS" = macos ] || { echo "theme sync needs a system that has an opinion; use: theme set" >&2; exit 1; }
+    want=$(macos_variant)
+    mode='set'
+    ;;
+render | render-only | check | diff) ;;
+*)
+    echo "Unknown command: $mode" >&2
+    exit 1
+    ;;
+esac
+
+stale=0
+if [ -w "$REPO/themes" ]; then
+case "$mode" in
+    check) python3 "$REPO/themes/ui_metrics.py" check || stale=1 ;;
+    diff) python3 "$REPO/themes/ui_metrics.py" check || true ;;
+    *) python3 "$REPO/themes/ui_metrics.py" render-defaults ;;
+esac
+for pdir in "$REPO"/themes/*/; do
+    palette=$(basename "$pdir")
+    [ -f "$pdir/colors.toml" ] || continue
+    load_palette "$pdir/colors.toml"
+    dest_dir=$(out_dir "$palette")
+
+    for tpl in "$REPO"/themes/templates/*.tpl; do
+        [ -f "$tpl" ] || continue
+        grep -q '^# theme:scope=metrics$' "$tpl" && continue
+        out=$(template_out "$tpl")
+        [ -n "$out" ] || { echo "Template has no theme:out header: $tpl" >&2; exit 1; }
+        case "$out" in */*) echo "theme:out must be a bare filename: $tpl" >&2; exit 1 ;; esac
+        dest="$dest_dir/$out"
+
+        tmp=$(mktemp)
+        {
+            comment=$(template_comment "$tpl")
+            if [ "$comment" = '/*' ]; then
+                printf '/* GENERATED by theme from themes/%s/colors.toml - do not edit. */\n' "$palette"
+            else
+                printf '%s GENERATED by `theme` from themes/%s/colors.toml - do not edit.\n' "$comment" "$palette"
+            fi
+            render "$tpl"
+        } >"$tmp"
+
+        if [ -f "$dest" ] && cmp -s "$tmp" "$dest"; then
+            rm -f "$tmp"
+            continue
+        fi
+
+        case "$mode" in
+        check)
+            echo "stale: themes/$palette/out/$out"
+            stale=1
+            rm -f "$tmp"
+            ;;
+        diff)
+            diff -u "$dest" "$tmp" 2>/dev/null | sed "s|$tmp|themes/$palette/out/$out (new)|" || true
+            rm -f "$tmp"
+            ;;
+        *)
+            mkdir -p "$dest_dir"
+            mv "$tmp" "$dest"
+            chmod 644 "$dest"
+            printf 'wrote themes/%s/out/%s\n' "$palette" "$out"
+            ;;
+        esac
+    done
+done
+
+fi
+
+if [ "$mode" = check ]; then
+    [ "$stale" -eq 0 ] && echo "all generated files are current"
+    exit "$stale"
+fi
+[ "$mode" = diff ] && exit 0
+[ "$mode" = render-only ] && exit 0
+
+name=${want:-$(current_name)}
+install_state "$name"
+if [ "$LAYER" != 1 ]; then
+    reload_terminals
+    reload_tmux
+fi
+case "$OS" in
+linux)
+    if command -v systemctl >/dev/null 2>&1; then
+        while IFS='=' read -r key value; do
+            case "$key" in
+                HYPRLAND_INSTANCE_SIGNATURE) [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] || export HYPRLAND_INSTANCE_SIGNATURE="$value" ;;
+                WAYLAND_DISPLAY) [ -n "${WAYLAND_DISPLAY:-}" ] || export WAYLAND_DISPLAY="$value" ;;
+            esac
+        done < <(systemctl --user show-environment 2>/dev/null || true)
+    fi
+    apply_desktop "$name"
+    save_name "$name"
+    reload_wallpaper
+    if [ "$LAYER" != 1 ]; then
+        restart_slack
+        reload_chrome
+        pkill -USR2 -x btop 2>/dev/null && echo "reloaded btop" || true
+    fi
+    if [ "$LAYER" != 1 ] && command -v gsettings >/dev/null 2>&1; then
+        scheme=$(sed -n 's/^mode *= *"\(.*\)"/\1/p' "$(palette_file "$name")")
+        gsettings set org.gnome.desktop.interface color-scheme "prefer-${scheme:-dark}" 2>/dev/null || true
+    fi
+    mako_dir="${XDG_CONFIG_HOME:-$HOME/.config}/mako"
+    rules="${XDG_STATE_HOME:-$HOME/.local/state}/oninix/notification-rules.conf"
+    oninix-desktop notification-render >/dev/null 2>&1 || true
+    (
+        temp_mako=$(mktemp "$STATE/.mako.conf.XXXXXX")
+        trap 'rm -f -- "$temp_mako"' EXIT
+        {
+            printf 'include=%s/mako.conf\n' "$CURRENT_LINK"
+            [ ! -f "$rules" ] || printf 'include=%s\n' "$rules"
+        } >"$temp_mako"
+        mv -f -- "$temp_mako" "$STATE/mako.conf"
+    )
+    if [ "$LAYER" != 1 ] && [ ! -e "$mako_dir/config" ] && [ ! -L "$mako_dir/config" ]; then
+        mkdir -p "$mako_dir"
+        ln -s "$STATE/mako.conf" "$mako_dir/config"
+    fi
+    if command -v makoctl >/dev/null 2>&1; then
+        makoctl reload >/dev/null 2>&1 || true
+    fi
+    if [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] && command -v hyprctl >/dev/null 2>&1; then
+        hyprctl reload >/dev/null && echo "hyprland reloaded"
+        oninix-shell ipc call colors reload >/dev/null 2>&1 && echo "reloaded bar" || true
+    fi
+    ;;
+macos)
+    save_name "$name"
+    ;;
+esac
+echo "theme: $name"
+exit 0

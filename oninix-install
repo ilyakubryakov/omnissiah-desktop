@@ -1,0 +1,283 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+log() { printf 'OniNix: %s\n' "$*"; }
+die() { log "$*" >&2; exit 1; }
+
+file_url() {
+    local LC_ALL=C path=$1 encoded='' char i
+    for ((i=0; i<${#path}; i++)); do
+        char=${path:i:1}
+        case "$char" in
+            [a-zA-Z0-9._~/-]) encoded+=$char ;;
+            *) printf -v char '%%%02X' "'$char"; encoded+=$char ;;
+        esac
+    done
+    printf 'git+file://%s' "$encoded"
+}
+
+action=install
+source_ref=
+allow_copr=0
+while (($#)); do
+    case "$1" in
+        install|uninstall) action=$1 ;;
+        --source)
+            (($# >= 2)) || die '--source needs a flake reference'
+            source_ref=$2
+            shift
+            ;;
+        --fedora-copr) allow_copr=1 ;;
+        -h|--help)
+            printf 'Usage: oninix-install [install|uninstall] [--source FLAKE] [--fedora-copr]\n'
+            exit 0
+            ;;
+        *) die "Unknown argument $1" ;;
+    esac
+    shift
+done
+
+((EUID != 0)) || die 'Run this as the user who will sign in to OniNix. sudo is used for system packages and the session entry.'
+[[ $(uname -m) == x86_64 ]] || die 'The OniNix layer currently supports x86_64 Linux.'
+if [[ $action == install ]]; then
+    . /etc/os-release
+    case "${ID:-}" in
+        ubuntu|fedora|arch) ;;
+        *) die "Unsupported distribution: ${PRETTY_NAME:-${ID:-unknown}}. The layer supports Ubuntu with Hyprland 0.55 or newer, Fedora and Arch Linux." ;;
+    esac
+fi
+command -v sudo >/dev/null 2>&1 || die 'OniNix requires sudo for the system packages and login session.'
+sudo -v || die 'OniNix requires sudo access. Run the installer in a terminal to authenticate, or use passwordless sudo for unattended installation.'
+if [[ $action == install && $ID == ubuntu ]]; then
+    sudo apt-get update
+    hyprland_version=$(LC_ALL=C apt-cache policy hyprland | awk '$1 == "Candidate:" {print $2}')
+    if [[ -z $hyprland_version || $hyprland_version == '(none)' ]]; then
+        die "${PRETTY_NAME:-$ID}: Hyprland is unavailable. OniNix requires Hyprland 0.55 or newer with Lua configuration support."
+    fi
+    dpkg --compare-versions "${hyprland_version#*:}" ge 0.55.0 ||
+        die "${PRETTY_NAME:-$ID} provides Hyprland $hyprland_version. OniNix requires Hyprland 0.55 or newer with Lua configuration support."
+fi
+config_home=${XDG_CONFIG_HOME:-$HOME/.config}
+state_home=${XDG_STATE_HOME:-$HOME/.local/state}
+flake="$config_home/oninix/layer"
+layer="$state_home/oninix/layer"
+profile="$layer/profile"
+unit_dir="$config_home/systemd/user"
+session_units="$profile/share/oninix-layer/systemd/user"
+(umask 077; mkdir -p -- "$layer")
+exec 9>"$layer/lock"
+flock 9
+
+register_session() {
+    sudo bash -s -- "$action" "$EUID" "${1:-0}" <<'ROOT'
+set -euo pipefail
+action=$1
+uid=$2
+manage_sddm=$3
+registry=/var/lib/oninix-layer
+launcher=/usr/local/libexec/oninix-layer-session
+desktop=/usr/share/wayland-sessions/oninix.desktop
+default_target=/etc/systemd/system/default.target
+if [[ $action == uninstall && ! -d $registry ]]; then
+    exit 0
+fi
+umask 077
+install -d -m 0700 "$registry"
+exec 9>"$registry/lock"
+flock 9
+if [[ $action == uninstall ]]; then
+    [[ -f $registry/$uid ]] || exit 0
+    users=("$registry"/[0-9]*)
+    if ((${#users[@]} == 1)); then
+        if [[ -f $registry/sddm && $(systemctl show -p Id --value display-manager.service) == sddm.service ]]; then
+            systemctl disable sddm.service
+        fi
+        if [[ -f $registry/default-target && -L $default_target && $(systemctl get-default) == graphical.target ]]; then
+            previous=$(cat "$registry/default-target")
+            if [[ -n $previous ]]; then
+                ln -sfnT -- "$previous" "$default_target"
+            else
+                rm -f "$default_target"
+            fi
+            systemctl daemon-reload
+        fi
+        rm -f "$launcher" "$desktop"
+        rm -f "$registry/sddm" "$registry/default-target"
+    fi
+    rm -f "$registry/$uid"
+    exit 0
+fi
+if ! compgen -G "$registry/[0-9]*" >/dev/null; then
+    [[ ! -e $launcher && ! -L $launcher && ! -e $desktop && ! -L $desktop ]] || {
+        printf 'OniNix session paths are already in use.\n' >&2
+        exit 1
+    }
+fi
+install -d -m 0755 /usr/local/libexec /usr/share/wayland-sessions
+temp=$(mktemp -d "$registry/.session.XXXXXX")
+trap 'rm -rf -- "$temp"' EXIT
+cat > "$temp/launcher" <<'LAUNCHER'
+#!/bin/sh
+profile="${XDG_STATE_HOME:-$HOME/.local/state}/oninix/layer/profile"
+exec "$profile/bin/oninix-layer-session"
+LAUNCHER
+cat > "$temp/desktop" <<'DESKTOP'
+[Desktop Entry]
+Name=OniNix
+Comment=Hyprland with the OniNix desktop
+Exec=/usr/local/libexec/oninix-layer-session
+Type=Application
+DesktopNames=Hyprland
+DESKTOP
+install -m 0755 "$temp/launcher" "$launcher"
+install -m 0644 "$temp/desktop" "$desktop"
+touch "$registry/$uid"
+if [[ $manage_sddm == 1 ]]; then
+    touch "$registry/sddm"
+    if ! systemctl is-enabled display-manager.service >/dev/null 2>&1; then
+        systemctl enable sddm.service
+    fi
+    if [[ $(systemctl get-default) != graphical.target && ( ! -e $default_target || -L $default_target ) ]]; then
+        previous=''
+        if [[ -L $default_target ]]; then
+            previous=$(readlink "$default_target")
+        fi
+        printf '%s\n' "$previous" > "$registry/default-target"
+        systemctl set-default graphical.target
+    fi
+fi
+systemctl start display-manager.service
+ROOT
+}
+
+if [[ $action == uninstall ]]; then
+    log 'Removing the OniNix session, user units and profile'
+    register_session
+    systemctl --user stop oninix-layer.target 2>/dev/null || true
+    for unit in "$unit_dir"/oninix-*; do
+        [[ -L $unit && $(readlink -- "$unit") == "$session_units/${unit##*/}" ]] && rm -- "$unit"
+    done
+    systemctl --user daemon-reload 2>/dev/null || true
+    rm -f -- "$profile" "$profile"-[0-9]*-link "$state_home/oninix/spirit/layer-undo.json"
+    log 'Removed. Your OniNix settings, Nix installation and system packages are still available.'
+    exit 0
+fi
+
+display_manager=()
+manage_sddm=0
+if ! systemctl cat display-manager.service >/dev/null 2>&1; then
+    display_manager=(sddm)
+    manage_sddm=1
+fi
+system_packages=(hyprland hyprlock hypridle hyprsunset xdg-desktop-portal-hyprland
+    xdg-desktop-portal-gtk pipewire wireplumber curl git)
+log "Installing native system packages on ${PRETTY_NAME:-$ID}"
+case "$ID" in
+    ubuntu)
+        if ((${#display_manager[@]})); then display_manager+=(xserver-xorg-core xserver-xorg-input-libinput); fi
+        uwsm=()
+        if apt-cache show uwsm >/dev/null 2>&1; then uwsm=(uwsm); fi
+        sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "${system_packages[@]}" "${display_manager[@]}" "${uwsm[@]}" \
+            pipewire-audio hyprland-guiutils libgl1-mesa-dri mesa-vulkan-drivers dbus-user-session xwayland bubblewrap
+        ;;
+    fedora)
+        if ((${#display_manager[@]})); then display_manager+=(xorg-x11-server-Xorg); fi
+        if ! dnf -q repoquery --qf '%{name}' hyprland | grep -Fx hyprland >/dev/null; then
+            ((allow_copr)) || die 'Fedora needs the sdegler/hyprland COPR. Run oninix-install --fedora-copr to enable it.'
+            log 'Enabling the sdegler/hyprland Fedora COPR'
+            sudo dnf -y copr enable sdegler/hyprland
+        fi
+        uwsm=()
+        if dnf -q repoquery --qf '%{name}' uwsm | grep -Fx uwsm >/dev/null; then uwsm=(uwsm); fi
+        sudo dnf -y install "${system_packages[@]}" "${display_manager[@]}" "${uwsm[@]}" pipewire-pulseaudio dbus-tools \
+            mesa-dri-drivers mesa-vulkan-drivers xorg-x11-server-Xwayland policycoreutils policycoreutils-python-utils
+        ;;
+    arch)
+        if ((${#display_manager[@]})); then display_manager+=(xorg-server); fi
+        sudo pacman -Syu --needed --noconfirm "${system_packages[@]}" "${display_manager[@]}" uwsm pipewire-pulse \
+            mesa vulkan-swrast xorg-xwayland polkit
+        ;;
+esac
+
+if ! command -v nix >/dev/null 2>&1 && [[ ! -x /nix/var/nix/profiles/default/bin/nix ]]; then
+    log 'Installing upstream Nix in multi-user mode'
+    installer=$(mktemp)
+    trap 'rm -f "$installer"' EXIT
+    curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
+        https://channels.nixos.org/nix-latest/nix-installer -o "$installer"
+    sh "$installer" install linux --enable-flakes --no-confirm
+fi
+if ! command -v nix >/dev/null 2>&1; then
+    export PATH="$PATH:/nix/var/nix/profiles/default/bin"
+fi
+nix_cmd=(nix --extra-experimental-features 'nix-command flakes')
+mkdir -p "$flake" "$unit_dir"
+if [[ ! -e $flake/flake.nix ]]; then
+    if [[ -z $source_ref ]]; then
+        script=${BASH_SOURCE[0]:-}
+        if [[ -n $script ]] &&
+            repo=$(cd -- "$(dirname -- "$script")" && pwd -P) &&
+            [[ -f $repo/nix/layer/package.nix ]]; then
+            if [[ -e $repo/.git ]]; then
+                source_ref=$(file_url "$repo")
+            else
+                source_ref="path:$repo"
+            fi
+        else
+            source_ref='git+ssh://git@github.com/ilyakubryakov/omnissiah-desktop.git?ref=oninix'
+        fi
+    fi
+    [[ $source_ref != *$'\n'* && $source_ref != *$'\r'* ]] || die 'Invalid flake source'
+    escaped=${source_ref//\\/\\\\}
+    escaped=${escaped//\"/\\\"}
+    interpolation='${'
+    escaped=${escaped//"$interpolation"/\\$interpolation}
+    (
+        temp_flake=$(mktemp "$flake/.flake.XXXXXX")
+        trap 'rm -f -- "$temp_flake"' EXIT
+        cat > "$temp_flake" <<FLAKE
+{
+  description = "My OniNix desktop layer";
+
+  inputs.oninix.url = "$escaped";
+  inputs.nixpkgs.follows = "oninix/nixpkgs";
+
+  outputs = { oninix, nixpkgs, ... }:
+    let
+      system = "x86_64-linux";
+      pkgs = nixpkgs.legacyPackages.\${system};
+    in {
+      packages.\${system}.layer = oninix.packages.\${system}.layer.override {
+        extraPackages = with pkgs; [ ];
+      };
+    };
+}
+FLAKE
+        mv -T -- "$temp_flake" "$flake/flake.nix"
+    )
+fi
+
+if [[ -n $source_ref ]] && [[ -f $flake/flake.lock ]]; then
+    log "Using the saved layer source in $flake/flake.nix"
+fi
+
+if [[ ! -x $profile/bin/oninix-layer-session ]]; then
+    log "Building the user's OniNix profile from $flake"
+    "${nix_cmd[@]}" flake lock "path:$flake"
+    "${nix_cmd[@]}" profile install --profile "$profile" "path:$flake#layer"
+fi
+
+for file in "$session_units"/*; do
+    unit="$unit_dir/${file##*/}"
+    if [[ -e $unit || -L $unit ]]; then
+        [[ -L $unit && $(readlink -- "$unit") == "$file" ]] ||
+            die "Existing user unit $unit conflicts with OniNix"
+    fi
+done
+for file in "$session_units"/*; do
+    ln -sfn -- "$file" "$unit_dir/${file##*/}"
+done
+systemctl --user daemon-reload 2>/dev/null || true
+log 'Registering OniNix with the display manager'
+register_session "$manage_sddm"
+log 'Ready. Choose OniNix at the login screen.'

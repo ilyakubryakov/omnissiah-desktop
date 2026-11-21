@@ -1,288 +1,172 @@
-<p align="center"><img src="quickshell/assets/mark.svg" width="88" alt="Omnissiah Desktop"></p>
+<p align="center"><img src="desktop/quickshell/assets/mechanicus.png" width="120" alt="OniNix"></p>
 
-# Omnissiah Desktop
+<h1 align="center">OniNix</h1>
+<p align="center"><b>OmnissiaNix.</b> NixOS with my Hyprland desktop, and a machine spirit you can talk to.</p>
 
-My Hyprland desktop for getting shit done. Two panels, a Control Center, shared app themes and useful keyboard shortcuts. Runs on **Arch Linux, CachyOS, Ubuntu and Fedora**, using native packages.
+![Control Station](docs/screenshots/control-station.png)
 
-![Control Center](docs/screenshots/control-center.png)
+This is the desktop I work in every day, packed as a distribution. Two panels, Control Station, notes, a voice you can dictate with, and a machine spirit that changes the system when you ask it. Under it sits NixOS: system rebuilds keep earlier generations, and if something goes sideways I can boot a retained one from GRUB. No heroics.
+
+## Why not just Omarchy
+
+Omarchy is great. It inspired a lot of this and I'm not ashamed. It even has Btrfs snapshots and dictation now. So here is what I wanted that it doesn't do:
+
+| | Omarchy | OniNix |
+|---|---|---|
+| Base | Arch Linux | NixOS: the whole system is one config you can read |
+| Going back | Btrfs snapshots in Limine | Retained system generations in GRUB, packages and config together |
+| Changing the system | Menus, scripts, the package manager | Ask the machine spirit, read the diff, apply or don't |
+| Settings | Omarchy menu and dotfiles | Control Station, with search |
+| Dictation | Superwhisper, local model optional | Local Whisper, sized to your hardware by a benchmark |
+| Look | Lots of themes | Live palettes and Mechanicus from GRUB to the lock screen |
+
+[Omarchy snapshots](https://omarchy.org/manual/system-snapshots/) · [Omarchy dictation](https://omarchy.org/news/2026/11/omarchy-4-5/)
+
+## The machine spirit
+
+Press **Super+A**, or hold **Right Ctrl** and say it. "Install Blender." "Turn on the gaming set." "Add the German layout."
+
+1. Claude Code or Codex (sign in to one first) edits a scratch copy of `settings.nix` in a sandbox. OniNix takes only that file as a configuration proposal. The agent CLI can refresh its own login. Your request and configuration can go to the provider, so keep secrets out of both.
+2. OniNix builds the proposal. If it doesn't build, nothing happens.
+3. You get the config diff and the package diff.
+4. **Apply** asks for sudo and switches to exactly the build you looked at. `oninix-spirit undo` brings back the previous settings and system generation.
+
+I read the diff before I apply. You should too: a NixOS config can change anything an admin can. Rollback covers system software and config. Your home files keep their current contents.
+
+I wanted a way to ask for a change, read what it would do and keep a way back.
+
+## Voice
+
+Hold **Right Alt** in a text field, speak, let go. The text lands where your cursor is. Whisper runs on your machine, the audio doesn't go anywhere.
+
+On first login `oninix-voice-profile` looks at what you have (NVIDIA, AMD or Intel through Vulkan, or just the CPU), downloads a model sized for it and benchmarks it. It steps down from that model toward a target of about three seconds. In a VM without GPU, or on a potato, dictation stays off and **Control Station → System → Software → Voice and machine spirit** tells you why and lets you turn it on anyway. Small models are worse with languages other than English. Just so you know.
 
 ## What is inside
 
-- Two panels with workspace numbers, app icons, pinned apps and a system tray.
-- Islands that join into a full panel when windows fill the workspace.
-- Panel settings for size, corners, colors, groups and transparency.
-- A Control Center with search, quick actions, sound, displays, devices and work modes.
-- Hover cards for music, calendar, notifications, sound and system usage.
-- An app launcher, launchpad, clipboard history and an Alt+Tab switcher.
-- A notification center with history, DND, clear buttons and rules for noisy apps.
-- A side notebook with Markdown notes, a calculator, timers and reminders. You can point it at an Obsidian vault.
-- Calendar support for Google, Microsoft 365 and private iCalendar feeds.
-- Six color themes, day/night switching, wallpapers and a lock screen.
-- A shortcut guide that reads the current Hyprland bindings.
+- Two panels, islands that join when windows fill the screen, drag icons between groups.
+- Control Station: connections, sound, displays, devices, power, themes, panels, apps, work modes, calendars, session.
+- Launcher, launchpad, clipboard history with previews, Alt+Tab across workspaces.
+- Notebook: Markdown notes (point it at an Obsidian vault), calculator, timers, dictation and meeting transcripts.
+- Notifications with history, do not disturb and rules for noisy apps.
+- Calendars: Google, Microsoft 365, iCalendar feeds.
+- Palettes with day and night switching, wallpapers, lock screen, all in the same colors.
+- Game mode with the Gaming set: pause selected apps and services and restore them when you leave Game mode.
+- GRUB, boot splash, login screen and fastfetch in Mechanicus style. Of course.
 
-| Panel settings | Quick notes |
+| Panels | Notebook |
 |---|---|
-| ![Panel settings](docs/screenshots/panels.png) | ![Notebook](docs/screenshots/notebook.png) |
-| ![Light theme](docs/screenshots/light.png) | ![Notifications](docs/screenshots/notifications.png) |
+| ![Panels](docs/screenshots/panels.png) | ![Notebook](docs/screenshots/notebook.png) |
+| ![Light palette](docs/screenshots/palette-light.png) | ![Launchpad](docs/screenshots/launchpad.png) |
 
-The screenshots use demo data. The wallpaper and project mark are included as SVG files.
+| Boot | Login |
+|---|---|
+| ![GRUB](docs/screenshots/grub.png) | ![Login](docs/screenshots/greeter.png) |
+
+| Installer disk selection | Optional sets | Encrypted install summary |
+|---|---|---|
+| ![Disk selection](docs/screenshots/installer-disk.png) | ![Optional sets](docs/screenshots/installer-sets.png) | ![Install summary](docs/screenshots/installer-summary.png) |
+
+The screenshots use a demo account. [Desktop layer on Arch](docs/screenshots/arch-layer.png) · [Encrypted boot](docs/screenshots/luks-unlock.png) · [Boot splash](docs/screenshots/plymouth.png) · [Machine spirit setup](docs/screenshots/spirit-no-agent.png) · [Voice status in a VM](docs/screenshots/voice-disabled.png).
 
 ## Install
 
-I am targeting **Arch Linux, CachyOS, Ubuntu and Fedora**. Other distros can fuck off for now. Four are enough to keep me busy.
-
-Clone the repo:
+Build from a checkout on x86-64 Linux with Nix. Access to this repository is required.
 
 ```sh
-git clone git@github.com:ilyakubryakov/omnissiah-desktop.git
+git clone --branch oninix git@github.com:ilyakubryakov/omnissiah-desktop.git
 cd omnissiah-desktop
+nix --extra-experimental-features 'nix-command flakes' build .#iso
 ```
 
-Then run:
+Write the ISO in `result/iso/` as a disk image to a USB stick. Boot in UEFI mode with Secure Boot disabled. The live desktop has an **Install OniNix** button. Have an internet connection and an available target disk of at least 32 GB.
+
+I tested the base desktop with two x86-64 CPU cores, 2 GiB of RAM and a graphics adapter that Hyprland can use through DRM/KMS. I use 2 GiB as the minimum and recommend 4 GiB for installation and running several apps. The installer filled swap at 2 GiB, and the system killed a process under memory pressure at 1 GiB.
+
+The installer asks for the disk, encryption, your name, login, password, computer name, time zone and keyboard layouts. Graphics and laptop are detected. Then you tick what you want:
+
+- **Gaming:** Steam, Proton, Game mode, launchers
+- **Coding:** editors, toolchains, developer tools
+- **Music:** low-latency audio and a DAW
+- **AI:** Claude Code and Codex (the machine spirit needs one of them) and local models through Ollama
+
+It erases the disk you picked, and it asks before it does. Read the summary.
+
+Your machine config lives in `/etc/nixos`: `settings.nix` is yours (and the spirit's), the rest is generated.
+
+## On Ubuntu, Fedora or Arch
+
+I made this desktop available as a Nix layer on x86-64. From a clone of the `oninix` branch, run:
 
 ```sh
-./install.sh
+./oninix-install
 ```
 
-Fedora needs community packages. Read [the package sources](#install-and-restore) first, then use:
+I tested Ubuntu 26.10, Fedora 45 and current Arch. On Fedora, run `./oninix-install --fedora-copr` to enable the community `sdegler/hyprland` COPR for the Hyprland stack. Arch runs a normal full pacman upgrade. Pick **OniNix** at the login screen.
 
-```sh
-./install.sh --fedora-copr
-```
+The layer uses Hyprland's Lua configuration and needs Hyprland 0.55 or newer. Ubuntu 26.04 LTS ships an older version. I run the installer with my regular user and authenticate through sudo if asked.
 
-After installation, log out and select **Hyprland (uwsm)**. You can also run `uwsm start Hyprland` from a local TTY.
+On first install you can pipe a downloaded installer into `bash -s -- --source FLAKE`. With no `--source`, the script uses this GitHub branch over SSH. Reinstalling keeps the source in your saved layer flake.
 
-| Distribution | Package source |
-|---|---|
-| Arch Linux | Official packages + a small `python-msal` PKGBUILD |
-| CachyOS | The same native package path as Arch |
-| Ubuntu 26.10+ | Universe + a local `.deb` with the full icon font |
-| Fedora 44+ | Two explicit COPRs + local RPMs for missing dependencies |
+I use the distro's Hyprland, lock screen, login, audio and graphics drivers. The same OniNix panels and tools come from Nix. The panels use Qt software rendering and the layer currently profiles Whisper on the CPU. Apps I add that need OpenGL or Vulkan may need a driver wrapper.
 
-Older Ubuntu releases do not have the required runtime in their official repositories. I have tested the UI on Ubuntu and the packages and helpers on Arch and Fedora. CachyOS still needs its own test run. The [test notes](#tests-and-current-limits) have the details.
+**Super+A** still opens the machine spirit. It can change the list of nixpkgs package names in `~/.config/oninix/layer/flake.nix`. Sign in to Claude Code or Codex first. Review the build and apply it, or run `oninix-spirit undo` to roll back the profile. Sign out and back in to reload it. Full system rollback requires OniNix on NixOS. For a local clone, pull the branch before checking for a layer update.
 
-## A few shortcuts
+To remove the layer, sign out and run `./oninix-install uninstall` from the clone. I leave your settings, Nix and the packages the installer added through your distro package manager in place. In my test VMs, that left 364 additional packages on Ubuntu, 479 on Fedora and 218 on Arch. If OniNix set up SDDM, removing the last OniNix user restores the previous login setup for the next boot.
+
+## Updates and going back
+
+The panel checks the OniNix input about once a day. **Update** opens a terminal to update that input and rebuild. While the upstream is private, Nix needs authenticated access to it, including for the sudo update command. If a rebuild changes the system, the previous generation remains in GRUB until you remove it.
+
+I use `oninix-doctor` to check failed services, disk health, crashes and backups. `oninix-doctor --events` shows the last day of activity, and `/var/lib/oninix-maintenance/last-rebuild.txt` shows the package changes from my last switch.
+
+I can enable local backups with `oninix.backup.enable = true;` in `settings.nix`. I mount a root-owned backup disk at `/mnt/oninix-backup` (or set `oninix.backup.mountPoint`), create a root-owned password file at `/etc/oninix/backup-password` with mode 0600, and keep a separate copy of the password. After a rebuild, `sudo oninix-backup init` creates the encrypted restic repository. OniNix backs up my home and `/etc/nixos` daily and tests a restore weekly. I can run `sudo oninix-backup snapshots` or `sudo oninix-backup restore latest /path/to/empty-directory` whenever I need it.
+
+I can also set `oninix.hardware.autoMount = true;` to mount removable media automatically when my desktop session is active.
+
+## Keys worth knowing
 
 | Keys | Action |
 |---|---|
+| Super + A | Machine spirit |
+| Hold Right Ctrl | Talk to the machine spirit |
+| Hold Right Alt | Dictate into the focused field |
 | Super + Space | Search apps, projects and files |
 | Super + D | Launchpad |
-| Super + Ctrl + C | Control Center |
-| Super + N | Notes, calculator and timers |
+| Super + , | Control Station |
+| Super + Ctrl + C | Quick toggles and sliders |
+| Super + N | Notebook |
 | Super + Shift + V | Clipboard history |
-| Super + Shift + H | Shortcut guide |
-| Alt + Tab | Switch windows across workspaces |
+| Super + / | Shortcuts you use every day |
+| Super + Shift + H | Every shortcut |
+| Alt + Tab | Switch windows |
 | Super + Return | Terminal |
 | Super + L | Lock |
 
-![Shortcut guide](docs/screenshots/shortcuts.png)
+![Shortcuts](docs/screenshots/cheatsheet.png)
 
-## What the installer changes
+## Make it yours
 
-The project has no accounts, passwords, VPN profiles, SSH keys or private endpoints. Weather, Prometheus, Kubernetes and AI usage widgets are off until you configure them.
+- Drop a `~/.config/oninix/hypr/user.lua` for your own Hyprland bits, or a module with the same name as one of ours to replace it.
+- Palettes, wallpapers, panels and icons are in Control Station.
+- System stuff goes to `/etc/nixos/settings.nix`, by hand or through the spirit.
 
-Your settings live outside the installed release. The installer backs up the files it replaces. Uninstall restores those files and keeps later changes in a separate folder. It does not remove your notes or accounts.
+## Repository
 
-Your distribution still manages drivers, networking, the login screen and boot. I leave those alone.
-
-- [Install, update and restore](#install-and-restore)
-- [Local settings and integrations](#local-settings)
-- [Project structure](#project-structure)
-- [Tests and current limits](#tests-and-current-limits)
-- [Licenses and credits](NOTICE)
-
-## Install and restore
-
-<details>
-<summary>Requirements, package sources, updates and recovery</summary>
-
-I install this on top of an existing Linux desktop. It needs systemd/logind, NetworkManager and a working graphics driver. The supported distro IDs are `arch`, `cachyos`, `ubuntu` and `fedora`. So far I have used x86_64 machines.
-
-The runtime needs Python 3.11+, Hyprland 0.55+ and Quickshell 0.3+. Run the installer as your normal user. It uses sudo only for native packages.
-
-### Before installation
-
-```sh
-./install.sh plan --distro ubuntu
-```
-
-This shows the package steps without running them. During installation, apt, pacman or dnf shows the real package changes and asks for confirmation where needed.
-
-The installer backs up files it replaces: Hyprland, Quickshell, launcher settings and the application settings changed by the theme. It also saves the desktop font, icon and color settings.
-
-After installation, log out and select **Hyprland (uwsm)**. Without a login manager, use `uwsm start Hyprland` from a local TTY. An ordinary SSH session is not enough to start a desktop.
-
-UWSM starts `omnissiah.target`. This runs the panels, notifications, clipboard, wallpaper, idle/lock, calendar and theme services. The host keeps its own audio, network and login services.
-
-### Where the packages come from
-
-**Arch and CachyOS:** a full `pacman -Syu`, so Qt and Hyprland do not get a partial upgrade. `python-msal` is built with makepkg from the recipe in this repo, then installed through pacman.
-
-**Ubuntu 26.10+:** apt packages from Universe. Ubuntu's `fonts-nerd-symbols` is missing the icon range used by the panels. The installer builds a small `.deb` with the full upstream font. It replaces that reduced font package. Font licenses stay in `/usr/share/doc/omnissiah-symbols-fonts`.
-
-**Fedora 44+:** the official packages are not enough for this version. `--fedora-copr` enables `giperborey/Hyprland` and `errornointernet/quickshell`. These are community repositories, not official Fedora support. Missing idle, calendar and font packages are built as local RPMs. The calendar builds include icalendar because the Fedora package's Python version metadata does not meet the recurrence library's requirement.
-
-All extra source URLs and checksums are in `packaging/`. Builds run as your normal user. No global pip environment or Nix installation is involved. Local packages and build tools remain visible to pacman, apt or dnf.
-
-If you already installed the runtime, use `./install.sh --no-packages`. It still checks the required commands and versions.
-
-### Update
-
-Pull the changes, have a look, then run the installer again. Installed versions live in `~/.local/share/omnissiah/releases/`. A `current` link selects one version. Settings live outside it.
-
-If you replaced a managed link with your own file or folder, the update stops and tells you which path needs attention. It does not overwrite that change.
-
-### Remove or recover
-
-Log out first, then run:
-
-```sh
-./install.sh uninstall
-```
-
-This restores the configuration saved before the first installation. Later file changes go to `~/.local/state/omnissiah/removed/`. Notes, accounts, wallpapers, saved preferences and native packages stay on the machine. The original backup path is recorded in `~/.local/state/omnissiah/receipt.json` while installed.
-
-If the desktop fails to start, use a TTY and run the same uninstall command from your checkout. Then choose your previous session.
-
-This restores configuration, not old package versions. Use distro snapshots or your normal backup for an OS rollback.
-
-### Limits
-
-I leave GPU drivers, PAM, fingerprint setup, autologin, the bootloader, login screen and network manager to the distro. I want a better desktop, not another bloody OS installer.
-
-Use standard XDG paths under your home. Custom locations are not supported; the installer stops if you use them.
-
-</details>
-
-## Local settings
-
-<details>
-<summary>Themes, calendars, notes and other integrations</summary>
-
-I keep most settings in Control Center: colors, wallpapers, panel size, corners, groups, accents, pinned apps, devices and work modes. Drag pinned apps to reorder them; app icons are made monochrome by the shell.
-
-Settings stay under `~/.local/state/theme`, `~/.local/state/station` and `~/.config/theme-schedule.conf`. Theme output is generated from `themes/*/colors.toml`. GTK and Qt6 use the same palette. Electron apps need their system theme setting. Legacy Qt5 apps may need `QT_QPA_PLATFORMTHEME=qt5ct` when launched; the matching qt5ct colors are already written. Applications that cache their own theme may need restarting.
-
-Put extra Hyprland settings in `~/.config/omnissiah/local.lua`. Optional display roles go in `~/.config/omnissiah/monitors.conf`; no hardware role is required. Ordinary outputs use preferred mode/scale 1 until you choose settings in Displays.
-
-### Optional integrations
-
-`~/.config/omnissiah/integrations.json` starts as `{}`. Example fields (add only those you want):
-
-```json
-{
-  "weather": {"latitude": 51.5074, "longitude": -0.1278},
-  "holidays": ["lt", "ie"],
-  "clocks": {"UTC": "Etc/UTC", "London": "Europe/London"},
-  "ai": ["codex", "claude"],
-  "clusters": [],
-  "prometheus": "",
-  "telemetry": ""
-}
-```
-
-London is just an example. Weather requests go to Open-Meteo after you supply coordinates. Solar theme scheduling has separate coordinates in `theme-schedule.conf`; set them before selecting Sun mode. Fixed-time and manual scheduling do not need a location.
-
-AI usage reads your locally authorized clients only after opt-in. It does not install clients or authenticate them. Kubernetes targets contain `id`, `label`, `kubeconfig` (filename under `~/.kube/`, or absolute path) and `context`. The widget only reads status and uses timeouts. A Prometheus URL enables alert queries; optional `telemetry` is an HTTPS endpoint returning your own compatible resource summary. Empty fields make no request.
-
-Add calendar accounts and OAuth app details through Calendars. Google and Microsoft tokens stay in your private account configuration. A work account may need your company's approval. This panel reads meetings. For editing them, use your mail or calendar app.
-
-I use the notebook with Obsidian. Its default path is `~/Documents/Notes`. Open that folder as a vault in Obsidian once, or choose an existing vault in Notebook settings. It needs the vault's `.obsidian` folder before saving notes. Files stay as normal Markdown; your sync tool handles other devices. Obsidian itself is not installed by this project.
-
-The icon chooser shows which families are installed. Papirus and Breeze are included; Tela, Colloid and Fluent become available when their native packages are installed. Missing themes are not downloaded behind your back.
-
-Screen recordings go to `~/Videos/Screencasts`. The recorder uses MP4 with H.264/AAC when those encoders are available, or WebM with VP9/Opus on Fedora's free FFmpeg build. Audio and microphone selection are in Capture settings.
-
-VPN profiles come from NetworkManager. Login auto-connect only runs for profiles you enabled in Control Center. The project does not add a VPN profile or enable one by default.
-
-</details>
-
-## Project structure
-
-<details>
-<summary>Where the files live and how the desktop starts</summary>
-
-The desktop is split between the Quickshell UI, Hyprland configuration and local helpers.
-
-| Path | What it does |
+| Path | What |
 |---|---|
-| `quickshell/` | Panels, Control Center, cards, launchpad, notes and guide |
-| `config/hypr/` | Hyprland layout, bindings, rules, idle and lock |
-| `dotfiles/.local/bin/` | Small desktop commands |
-| `dotfiles/.local/lib/` | Shared Python code |
-| `themes/` | Palettes, templates, wallpaper and icon settings |
-| `systemd/user/` | Services for the desktop session |
-| `installer.py` | Package checks, installation, update and restore |
-| `packaging/` | Native packages missing from distro repositories |
-| `assets/` | Project artwork |
-| `tests/` and `quickshell/tests/` | Installer and desktop tests |
+| `flake.nix` | The NixOS module, the ISO and the demo VM |
+| `nix/modules/` | System side: desktop, boot, voice, updates, the spirit |
+| `nix/installer/` | The disk installer |
+| `nix/layer/`, `oninix-install` | The desktop layer and its distro installer |
+| `nix/template/` | The machine flake the installer writes |
+| `desktop/hypr/` | Hyprland, in Lua |
+| `desktop/quickshell/` | Panels, Control Station, Notebook |
+| `desktop/bin/`, `desktop/lib/` | The `oninix-*` commands |
+| `desktop/themes/` | Palettes and templates, rendered at build time |
+| `docs/` | Screenshots and the one-page site |
 
-The UI calls local helpers with a fixed set of actions. Text from input fields is passed as data, rather than shell commands. Account data stays in the user's private state directory.
+`nix flake check` builds the demo system and runs the repository checks. `nix build .#nixosConfigurations.demo.config.system.build.vm` gives you a VM to poke at.
 
-`omnissiah.target` starts the desktop services inside a UWSM session. They stop with the graphical session. The host provides logind, networking, audio and graphics drivers.
+## Licenses
 
-Each installed version has a content-based directory name. A `current` link selects the version. User settings, notes and account data stay outside it. The installer records displaced files before replacing them.
-
-</details>
-
-## Tests and current limits
-
-<details>
-<summary>What I tested and what still needs work</summary>
-
-I tested this version on 3 November 2026. All Linux packages came from the native package managers and the recipes in this repo. The containers ran on an Intel laptop with a working Wayland session.
-
-### What I checked
-
-| System | Runtime versions | Result |
-|---|---|---|
-| Ubuntu 26.10 | Hyprland 0.56.2, Quickshell 0.3.0, UWSM 0.26.6 | Packages, doctor, tests and a separate graphical session |
-| Arch Linux | Hyprland 0.57.0, Quickshell 0.3.2, UWSM 0.27.1 | Packages, doctor and tests |
-| Fedora 44 | Hyprland 0.57.0, Quickshell 0.3.2, UWSM 0.27.0 | COPR/local RPM packages, doctor and tests |
-| CachyOS | Uses the Arch package path | Not tested on CachyOS yet |
-
-The Python tests passed on Ubuntu, Arch and Fedora: 9 installer/recording tests and 80 desktop tests on each. Five JavaScript test files also passed. I checked Python and shell syntax, and rendered all six palettes.
-
-The installer tests cover backup, repeated installation, changed managed files, broken symlinks, restore, unsupported systems and real theme output. They use temporary home directories. They do not replace a test of a full desktop login.
-
-Two lock-screen tests depend on the time of day. The final run used `TZ=Etc/GMT+10`, when both could run; all 80 desktop tests passed without skips.
-
-### Graphical check
-
-I started the Ubuntu desktop inside its own Hyprland window, with a separate user and D-Bus session. It had no access to my home directory or accounts. The README screenshots came from this session.
-
-I checked the panels, Control Center, panel editor, dark/light colors, notebook, notification center and shortcut guide. Hyprland reported no configuration errors, and the panel and guide loaded without QML errors. The complete icon font fixed the missing symbols from Ubuntu's smaller font package.
-
-Screen recording produced a real H.264/AAC MP4. Fedora's free FFmpeg build does not include H.264 encoding, so the recorder selects VP9/Opus WebM there. I checked those codecs with a short encode on Fedora; I have not tested Fedora screen capture in a graphical session yet.
-
-I also recorded desktop sound and the demo microphone together. The temporary audio mixer was removed after capture stopped.
-
-The demo scripts in `tests/` are for an isolated `/home/demo` account. They create fake notes, meetings and devices. Do not run them in your daily account.
-
-### Still to test
-
-- A clean install, login and logout through UWSM on each target distro. The container demo starts services directly because it does not run systemd as PID 1.
-- The full graphical session on Arch, Fedora and CachyOS.
-- Real NVIDIA/AMD hardware, several monitors, suspend, Bluetooth and fingerprint devices.
-- Google and Microsoft account setup on a new installation. No real account tokens were copied into the preview.
-- Updates across new Hyprland, Qt and Quickshell releases. The package versions above are a test record, not a permanent version lock.
-
-`Hyprland --verify-config` crashed in the Ubuntu container when the config queried live outputs. I checked the running compositor's configuration errors and the UI itself. The checker crash still needs looking at.
-
-</details>
-
-## Development
-
-```sh
-python3 -m unittest discover -s tests
-python3 -m unittest discover -s quickshell/tests -p 'test_*.py'
-TZ=Europe/Vilnius sh -c 'for test in quickshell/tests/*.test.cjs; do node "$test"; done'
-./install.sh plan --distro ubuntu
-./install.sh doctor
-```
-
-The calendar tests need the Python packages listed in `packages.json`.
-
-Use clear names and small functions. Keep comments and docstrings out of code; explanations go here. Executable directives and license notices stay where they belong.
-
-If something breaks, send the logs. "It's fucked" is a fair review, but a poor bug report. Sláinte.
+MIT for my code. Palettes, fonts and the rest keep their own licenses, see [NOTICE](NOTICE).

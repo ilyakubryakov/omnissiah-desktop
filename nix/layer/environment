@@ -1,0 +1,12 @@
+export ONINIX_LAYER=1
+export ONINIX_LAYER_PROFILE="${XDG_STATE_HOME:-$HOME/.local/state}/oninix/layer/profile"
+export ONINIX_FLAKE="${XDG_CONFIG_HOME:-$HOME/.config}/oninix/layer"
+export ONINIX_SHARE="$ONINIX_LAYER_PROFILE/share/oninix"
+export PATH="$ONINIX_LAYER_PROFILE/bin:${PATH:-/usr/local/bin:/usr/bin}"
+if ! command -v nix >/dev/null 2>&1; then
+    export PATH="$PATH:/nix/var/nix/profiles/default/bin"
+fi
+export XDG_DATA_DIRS="$ONINIX_LAYER_PROFILE/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+export FONTCONFIG_FILE="$ONINIX_LAYER_PROFILE/share/oninix-layer/fonts.conf"
+export NIX_CONFIG="${NIX_CONFIG:+$NIX_CONFIG
+}extra-experimental-features = nix-command flakes"

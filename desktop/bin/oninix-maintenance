@@ -1,0 +1,246 @@
+#!/usr/bin/env python3
+import fcntl
+import json
+import os
+import shutil
+import stat
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
+from oninix_shell import atomic
+
+FLAKE = Path(os.environ.get('ONINIX_FLAKE', '/etc/nixos'))
+LAYER_PROFILE = os.environ.get('ONINIX_LAYER_PROFILE')
+UPSTREAM = os.environ.get('ONINIX_UPSTREAM')
+STATE = Path(os.environ.get('XDG_STATE_HOME', Path.home() / '.local/state')) / 'oninix'
+CHECK = STATE / 'updates-check.json'
+SESSION = STATE / 'update-session.json'
+SYSTEM_PROFILE = Path('/nix/var/nix/profiles/system')
+DAY = 24 * 60 * 60
+DUE_AGE_DAYS = 14
+RENOTIFY = 3 * DAY
+
+def resolve_online(args, report=False):
+    result = subprocess.run(args, capture_output=True, text=True, timeout=120)
+    if report and result.stderr:
+        print(result.stderr, end='', file=sys.stderr)
+    result.check_returncode()
+    if any(message in result.stderr for message in (
+        'could not update local clone of Git repository', '; using cached version',
+    )):
+        raise RuntimeError('Could not refresh the OniNix input from its source.')
+    return result.stdout
+
+def read_json(path, default):
+    try:
+        return json.loads(path.read_text())
+    except (OSError, ValueError):
+        return default
+
+def write_json(path, value):
+    atomic(path, json.dumps(value))
+
+def oninix_input(file):
+    lock = json.loads(file.read_text())
+    nodes = lock['nodes']
+    node = nodes[nodes['root']['inputs']['oninix']]
+    return node
+
+def resolve_input(flake, file):
+    return ['nix', 'flake', 'update', 'oninix', '--flake', f'path:{flake}',
+            '--output-lock-file', str(file)]
+
+def upstream(node):
+    if LAYER_PROFILE:
+        original = node['original']
+        data = json.loads(resolve_online(['nix', 'flake', 'metadata', '--json', '--refresh',
+                                          '--inputs-from', f'path:{FLAKE}', original_ref(original)]))
+        return data['locked']
+    if UPSTREAM:
+        return json.loads(resolve_online(['nix', 'flake', 'metadata', '--json', '--refresh', UPSTREAM]))['locked']
+    with tempfile.TemporaryDirectory(prefix='oninix-check-') as temp:
+        candidate = Path(temp) / 'flake.lock'
+        resolve_online([*resolve_input(FLAKE, candidate), '--refresh'])
+        return oninix_input(candidate)['locked']
+
+def original_ref(original):
+    if original['type'] == 'path':
+        return 'path:' + original['path']
+    if original['type'] == 'git':
+        return 'git+' + original['url'] + ('?ref=' + original['ref'] if 'ref' in original else '')
+    if original['type'] == 'github':
+        return 'github:' + original['owner'] + '/' + original['repo'] + ('/' + original['ref'] if 'ref' in original else '')
+    raise ValueError('Unsupported update source')
+
+def revision(node):
+    return node.get('rev') or node.get('narHash', '').removeprefix('sha256-')
+
+def changed(locked, latest):
+    if 'rev' not in locked or 'rev' not in latest:
+        if locked.get('narHash') and locked['narHash'] == latest.get('narHash'):
+            return False
+    return bool(revision(latest)) and revision(locked) != revision(latest)
+
+def assess(item, now):
+    if item['status'] == 'unknown':
+        return {'level': 'error', 'count': 0, 'reasons': [], 'summary': item['detail'],
+                'blocker': '', 'unreachable': [item['name']], 'nixpkgsAgeDays': None}
+    locked_at = item.get('lockedAt')
+    age = max(0, int((now - locked_at) / DAY)) if locked_at and locked_at > 0 else None
+    if item['status'] != 'available':
+        return {'level': 'current', 'count': 0, 'reasons': [], 'summary': 'Everything is up to date',
+                'blocker': '', 'unreachable': [], 'nixpkgsAgeDays': age}
+    reasons = ['OniNix is ' + str(age) + ' days behind'] if age is not None and age >= DUE_AGE_DAYS else []
+    summary = 'An OniNix update is waiting. Installed release date unknown.' if age is None else 'An OniNix update is waiting, no rush'
+    return {'level': 'due' if reasons else 'available', 'count': 1, 'reasons': reasons,
+            'summary': 'Time to update: ' + ', '.join(reasons) if reasons else summary,
+            'blocker': '', 'unreachable': [], 'nixpkgsAgeDays': age}
+
+def check():
+    STATE.mkdir(parents=True, exist_ok=True)
+    with (STATE / 'updates-check.lock').open('w') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        now = time.time()
+        try:
+            node = oninix_input(FLAKE / 'flake.lock')
+            locked = node['locked']
+            current = revision(locked)
+            latest = upstream(node)
+            candidate = revision(latest)
+            newer = changed(locked, latest)
+            item = {'name': 'OniNix', 'kind': 'release', 'status': 'available' if newer else 'current',
+                    'current': current[:12], 'latest': candidate[:12],
+                    'lockedAt': locked.get('lastModified') or None,
+                    'detail': current[:12] + (' → ' + candidate[:12] if newer else ' · No newer release')}
+        except (OSError, ValueError, KeyError, RuntimeError, subprocess.SubprocessError):
+            item = {'name': 'OniNix', 'kind': 'error', 'status': 'unknown',
+                    'detail': 'Could not check the OniNix input. Check the machine flake, network and repository access.'}
+        value = {'checkedAt': now, 'items': [item], 'assessment': assess(item, now)}
+        write_json(CHECK, value)
+        return value
+
+def session_open():
+    session = read_json(SESSION, {})
+    pid = session.get('pid')
+    if not pid:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+def status():
+    return {'sessionOpen': session_open(), 'checkRunning': False}
+
+def launch():
+    STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with (STATE / 'update-session.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if session_open():
+            return {'error': 'An update session is already open'}
+        terminal = shutil.which('kitty')
+        if not terminal:
+            return {'error': 'kitty is not installed'}
+        script = (
+            'if sudo "$2" apply-system "$1"; then '
+            'oninix-maintenance check >/dev/null; fi; '
+            'read -r -p "Press Enter to close" _'
+        )
+        if LAYER_PROFILE:
+            script = ('oninix-maintenance apply-layer && oninix-maintenance check >/dev/null; '
+                      'read -r -p "Press Enter to close" _')
+        process = subprocess.Popen(['systemd-run', '--user', '--scope', '--quiet', '--collect',
+                                    '--unit=oninix-update', '--', terminal,
+                                    '--class', 'oninix-update', '--title', 'OniNix update',
+                                    'bash', '-c', script, '_', str(FLAKE), str(Path(__file__).resolve())],
+                                   start_new_session=True)
+        write_json(SESSION, {'pid': process.pid, 'startedAt': time.time()})
+        return {}
+
+def apply_system(flake):
+    if os.geteuid() != 0:
+        raise RuntimeError('Run sudo oninix-maintenance apply-system to update the system.')
+    file = flake / 'flake.lock'
+    with Path('/run/oninix-system-update.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        previous = SYSTEM_PROFILE.resolve(strict=True)
+        old = file.read_bytes()
+        mode = stat.S_IMODE(file.stat().st_mode)
+        with tempfile.TemporaryDirectory(prefix='oninix-update-', dir='/run') as directory:
+            work = Path(directory)
+            candidate = work / 'flake.lock'
+            result = work / 'system'
+            print(f'Resolving the OniNix input in {flake}', flush=True)
+            resolve_online([*resolve_input(flake, candidate), '--refresh'], report=True)
+            print('Building the OniNix system', flush=True)
+            target = f'path:{flake}#nixosConfigurations.oninix.config.system.build.toplevel'
+            subprocess.run(['nix', 'build', '--reference-lock-file', str(candidate),
+                            '--no-update-lock-file', '--out-link', str(result), target], check=True)
+            if file.read_bytes() != old or SYSTEM_PROFILE.resolve(strict=True) != previous:
+                raise RuntimeError('The system configuration changed during the update. Run the update again.')
+            updated = candidate.read_bytes()
+            if updated != old:
+                atomic(file, updated, mode=mode)
+            try:
+                subprocess.run(['nixos-rebuild', 'switch', '--store-path', str(result.resolve(strict=True))], check=True)
+            except (OSError, subprocess.SubprocessError):
+                if updated != old and SYSTEM_PROFILE.resolve(strict=True) == previous and file.read_bytes() == updated:
+                    atomic(file, old, mode=mode)
+                raise
+    print('Done. Retained generations are available in the boot menu.')
+
+def apply_layer():
+    with Path(LAYER_PROFILE).with_name('lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        file = FLAKE / 'flake.lock'
+        old = file.read_bytes()
+        try:
+            subprocess.run(['nix', 'flake', 'update', 'oninix', '--flake', f'path:{FLAKE}'], check=True)
+            subprocess.run(['nix', 'profile', 'upgrade', '--profile', LAYER_PROFILE, 'layer'], check=True)
+        except (OSError, subprocess.SubprocessError):
+            atomic(file, old)
+            raise
+        print('OniNix profile updated. Log out and in to reload the desktop.')
+
+def daily():
+    cached = read_json(CHECK, {})
+    legacy_due = cached.get('assessment', {}).get('level') == 'due' and any(
+        item.get('kind') == 'release' and not item.get('lockedAt') for item in cached.get('items', [])
+    )
+    if legacy_due or time.time() - cached.get('checkedAt', 0) >= DAY:
+        cached = check()
+    if cached.get('assessment', {}).get('level') != 'due':
+        return
+    reminder = STATE / 'update-reminder.json'
+    if time.time() - read_json(reminder, {}).get('notifiedAt', 0) < RENOTIFY:
+        return
+    if shutil.which('notify-send'):
+        subprocess.run(['notify-send', '-a', 'OniNix', 'Time to update OniNix', cached['assessment']['summary']])
+    write_json(reminder, {'notifiedAt': time.time()})
+
+def main(args):
+    if args == ['status']:
+        print(json.dumps(status()))
+    elif args == ['check']:
+        print(json.dumps(check()))
+    elif args[:1] == ['launch']:
+        print(json.dumps(launch()))
+    elif args[:1] == ['apply-system'] and len(args) <= 2 and not LAYER_PROFILE:
+        try:
+            apply_system(Path(args[1]).resolve() if len(args) == 2 else FLAKE.resolve())
+        except (OSError, RuntimeError, subprocess.SubprocessError) as error:
+            raise SystemExit(f'OniNix update failed: {error}') from error
+    elif args == ['apply-layer'] and LAYER_PROFILE:
+        apply_layer()
+    elif args == ['daily']:
+        daily()
+    else:
+        raise SystemExit('Usage: oninix-maintenance status|check|launch|apply-system|daily')
+
+if __name__ == '__main__':
+    main(sys.argv[1:])
