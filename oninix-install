@@ -39,6 +39,24 @@ done
 
 ((EUID != 0)) || die 'Run this as the user who will sign in to OniNix. sudo is used for system packages and the session entry.'
 [[ $(uname -m) == x86_64 ]] || die 'The OniNix layer currently supports x86_64 Linux.'
+if [[ $action == install ]]; then
+    . /etc/os-release
+    case "${ID:-}" in
+        ubuntu|fedora|arch) ;;
+        *) die "Unsupported distribution: ${PRETTY_NAME:-${ID:-unknown}}. The layer supports Ubuntu with Hyprland 0.55 or newer, Fedora and Arch Linux." ;;
+    esac
+fi
+command -v sudo >/dev/null 2>&1 || die 'OniNix requires sudo for the system packages and login session.'
+sudo -v || die 'OniNix requires sudo access. Run the installer in a terminal to authenticate, or use passwordless sudo for unattended installation.'
+if [[ $action == install && $ID == ubuntu ]]; then
+    sudo apt-get update
+    hyprland_version=$(LC_ALL=C apt-cache policy hyprland | awk '$1 == "Candidate:" {print $2}')
+    if [[ -z $hyprland_version || $hyprland_version == '(none)' ]]; then
+        die "${PRETTY_NAME:-$ID}: Hyprland is unavailable. OniNix requires Hyprland 0.55 or newer with Lua configuration support."
+    fi
+    dpkg --compare-versions "${hyprland_version#*:}" ge 0.55.0 ||
+        die "${PRETTY_NAME:-$ID} provides Hyprland $hyprland_version. OniNix requires Hyprland 0.55 or newer with Lua configuration support."
+fi
 config_home=${XDG_CONFIG_HOME:-$HOME/.config}
 state_home=${XDG_STATE_HOME:-$HOME/.local/state}
 flake="$config_home/oninix/layer"
@@ -110,7 +128,6 @@ if [[ $action == uninstall ]]; then
     exit 0
 fi
 
-. /etc/os-release
 display_manager=()
 if ! systemctl cat display-manager.service >/dev/null 2>&1; then
     display_manager=(sddm)
@@ -121,7 +138,6 @@ log "Installing native system packages on ${PRETTY_NAME:-$ID}"
 case "$ID" in
     ubuntu)
         if ((${#display_manager[@]})); then display_manager+=(xserver-xorg-core xserver-xorg-input-libinput); fi
-        sudo apt-get update
         uwsm=()
         if apt-cache show uwsm >/dev/null 2>&1; then uwsm=(uwsm); fi
         sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "${system_packages[@]}" "${display_manager[@]}" "${uwsm[@]}" \
@@ -144,7 +160,6 @@ case "$ID" in
         sudo pacman -Syu --needed --noconfirm "${system_packages[@]}" "${display_manager[@]}" uwsm pipewire-pulse \
             mesa vulkan-swrast xorg-xwayland
         ;;
-    *) die "Unsupported distribution: $ID" ;;
 esac
 
 if ! command -v nix >/dev/null 2>&1 && [[ ! -x /nix/var/nix/profiles/default/bin/nix ]]; then

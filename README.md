@@ -101,6 +101,8 @@ I made this desktop available as a Nix layer on x86-64. From a clone of the `oni
 
 I tested Ubuntu 26.10, Fedora 45 and current Arch. On Fedora, run `./oninix-install --fedora-copr` to enable the community `sdegler/hyprland` COPR for the Hyprland stack. Arch runs a normal full pacman upgrade. Pick **OniNix** at the login screen.
 
+The layer uses Hyprland's Lua configuration and needs Hyprland 0.55 or newer. Ubuntu 26.04 LTS ships an older version. I run the installer with my regular user and authenticate through sudo if asked.
+
 On first install you can pipe a downloaded installer into `bash -s -- --source FLAKE`. With no `--source`, the script uses this GitHub branch over SSH. Reinstalling keeps the source in your saved layer flake.
 
 I use the distro's Hyprland, lock screen, login, audio and graphics drivers. The same OniNix panels and tools come from Nix. The panels use Qt software rendering and the layer currently profiles Whisper on the CPU. Apps I add that need OpenGL or Vulkan may need a driver wrapper.
