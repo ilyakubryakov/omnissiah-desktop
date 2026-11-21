@@ -81,8 +81,9 @@ def agent():
             return name
     return None
 
-def read_regular(path, limit):
-    with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), 'rb') as handle:
+def read_regular(path, limit, *, dir_fd=None):
+    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
+    with os.fdopen(os.open(path, flags, dir_fd=dir_fd), 'rb') as handle:
         info = os.fstat(handle.fileno())
         if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
             raise RuntimeError(f'{path.name} must be a regular file with one link.')
@@ -102,7 +103,11 @@ def keep_refreshed_login(original, copy, initial):
     if initial is None or original.is_symlink():
         return
     try:
-        fresh = read_regular(copy, AUTH_LIMIT)
+        directory = os.open(copy.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            fresh = read_regular(Path(copy.name), AUTH_LIMIT, dir_fd=directory)
+        finally:
+            os.close(directory)
     except FileNotFoundError:
         return
     if fresh == initial:
