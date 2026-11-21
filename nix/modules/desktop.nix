@@ -345,7 +345,11 @@ lib.mkIf cfg.enable {
     kdePackages.breeze-gtk
     kdePackages.kconfig
     papirus-icon-theme
-    rofi
+    (symlinkJoin {
+      name = "rofi-without-menu-entries";
+      paths = [ rofi ];
+      postBuild = "rm -r $out/share/applications";
+    })
     libnotify
     glib
     gsettings-desktop-schemas
