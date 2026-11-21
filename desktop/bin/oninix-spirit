@@ -358,6 +358,7 @@ def main(args):
         text = sys.stdin.read().strip()
         subprocess.Popen(['kitty', '--class', 'oninix-spirit', '--title', 'Machine spirit',
                           'bash', '-c', 'oninix-spirit "$1"; read -r -p "Press Enter to close" _', '_', text],
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          start_new_session=True)
         return 0
     undo_requested = args == ['undo']
