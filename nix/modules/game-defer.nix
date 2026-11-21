@@ -86,6 +86,8 @@ lib.mkIf cfg.enable {
     serviceConfig = {
       ExecCondition = systemQueue.condition name;
       ExecStartPost = lib.mkAfter [ (systemQueue.acknowledge name) ];
+    } // lib.optionalAttrs (name == "nix-optimise") {
+      Type = lib.mkDefault "oneshot";
     };
   }) // lib.optionalAttrs scrub.enable {
     "btrfs-scrub@".serviceConfig = {
