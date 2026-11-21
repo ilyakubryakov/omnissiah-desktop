@@ -4,7 +4,9 @@ let
     babel
     google-auth
     google-auth-oauthlib
+    icalendar
     msal
+    recurring-ical-events
     requests
   ]);
 in

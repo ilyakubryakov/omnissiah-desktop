@@ -34,7 +34,7 @@ Item {
 
     FileView {
         id: file
-        path: Quickshell.env("HOME") + "/.cache/caldash.json"
+        path: (Quickshell.env("XDG_CACHE_HOME") || Quickshell.env("HOME") + "/.cache") + "/caldash.json"
         printErrors: false
         watchChanges: true
         onFileChanged: reload()

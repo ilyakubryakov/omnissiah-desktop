@@ -13,6 +13,9 @@ def emit(value):
 
 def main():
     os.umask(0o077)
+    if "--sync" in sys.argv:
+        calendars.sync()
+        return
     request = {"op": "status"} if "--status" in sys.argv else json.loads(sys.stdin.read(1024 * 1024))
     if not isinstance(request, dict):
         raise calendars.CalendarError("invalid", "Invalid calendar request.")

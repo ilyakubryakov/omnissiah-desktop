@@ -39,7 +39,7 @@ let
       PartOf=graphical-session.target
       Wants=oninix-theme.service oninix-panel.service oninix-wallpaper.service oninix-notifications.service
       Wants=oninix-idle.service oninix-dictation.service oninix-voice-profile.service
-      Wants=oninix-update-check.timer oninix-theme-schedule.timer
+      Wants=oninix-update-check.timer oninix-theme-schedule.timer caldash.timer
     '';
     "oninix-panel.service" = service "OniNix panels and Control Station" "oninix-shell -n" ''
       Restart=on-failure
@@ -99,6 +99,16 @@ let
       OnActiveSec=15min
       OnUnitActiveSec=1h
       RandomizedDelaySec=10min
+    '';
+    "caldash.service" = service "Sync OniNix calendars" "oninix-calendar --sync" "Type=oneshot";
+    "caldash.timer" = ''
+      [Unit]
+      Description=Refresh OniNix calendars
+      PartOf=oninix-layer.target
+
+      [Timer]
+      OnActiveSec=5s
+      OnUnitActiveSec=10min
     '';
     "oninix-theme-schedule.service" = service "Apply scheduled OniNix palette and night light" "oninix-theme-schedule" "Type=oneshot";
     "oninix-theme-schedule.timer" = ''

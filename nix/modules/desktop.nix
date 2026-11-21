@@ -130,6 +130,24 @@ lib.mkIf cfg.enable {
       oninix-theme-schedule
     '';
   };
+  systemd.user.services.caldash = {
+    description = "Sync OniNix calendars";
+    partOf = [ "graphical-session.target" ];
+    path = [ "/run/current-system/sw" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${share}/bin/oninix-calendar --sync";
+    };
+  };
+  systemd.user.timers.caldash = {
+    description = "Refresh OniNix calendars";
+    wantedBy = [ "graphical-session.target" ];
+    partOf = [ "graphical-session.target" ];
+    timerConfig = {
+      OnActiveSec = "5s";
+      OnUnitActiveSec = "10min";
+    };
+  };
   systemd.user.services.oninix-wallpaper = {
     description = "OniNix wallpaper service";
     partOf = [ "graphical-session.target" ];

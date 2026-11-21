@@ -10,9 +10,11 @@ import secrets
 import tempfile
 import time
 import urllib.parse
-from datetime import datetime, timezone
+import urllib.request
+from datetime import datetime, time as wall_time, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 CONFIG = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "caldash"
 CACHE = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
@@ -464,7 +466,6 @@ def normalized_microsoft(events, key, tz):
                     raise CalendarError("response", "Microsoft returned an unexpected event time zone.")
                 dt = dt.replace(tzinfo=timezone.utc)
             if allday:
-                from zoneinfo import ZoneInfo
                 from babel.core import get_global
                 zone = ev.get("originalStartTimeZone") or "UTC"
                 zone = get_global("windows_zone_mapping").get(zone, zone)
@@ -474,6 +475,71 @@ def normalized_microsoft(events, key, tz):
         call = is_call(ev.get("isOnlineMeeting"), ev.get("attendees"), (ev.get("location") or {}).get("displayName"))
         result.append(with_place(dict(s=parse(ev["start"]), e=parse(ev["end"]), t=str(ev.get("subject") or "(no title)")[:160], c=key, a=allday, m=call), (ev.get("location") or {}).get("displayName")))
     return result
+
+def feed_address(url):
+    try:
+        parsed = urllib.parse.urlsplit(url)
+        parsed.port
+    except ValueError:
+        return None
+    if not parsed.hostname or parsed.username is not None or parsed.password is not None or len(url) > 4096:
+        return None
+    if parsed.scheme == "https" or (parsed.scheme == "http" and parsed.hostname in {"localhost", "127.0.0.1", "::1"}):
+        return parsed
+    return None
+
+class FeedRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        next_address = feed_address(newurl)
+        if next_address is None or (req.type == "https" and next_address.scheme != "https"):
+            raise CalendarError("feed", "The calendar feed redirected to an insecure address.")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+def source_ics(key, url, start, end):
+    from icalendar import Calendar
+    import recurring_ical_events
+
+    if feed_address(url) is None:
+        raise CalendarError("feed", "Calendar feeds require HTTPS or a local HTTP address.")
+    req = urllib.request.Request(url, headers={"User-Agent": "OniNix Calendar"})
+    limit = 8 * 1024 * 1024
+    with urllib.request.build_opener(FeedRedirect).open(req, timeout=TIMEOUT) as response:
+        body = response.read(limit + 1)
+    if len(body) > limit:
+        raise CalendarError("feed", "The calendar feed exceeds the 8 MiB limit.")
+
+    def local(value):
+        if not isinstance(value, datetime):
+            return datetime.combine(value, wall_time.min, start.tzinfo)
+        return value.replace(tzinfo=start.tzinfo) if value.tzinfo is None else value.astimezone(start.tzinfo)
+
+    result = []
+    for event in recurring_ical_events.of(Calendar.from_ical(body)).between(start, end):
+        if event.get("STATUS") == "CANCELLED" or "DTSTART" not in event:
+            continue
+        raw_start = event.decoded("DTSTART")
+        raw_end = event.decoded("DTEND", raw_start)
+        place = event.get("LOCATION")
+        result.append(with_place(dict(
+            s=local(raw_start).isoformat(), e=local(raw_end).isoformat(),
+            t=str(event.get("SUMMARY") or "(no title)")[:160], c=key,
+            a=not isinstance(raw_start, datetime), m=is_call(event.get("CONFERENCE"), event.get("ATTENDEE"), place),
+        ), place))
+    return result
+
+def sync():
+    try:
+        with open("/etc/localtime", "rb") as localtime:
+            tz = ZoneInfo.from_file(localtime)
+    except (OSError, ValueError):
+        tz = timezone.utc
+    now = datetime.now(tz)
+    start = datetime.combine(now.date() - timedelta(days=62), wall_time.min, tz)
+    end = datetime.combine(now.date() + timedelta(days=100), wall_time.min, tz)
+    with lock("sync"):
+        events, status = collect_sources(start, end, tz, source_ics)
+        events.sort(key=lambda event: datetime.fromisoformat(event["s"]))
+        publish({"ts": time.time(), "events": events, "cals": status})
 
 def collect_sources(start, end, tz, source_ics):
     events, status = [], {}
@@ -611,10 +677,9 @@ def handle(request, emit=lambda value: None):
                 path.unlink(missing_ok=True)
     elif operation == "feed":
         url = str(request.get("url", "")).strip()
-        parsed = urllib.parse.urlsplit(url)
         label = str(request.get("label", "")).strip()[:120]
-        if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password or not label or len(url) > 4096:
-            raise CalendarError("invalid", "Enter a name and an HTTPS iCalendar subscription URL.")
+        if not label or feed_address(url) is None:
+            raise CalendarError("invalid", "Enter a name and an HTTPS or local HTTP iCalendar subscription URL.")
         ident = secrets.token_hex(16)
         private_dir(CONFIG / "credentials")
         write_json(credential_path(ident), {"url": url})
