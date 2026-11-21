@@ -1,0 +1,161 @@
+#!/usr/bin/env python3
+import argparse
+from collections import Counter
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import sys
+import time
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
+from oninix_health import CACHE, command, coredumps, failed_units, report
+from oninix_shell import atomic
+
+REBUILD = Path('/var/lib/oninix-maintenance/last-rebuild.txt')
+BACKUP = Path('/var/lib/oninix-backup/status')
+DISK_ERROR = re.compile(r'I/O error|critical medium|AER:.*(?:error|fatal)|BTRFS (?:error|critical)', re.I)
+SMART_FAIL = re.compile(r'FAILED SMART|Critical Warning|is failing', re.I)
+SMART_WARN = re.compile(r'Currently unreadable|Offline uncorrectable|error count increased|Self-Test Log error', re.I)
+
+
+def units():
+    scopes = [('system', failed_units()), ('user', failed_units('--user'))]
+    failed = [f'{scope} {unit}' for scope, names in scopes for unit in names or []]
+    if failed:
+        return 'fail', 'Failed units: ' + ', '.join(failed)
+    if any(names is None for _, names in scopes):
+        return 'warn', 'One of the systemd managers is unreachable'
+    return 'ok', 'No failed system or user units'
+
+
+def storage():
+    low = []
+    mounts = list(dict.fromkeys([Path('/'), Path('/nix/store'), Path.home()]))
+    seen = set()
+    for mount in mounts:
+        device = mount.stat().st_dev
+        if device in seen:
+            continue
+        seen.add(device)
+        usage = shutil.disk_usage(mount)
+        if usage.total and usage.free / usage.total < 0.1:
+            low.append((mount, usage.free / usage.total))
+    if not low:
+        return 'ok', 'System and home volumes have at least 10% free'
+    return ('fail' if min(free for _, free in low) < 0.05 else 'warn',
+            'Low space: ' + ', '.join(f'{mount} {free:.0%} free' for mount, free in low))
+
+
+def kernel():
+    result = command('journalctl', '-k', '-p', 'warning', '--since', '24 hours ago', '--no-pager', '-o', 'cat')
+    if result.returncode or 'not seeing messages' in result.stderr:
+        return 'warn', 'Kernel journal is unavailable to this user'
+    hits = [line for line in result.stdout.splitlines() if DISK_ERROR.search(line)]
+    return ('fail', hits[-1][:160]) if hits else ('ok', 'No storage errors in the available kernel journal')
+
+
+def disks():
+    if command('systemctl', 'is-active', 'smartd.service').returncode:
+        return 'ok', 'No active SMART monitor'
+    result = command('journalctl', '-u', 'smartd.service', '--since', '7 days ago', '--no-pager', '-o', 'cat')
+    if result.returncode or 'not seeing messages' in result.stderr:
+        return 'warn', 'SMART journal is unavailable to this user'
+    for pattern, level in [(SMART_FAIL, 'fail'), (SMART_WARN, 'warn')]:
+        hits = [line for line in result.stdout.splitlines() if pattern.search(line)]
+        if hits:
+            return level, hits[-1][:160]
+    return 'ok', 'No disk health alerts from SMART in 7 days'
+
+
+def backups():
+    timer = command('systemctl', 'show', '-P', 'LoadState', 'oninix-backup.timer')
+    if timer.returncode or timer.stdout.strip() != 'loaded':
+        return 'ok', 'Local backup is optional and has no active schedule'
+    warnings = []
+    for name, days, label in [('snapshot', 2, 'Backup'), ('verified', 8, 'Restore test')]:
+        try:
+            stamp = int((BACKUP / name).read_text())
+        except (OSError, ValueError):
+            warnings.append(f'{label} has no successful run yet')
+        else:
+            if time.time() - stamp > days * 86400:
+                warnings.append(f'{label} last succeeded over {days} days ago')
+    return ('warn', '. '.join(warnings)) if warnings else ('ok', 'Backup and restore test are on schedule')
+
+
+def system_state():
+    booted, active = (Path(f'/run/{kind}-system/kernel') for kind in ('booted', 'current'))
+    if not active.exists():
+        return 'ok', 'Running as a desktop layer'
+    if not booted.exists():
+        return 'warn', 'The booted kernel is unavailable for comparison'
+    if booted.resolve() != active.resolve():
+        return 'warn', 'The active generation has a different kernel. Reboot when convenient.'
+    return 'ok', 'The booted kernel matches the active generation'
+
+
+def crash_summary(available, crashes):
+    if not available:
+        return 'warn', 'Crash journal is unavailable'
+    counts = Counter(entry.get('COREDUMP_COMM', 'unknown') for entry in crashes)
+    if not counts:
+        return 'ok', 'No crashes in the available journal for 24 hours'
+    detail = ', '.join(f'{name} x{count}' for name, count in counts.most_common(6))
+    return 'warn', f'{len(crashes)} recorded crashes: {detail}'
+
+
+def rebuild():
+    try:
+        text = REBUILD.read_text()
+    except OSError:
+        return None
+    kinds = dict(U='updated', D='downgraded', A='added', R='removed', C='changed')
+    changes = []
+    for line in text.splitlines():
+        match = re.match(r'\s*\[([UDCAR])[.*]?\]\s+#\d+\s+(\S+)\s*(.*)', line)
+        if match:
+            kind, name, detail = match.groups()
+            changes.append(dict(kind=kinds[kind], name=name, detail=' '.join(detail.split())))
+    return dict(at=next((line[5:] for line in text.splitlines() if line.startswith('At   ')), ''),
+                changes=changes[:60], count=len(changes),
+                closure=next((line for line in text.splitlines() if line.startswith('Closure size')), ''))
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Check OniNix system and session health')
+    parser.add_argument('--json', action='store_true')
+    parser.add_argument('--cache', action='store_true')
+    parser.add_argument('--events', action='store_true')
+    args = parser.parse_args()
+    available, crashes = coredumps()
+    checks = [('Units', units), ('Storage', storage), ('Disks', disks), ('Kernel', kernel),
+              ('Crashes', lambda: crash_summary(available, crashes)), ('Backups', backups),
+              ('Reboot', system_state)]
+    results = []
+    now = int(time.time())
+    for name, check in checks:
+        try:
+            level, message = check()
+        except (OSError, ValueError) as error:
+            level, message = 'warn', f'Cannot run this check: {error}'
+        results.append(dict(check=name, level=level, message=message, checked=now))
+    value = report(results, rebuild(), crashes)
+    if args.cache:
+        atomic(CACHE / 'doctor.json', json.dumps(value))
+    if args.events:
+        for event in value['events']:
+            print(time.strftime('%H:%M', time.localtime(event['at'])), event['level'], event['text'])
+    elif args.json:
+        print(json.dumps(value))
+    elif not args.cache:
+        for item in results:
+            print(f"{item['level']:4}  {item['check']:10}  {item['message']}")
+    if args.cache or args.events:
+        return 0
+    return ('ok', 'warn', 'fail').index(value['level'])
+
+
+if __name__ == '__main__':
+    sys.exit(main())

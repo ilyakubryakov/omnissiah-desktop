@@ -10,6 +10,7 @@ in
     ./hardware.nix
     ./features.nix
     ./updates.nix
+    ./maintenance.nix
     ./voice.nix
     ./spirit.nix
   ];
