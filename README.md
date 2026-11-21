@@ -80,6 +80,8 @@ nix --extra-experimental-features 'nix-command flakes' build .#iso
 
 Write the ISO in `result/iso/` as a disk image to a USB stick. Boot in UEFI mode with Secure Boot disabled. The live desktop has an **Install OniNix** button. Have an internet connection and an available target disk of at least 32 GB.
 
+I tested the base desktop with two x86-64 CPU cores, 2 GiB of RAM and a graphics adapter that Hyprland can use through DRM/KMS. I use 2 GiB as the minimum and recommend 4 GiB for installation and running several apps. The installer filled swap at 2 GiB, and the system killed a process under memory pressure at 1 GiB.
+
 The installer asks for the disk, encryption, your name, login, password, computer name, time zone and keyboard layouts. Graphics and laptop are detected. Then you tick what you want:
 
 - **Gaming:** Steam, Proton, Game mode, launchers
