@@ -111,7 +111,7 @@ I use the distro's Hyprland, lock screen, login, audio and graphics drivers. The
 
 **Super+A** still opens the machine spirit. It can change the list of nixpkgs package names in `~/.config/oninix/layer/flake.nix`. Sign in to Claude Code or Codex first. Review the build and apply it, or run `oninix-spirit undo` to roll back the profile. Sign out and back in to reload it. Full system rollback requires OniNix on NixOS. For a local clone, pull the branch before checking for a layer update.
 
-To remove the layer, sign out and run `./oninix-install uninstall` from the clone. Your settings, Nix and distro packages stay. If OniNix set up SDDM, removing the last OniNix user restores the previous login setup for the next boot.
+To remove the layer, sign out and run `./oninix-install uninstall` from the clone. I leave your settings, Nix and the packages the installer added through your distro package manager in place. In my test VMs, that left 364 additional packages on Ubuntu, 479 on Fedora and 218 on Arch. If OniNix set up SDDM, removing the last OniNix user restores the previous login setup for the next boot.
 
 ## Updates and going back
 
