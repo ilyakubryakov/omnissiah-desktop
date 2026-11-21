@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -13,7 +14,7 @@ from oninix_shell import atomic
 
 FLAKE = Path(os.environ.get('ONINIX_FLAKE', '/etc/nixos'))
 LAYER_PROFILE = os.environ.get('ONINIX_LAYER_PROFILE')
-UPSTREAM = os.environ.get('ONINIX_UPSTREAM', 'github:ilyakubryakov/omnissiah-desktop/oninix')
+UPSTREAM = os.environ.get('ONINIX_UPSTREAM')
 STATE = Path(os.environ.get('XDG_STATE_HOME', Path.home() / '.local/state')) / 'oninix'
 CHECK = STATE / 'updates-check.json'
 SESSION = STATE / 'update-session.json'
@@ -21,8 +22,14 @@ DAY = 24 * 60 * 60
 DUE_AGE_DAYS = 14
 RENOTIFY = 3 * DAY
 
-def run(args, timeout=120):
-    return subprocess.run(args, capture_output=True, text=True, timeout=timeout, check=True).stdout
+def resolve_online(args):
+    result = subprocess.run(args, capture_output=True, text=True, timeout=120)
+    result.check_returncode()
+    if any(message in result.stderr for message in (
+        'could not update local clone of Git repository', '; using cached version',
+    )):
+        raise RuntimeError('Could not refresh the OniNix input from its source.')
+    return result.stdout
 
 def read_json(path, default):
     try:
@@ -33,21 +40,28 @@ def read_json(path, default):
 def write_json(path, value):
     atomic(path, json.dumps(value))
 
-def oninix_input():
-    lock = json.loads((FLAKE / 'flake.lock').read_text())
+def oninix_input(file):
+    lock = json.loads(file.read_text())
     nodes = lock['nodes']
     node = nodes[nodes['root']['inputs']['oninix']]
     return node
 
+def resolve_input(flake, file):
+    return ['nix', 'flake', 'update', 'oninix', '--flake', f'path:{flake}',
+            '--output-lock-file', str(file)]
+
 def upstream(node):
-    source = UPSTREAM
     if LAYER_PROFILE:
         original = node['original']
-        data = json.loads(run(['nix', 'flake', 'metadata', '--json', '--refresh',
-                               '--inputs-from', f'path:{FLAKE}', original_ref(original)]))
-    else:
-        data = json.loads(run(['nix', 'flake', 'metadata', '--json', '--refresh', source]))
-    return data['locked']
+        data = json.loads(resolve_online(['nix', 'flake', 'metadata', '--json', '--refresh',
+                                          '--inputs-from', f'path:{FLAKE}', original_ref(original)]))
+        return data['locked']
+    if UPSTREAM:
+        return json.loads(resolve_online(['nix', 'flake', 'metadata', '--json', '--refresh', UPSTREAM]))['locked']
+    with tempfile.TemporaryDirectory(prefix='oninix-check-') as temp:
+        candidate = Path(temp) / 'flake.lock'
+        resolve_online([*resolve_input(FLAKE, candidate), '--refresh'])
+        return oninix_input(candidate)['locked']
 
 def original_ref(original):
     if original['type'] == 'path':
@@ -61,11 +75,17 @@ def original_ref(original):
 def revision(node):
     return node.get('rev') or node.get('narHash', '').removeprefix('sha256-')
 
+def changed(locked, latest):
+    if 'rev' not in locked or 'rev' not in latest:
+        if locked.get('narHash') and locked['narHash'] == latest.get('narHash'):
+            return False
+    return bool(revision(latest)) and revision(locked) != revision(latest)
+
 def assess(item, now):
     if item['status'] == 'unknown':
         return {'level': 'error', 'count': 0, 'reasons': [], 'summary': item['detail'],
                 'blocker': '', 'unreachable': [item['name']], 'nixpkgsAgeDays': 0}
-    age = int((now - item.get('lockedAt', now)) / DAY)
+    age = max(0, int((now - (item.get('lockedAt') or now)) / DAY))
     if item['status'] != 'available':
         return {'level': 'current', 'count': 0, 'reasons': [], 'summary': 'Everything is up to date',
                 'blocker': '', 'unreachable': [], 'nixpkgsAgeDays': age}
@@ -80,18 +100,17 @@ def check():
         fcntl.flock(lock, fcntl.LOCK_EX)
         now = time.time()
         try:
-            node = oninix_input()
+            node = oninix_input(FLAKE / 'flake.lock')
             locked = node['locked']
             current = revision(locked)
             latest = upstream(node)
             candidate = revision(latest)
-            newer = bool(candidate) and candidate != current and (LAYER_PROFILE or
-                    latest.get('lastModified', 0) > locked.get('lastModified', 0))
+            newer = changed(locked, latest)
             item = {'name': 'OniNix', 'kind': 'release', 'status': 'available' if newer else 'current',
                     'current': current[:12], 'latest': candidate[:12],
                     'lockedAt': locked.get('lastModified', now),
                     'detail': current[:12] + (' → ' + candidate[:12] if newer else ' · No newer release')}
-        except (OSError, ValueError, KeyError, subprocess.SubprocessError):
+        except (OSError, ValueError, KeyError, RuntimeError, subprocess.SubprocessError):
             item = {'name': 'OniNix', 'kind': 'error', 'status': 'unknown',
                     'detail': 'Could not check the OniNix input. Check the machine flake, network and repository access.'}
         value = {'checkedAt': now, 'items': [item], 'assessment': assess(item, now)}
