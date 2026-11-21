@@ -32,9 +32,7 @@ lib.mkIf cfg.enable {
       fi
     '';
     interactiveShellInit = ''
-      if [[ -n "$TERM" && "$TERM" != dumb ]]; then
-        eval "$(${lib.getExe pkgs.starship} init zsh)"
-      fi
+      source /etc/oninix/zshrc
     '';
   };
   programs.zoxide.enable = true;
@@ -50,7 +48,11 @@ lib.mkIf cfg.enable {
   systemd.coredump.enable = lib.mkDefault true;
   zramSwap.enable = true;
 
-  environment.etc."xdg/fastfetch/config.jsonc".source = ../../desktop/fastfetch/config.jsonc;
+  environment.etc = {
+    "oninix/zshrc".source = ../../desktop/terminal/zshrc;
+    "xdg/fastfetch/config.jsonc".source = ../../desktop/fastfetch/config.jsonc;
+    "xdg/kitty/kitty.conf".source = ../../desktop/terminal/kitty.conf;
+  };
 
   environment.systemPackages = with pkgs; [
     google-chrome

@@ -178,8 +178,8 @@ def desktop_name(filename):
 
 def kitty_shortcuts():
     path = CONFIG / "kitty" / "kitty.conf"
-    rows = []
-    for source in ([path] + [Path(l.split(None, 1)[1].strip()).expanduser()
+    rows = {}
+    for source in ([Path("/etc/xdg/kitty/kitty.conf"), path] + [Path(l.split(None, 1)[1].strip()).expanduser()
                              for l in (path.read_text(errors="replace").splitlines()
                                        if path.is_file() else [])
                              if l.startswith("include ")]):
@@ -190,8 +190,8 @@ def kitty_shortcuts():
                 continue
             parts = line[4:].split(None, 1)
             if len(parts) == 2:
-                rows.append({"keys": pretty_keys(parts[0]), "desc": short_action(parts[1])})
-    return rows
+                rows[parts[0]] = {"keys": pretty_keys(parts[0]), "desc": short_action(parts[1])}
+    return list(rows.values())
 
 def short_action(action):
     action = action.strip()
@@ -233,9 +233,7 @@ def tmux_shortcuts():
     return rows
 
 def zsh_shortcuts():
-    path = HOME / ".zshrc"
-    if not path.is_file():
-        return []
+    paths = [Path("/etc/oninix/zshrc"), Path(os.environ.get("ZDOTDIR") or HOME) / ".zshrc"]
     seqs = {
         "^[[H": "Home", "^[[F": "End", "^[[3~": "Delete",
         "^[[1;5D": "Ctrl+Left", "^[[1;5C": "Ctrl+Right",
@@ -244,18 +242,16 @@ def zsh_shortcuts():
         "^[[A": "Up", "^[[B": "Down", "^[OA": "Up", "^[OB": "Down",
         "^[[5~": "PgUp", "^[[6~": "PgDn", "^[^M": "Alt+Enter",
     }
-    rows, seen = [], set()
-    for line in path.read_text(errors="replace").splitlines():
+    rows = {}
+    lines = (line for path in paths if path.is_file() for line in path.read_text(errors="replace").splitlines())
+    for line in lines:
         m = re.match(r"\s*bindkey '([^']+)' ([\w-]+)", line.strip())
         if not m:
             continue
         combo = seqs.get(m.group(1), m.group(1))
         widget = m.group(2).replace("-", " ")
-        if (combo, widget) in seen:
-            continue
-        seen.add((combo, widget))
-        rows.append({"keys": combo, "desc": widget})
-    return rows
+        rows[combo] = {"keys": combo, "desc": widget}
+    return list(rows.values())
 
 ICONS = {
     "Home": 0xF02DC, "KDE": 0xF0379, "Hyprland": 0xF0379, "kitty": 0xF018D,
@@ -294,9 +290,9 @@ def guides(rows):
 
 def main():
     sections = [
-        {"name": "kitty", "hint": "from kitty.conf", "rows": kitty_shortcuts()},
+        {"name": "kitty", "hint": "from system and user kitty.conf", "rows": kitty_shortcuts()},
         {"name": "tmux", "hint": "from tmux.conf", "rows": tmux_shortcuts()},
-        {"name": "zsh", "hint": "from .zshrc", "rows": zsh_shortcuts()},
+        {"name": "zsh", "hint": "from system and user zsh configuration", "rows": zsh_shortcuts()},
         {"name": "Hyprland", "hint": "described binds, from hyprctl binds",
          "rows": hyprland_shortcuts()},
         {"name": "KDE", "hint": "global, from kglobalshortcutsrc",

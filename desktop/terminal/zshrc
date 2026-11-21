@@ -1,0 +1,70 @@
+HISTSIZE=50000
+SAVEHIST=50000
+HISTFILE=~/.zsh_history
+setopt SHARE_HISTORY HIST_IGNORE_ALL_DUPS HIST_SAVE_NO_DUPS HIST_REDUCE_BLANKS
+
+setopt AUTO_PUSHD PUSHD_IGNORE_DUPS PUSHD_SILENT
+setopt EXTENDED_GLOB
+setopt INTERACTIVE_COMMENTS
+setopt NO_BEEP
+setopt NO_FLOW_CONTROL
+setopt NUMERIC_GLOB_SORT
+WORDCHARS='*?_-[]~&;!#$%^(){}<>'
+
+bindkey '^[[H' beginning-of-line
+bindkey '^[[F' end-of-line
+bindkey '^[[3~' delete-char
+bindkey '^[[1;5D' backward-word
+bindkey '^[[1;5C' forward-word
+bindkey '^H' backward-kill-word
+bindkey '^[[3;5~' kill-word
+bindkey '^[[1;3D' backward-word
+bindkey '^[[1;3C' forward-word
+
+autoload -Uz up-line-or-beginning-search down-line-or-beginning-search
+zle -N up-line-or-beginning-search
+zle -N down-line-or-beginning-search
+bindkey '^[[A' up-line-or-beginning-search
+bindkey '^[[B' down-line-or-beginning-search
+bindkey '^[OA' up-line-or-beginning-search
+bindkey '^[OB' down-line-or-beginning-search
+bindkey '^[[5~' history-beginning-search-backward
+bindkey '^[[6~' history-beginning-search-forward
+
+alias g='git'
+alias ls='eza --icons=auto --group-directories-first'
+alias ll='eza -la --icons=auto --group-directories-first --git'
+alias la='eza -la --icons=auto --group-directories-first'
+alias l='eza -l --icons=auto --group-directories-first --git'
+alias lt='eza --tree --level=2 --icons=auto --group-directories-first'
+alias d='dirs -v | head -20'
+alias ..='cd ..'
+alias ...='cd ../..'
+alias ....='cd ../../..'
+
+if [[ -n "$KITTY_WINDOW_ID" ]] && (( $+commands[kitten] )); then
+    ssh() { kitten ssh "$@"; }
+fi
+
+if [[ -n "$TERM" && "$TERM" != dumb ]]; then
+    eval "$(starship init zsh)"
+    source <(fzf --zsh)
+
+    autoload -Uz add-zsh-hook add-zle-hook-widget
+    _oninix_full_prompt=$PROMPT
+    _oninix_full_rprompt=$RPROMPT
+
+    _oninix_restore_prompt() {
+        PROMPT=$_oninix_full_prompt
+        RPROMPT=$_oninix_full_rprompt
+    }
+
+    _oninix_transient_prompt() {
+        PROMPT="$(starship module character)"
+        RPROMPT='%F{8}%T%f'
+        zle .reset-prompt
+    }
+
+    add-zsh-hook precmd _oninix_restore_prompt
+    add-zle-hook-widget line-finish _oninix_transient_prompt
+fi
