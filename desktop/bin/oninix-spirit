@@ -168,6 +168,7 @@ def run_agent(name, request, before):
     prompt = (LAYER_PROMPT if LAYER_PROFILE else PROMPT).format(request=request)
     executable = str(Path(shutil.which(name)).resolve())
     home = Path.home()
+    sandbox_home = '/home/agent'
     with tempfile.TemporaryDirectory(prefix='agent-', dir=STATE) as temp:
         root = Path(temp)
         agent_home = root / 'home'
@@ -178,9 +179,9 @@ def run_agent(name, request, before):
         auth = (Path(os.environ.get('CLAUDE_CONFIG_DIR', home / '.claude')) / '.credentials.json'
                 if name == 'claude' else Path(os.environ.get('CODEX_HOME', home / '.codex')) / 'auth.json')
         auth_copy = agent_home / f'.{name}' / auth.name
+        auth_copy.parent.mkdir(mode=0o700)
         initial = read_regular(auth.resolve(), AUTH_LIMIT) if auth.is_file() else None
         if initial is not None:
-            auth_copy.parent.mkdir(mode=0o700)
             with os.fdopen(os.open(auth_copy, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), 'wb') as handle:
                 handle.write(initial)
         if name == 'claude':
@@ -197,12 +198,12 @@ def run_agent(name, request, before):
         sandbox = [
             '--new-session', '--die-with-parent', '--unshare-pid', '--unshare-ipc', '--clearenv', '--cap-drop', 'ALL',
             '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp',
-            '--bind', str(agent_home), '/tmp/agent-home', '--bind', str(job), '/tmp/proposal', '--chdir', '/tmp/proposal',
+            '--bind', str(agent_home), sandbox_home, '--bind', str(job), '/tmp/proposal', '--chdir', '/tmp/proposal',
             '--ro-bind', str(resolver), '/etc/resolv.conf',
-            '--setenv', 'HOME', '/tmp/agent-home', '--setenv', 'CODEX_HOME', '/tmp/agent-home/.codex',
-            '--setenv', 'CLAUDE_CONFIG_DIR', '/tmp/agent-home/.claude',
-            '--setenv', 'XDG_CONFIG_HOME', '/tmp/agent-home/.config', '--setenv', 'XDG_CACHE_HOME', '/tmp/agent-home/.cache',
-            '--setenv', 'XDG_DATA_HOME', '/tmp/agent-home/.local/share', '--setenv', 'XDG_STATE_HOME', '/tmp/agent-home/.local/state',
+            '--setenv', 'HOME', sandbox_home, '--setenv', 'CODEX_HOME', f'{sandbox_home}/.codex',
+            '--setenv', 'CLAUDE_CONFIG_DIR', f'{sandbox_home}/.claude',
+            '--setenv', 'XDG_CONFIG_HOME', f'{sandbox_home}/.config', '--setenv', 'XDG_CACHE_HOME', f'{sandbox_home}/.cache',
+            '--setenv', 'XDG_DATA_HOME', f'{sandbox_home}/.local/share', '--setenv', 'XDG_STATE_HOME', f'{sandbox_home}/.local/state',
             '--setenv', 'PATH', os.environ.get('PATH', os.defpath),
         ]
         if not LAYER_PROFILE:
