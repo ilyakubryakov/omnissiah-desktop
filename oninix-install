@@ -69,13 +69,15 @@ exec 9>"$layer/lock"
 flock 9
 
 register_session() {
-    sudo bash -s -- "$action" "$EUID" <<'ROOT'
+    sudo bash -s -- "$action" "$EUID" "${1:-0}" <<'ROOT'
 set -euo pipefail
 action=$1
 uid=$2
+manage_sddm=$3
 registry=/var/lib/oninix-layer
 launcher=/usr/local/libexec/oninix-layer-session
 desktop=/usr/share/wayland-sessions/oninix.desktop
+default_target=/etc/systemd/system/default.target
 if [[ $action == uninstall && ! -d $registry ]]; then
     exit 0
 fi
@@ -85,10 +87,24 @@ exec 9>"$registry/lock"
 flock 9
 if [[ $action == uninstall ]]; then
     [[ -f $registry/$uid ]] || exit 0
-    rm -f "$registry/$uid"
-    if ! compgen -G "$registry/[0-9]*" >/dev/null; then
+    users=("$registry"/[0-9]*)
+    if ((${#users[@]} == 1)); then
+        if [[ -f $registry/sddm && $(systemctl show -p Id --value display-manager.service) == sddm.service ]]; then
+            systemctl disable sddm.service
+        fi
+        if [[ -f $registry/default-target && -L $default_target && $(systemctl get-default) == graphical.target ]]; then
+            previous=$(cat "$registry/default-target")
+            if [[ -n $previous ]]; then
+                ln -sfnT -- "$previous" "$default_target"
+            else
+                rm -f "$default_target"
+            fi
+            systemctl daemon-reload
+        fi
         rm -f "$launcher" "$desktop"
+        rm -f "$registry/sddm" "$registry/default-target"
     fi
+    rm -f "$registry/$uid"
     exit 0
 fi
 if ! compgen -G "$registry/[0-9]*" >/dev/null; then
@@ -98,12 +114,14 @@ if ! compgen -G "$registry/[0-9]*" >/dev/null; then
     }
 fi
 install -d -m 0755 /usr/local/libexec /usr/share/wayland-sessions
-install -m 0755 /dev/stdin "$launcher" <<'LAUNCHER'
+temp=$(mktemp -d "$registry/.session.XXXXXX")
+trap 'rm -rf -- "$temp"' EXIT
+cat > "$temp/launcher" <<'LAUNCHER'
 #!/bin/sh
 profile="${XDG_STATE_HOME:-$HOME/.local/state}/oninix/layer/profile"
 exec "$profile/bin/oninix-layer-session"
 LAUNCHER
-install -m 0644 /dev/stdin "$desktop" <<'DESKTOP'
+cat > "$temp/desktop" <<'DESKTOP'
 [Desktop Entry]
 Name=OniNix
 Comment=Hyprland with the OniNix desktop
@@ -111,7 +129,24 @@ Exec=/usr/local/libexec/oninix-layer-session
 Type=Application
 DesktopNames=Hyprland
 DESKTOP
+install -m 0755 "$temp/launcher" "$launcher"
+install -m 0644 "$temp/desktop" "$desktop"
 touch "$registry/$uid"
+if [[ $manage_sddm == 1 ]]; then
+    touch "$registry/sddm"
+    if ! systemctl is-enabled display-manager.service >/dev/null 2>&1; then
+        systemctl enable sddm.service
+    fi
+    if [[ $(systemctl get-default) != graphical.target && ( ! -e $default_target || -L $default_target ) ]]; then
+        previous=''
+        if [[ -L $default_target ]]; then
+            previous=$(readlink "$default_target")
+        fi
+        printf '%s\n' "$previous" > "$registry/default-target"
+        systemctl set-default graphical.target
+    fi
+fi
+systemctl start display-manager.service
 ROOT
 }
 
@@ -129,8 +164,10 @@ if [[ $action == uninstall ]]; then
 fi
 
 display_manager=()
+manage_sddm=0
 if ! systemctl cat display-manager.service >/dev/null 2>&1; then
     display_manager=(sddm)
+    manage_sddm=1
 fi
 system_packages=(hyprland hyprlock hypridle hyprsunset xdg-desktop-portal-hyprland
     xdg-desktop-portal-gtk pipewire wireplumber curl git)
@@ -242,12 +279,5 @@ for file in "$session_units"/*; do
 done
 systemctl --user daemon-reload 2>/dev/null || true
 log 'Registering OniNix with the display manager'
-register_session
-if ((${#display_manager[@]})); then
-    if ! systemctl is-enabled display-manager.service >/dev/null 2>&1; then
-        sudo systemctl enable sddm.service
-    fi
-    sudo systemctl set-default graphical.target
-fi
-sudo systemctl start display-manager.service
+register_session "$manage_sddm"
 log 'Ready. Choose OniNix at the login screen.'
