@@ -152,7 +152,9 @@ def launch():
         if LAYER_PROFILE:
             script = ('oninix-maintenance apply-layer && oninix-maintenance check >/dev/null; '
                       'read -r -p "Press Enter to close" _')
-        process = subprocess.Popen([terminal, '--class', 'oninix-update', '--title', 'OniNix update',
+        process = subprocess.Popen(['systemd-run', '--user', '--scope', '--quiet', '--collect',
+                                    '--unit=oninix-update', '--', terminal,
+                                    '--class', 'oninix-update', '--title', 'OniNix update',
                                     'bash', '-c', script, '_', str(FLAKE), str(Path(__file__).resolve())],
                                    start_new_session=True)
         write_json(SESSION, {'pid': process.pid, 'startedAt': time.time()})
