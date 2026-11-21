@@ -9,6 +9,7 @@ ColumnLayout {
     id: root
     spacing: Shared.DesktopStyle.px(20)
     readonly property bool laptop: Quickshell.env("ONINIX_LAPTOP") === "1"
+    readonly property var brightness: (DesktopData.controls.laptop || {}).brightness
     readonly property var idleChoices: [0, 1, 2, 3, 5, 10, 15, 20, 30, 45, 60, 90, 120]
     function idleLabel(m) {
         return m === 0 ? "Never" : m < 60 ? m + " min" : (m / 60) + " h";
@@ -112,16 +113,16 @@ ColumnLayout {
                     Layout.preferredWidth: Shared.DesktopStyle.px(250)
                     from: 5; to: 100; stepSize: 1
                     tint: Colors.yellow
-                    value: DesktopData.brightnessTarget >= 0 ? DesktopData.brightnessTarget : (DesktopData.controls.laptop || {}).brightness ?? 50
-                    enabled: (DesktopData.controls.laptop || {}).brightness != null
+                    value: DesktopData.brightnessTarget >= 0 ? DesktopData.brightnessTarget : root.brightness ?? 5
+                    visible: root.brightness != null
                     Accessible.name: "Display brightness"
                     onMoved: DesktopData.setBrightness(Math.round(value))
                 }
                 UiLabel {
-                    Layout.preferredWidth: Shared.DesktopStyle.px(46)
+                    Layout.preferredWidth: root.brightness == null ? implicitWidth : Shared.DesktopStyle.px(46)
                     horizontalAlignment: Text.AlignRight
                     color: Colors.muted
-                    text: Math.round(powerBrightness.value) + "%"
+                    text: root.brightness == null ? "Unavailable" : Math.round(powerBrightness.value) + "%"
                 }
             }
         }
