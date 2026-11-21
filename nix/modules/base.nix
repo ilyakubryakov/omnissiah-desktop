@@ -13,10 +13,6 @@ lib.mkIf cfg.enable {
 
   networking.networkmanager.enable = true;
   networking.firewall.enable = true;
-  services.avahi = {
-    enable = true;
-    nssmdns4 = true;
-  };
 
   users.users.${cfg.user.name} = {
     isNormalUser = true;
