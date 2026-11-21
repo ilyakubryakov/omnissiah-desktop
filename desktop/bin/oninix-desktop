@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import platform
 import re
 import selectors
 import shutil
@@ -472,7 +473,7 @@ def wifi_connect(ssid, password):
 STATE_HOME = Path(os.environ.get('XDG_STATE_HOME', str(Path.home() / '.local/state')))
 ONINIX_STATE = STATE_HOME / 'oninix'
 LAPTOP = os.environ.get('ONINIX_LAPTOP') == '1'
-TZ_MANUAL = Path('/var/lib/oninix/timezone-manual')
+TIMEZONE_SERVICE = 'automatic-timezoned.service'
 USER_AUTOSTART = Path.home() / '.config/autostart'
 INPUT_DEFAULTS = {'layouts': 'us,ru', 'repeat_rate': '25', 'repeat_delay': '600', 'mouse_speed': '0',
                   'mouse_natural': 'no', 'scroll': '0.7', 'natural': 'yes', 'tap': 'yes'}
@@ -603,15 +604,71 @@ def printers():
     jobs = [line for line in run(['lpstat', '-o']).decode().splitlines() if line.strip()]
     return {'queues': queues, 'default': default.split(':', 1)[1].strip() if ':' in default else '', 'jobs': len(jobs)}
 
+def timezone_mode():
+    properties = run(['systemctl', 'show', '-p', 'LoadState', '-p', 'ActiveState', TIMEZONE_SERVICE])
+    unit = dict(line.split('=', 1) for line in properties.decode().splitlines())
+    available = unit.get('LoadState') == 'loaded'
+    active = available and unit.get('ActiveState') in {'active', 'activating'}
+    if os.environ.get('ONINIX_LAYER') == '1' or platform.freedesktop_os_release().get('ID') != 'nixos':
+        return 'host', available, active
+    if available:
+        return 'automatic', False, active
+    flake = Path(os.environ.get('ONINIX_FLAKE', '/etc/nixos'))
+    installed = all((flake / name).is_file() for name in ('flake.nix', 'flake.lock', 'settings.nix'))
+    return 'nixos' if installed else 'readonly', False, False
+
 def timezone():
     zone = run(['timedatectl', 'show', '-p', 'Timezone', '--value']).decode().strip()
     zones = run(['timedatectl', 'list-timezones']).decode().split()
+    mode, service, auto = timezone_mode()
+    return {'zone': zone, 'zones': zones, 'mode': mode, 'auto': auto, 'service': service}
+
+def timezone_terminal(command):
+    terminal = shutil.which('kitty')
+    if not terminal:
+        raise RuntimeError('Open a terminal to apply the time zone change with administrator privileges')
+    status = subprocess.run(['systemctl', '--user', 'is-active', '--quiet', 'oninix-timezone.scope'], env=ENV)
+    if status.returncode == 0:
+        raise RuntimeError('Close the open time zone terminal before applying another change')
+    subprocess.Popen(['systemd-run', '--user', '--scope', '--quiet', '--collect', '--unit=oninix-timezone',
+                      '--', terminal, '--hold', '--title', 'Time zone', *command],
+                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                     start_new_session=True, env=ENV)
+
+def timezone_host(command, privileged):
     try:
-        run(['systemctl', 'is-active', '--quiet', 'automatic-timezoned.service'])
-        service = True
-    except subprocess.CalledProcessError:
-        service = False
-    return {'zone': zone, 'zones': zones, 'auto': not TZ_MANUAL.exists(), 'service': service}
+        run(command, timeout=30)
+    except subprocess.CalledProcessError as error:
+        detail = error.stderr.decode(errors='replace').strip()
+        if any(text in detail.lower() for text in ('access denied', 'authentication required', 'permission denied')):
+            timezone_terminal(['sudo', *privileged])
+        else:
+            raise RuntimeError(detail or 'The system could not change the time zone') from None
+
+def timezone_set(zone):
+    if zone not in run(['timedatectl', 'list-timezones']).decode().split():
+        raise ValueError('Unknown time zone')
+    mode, _, auto = timezone_mode()
+    if mode == 'nixos':
+        timezone_terminal(['oninix-spirit', 'set-timezone', zone])
+    elif mode == 'host':
+        if auto:
+            raise RuntimeError('Turn off automatic time zone before choosing a time zone')
+        timezone_host(['timedatectl', '--no-ask-password', 'set-timezone', zone],
+                      ['timedatectl', 'set-timezone', zone])
+    elif mode == 'automatic':
+        raise RuntimeError('Automatic time zone is managed by your NixOS configuration')
+    else:
+        raise RuntimeError('Set the time zone in the installer or in your NixOS configuration')
+
+def timezone_auto(enabled):
+    _, service, active = timezone_mode()
+    if not service:
+        raise RuntimeError('Automatic time zone is unavailable here')
+    if active != enabled:
+        action = 'start' if enabled else 'stop'
+        timezone_host(['systemctl', '--no-ask-password', action, TIMEZONE_SERVICE],
+                      ['systemctl', action, TIMEZONE_SERVICE])
 
 def nightlight_settings():
     theme = STATE_HOME / 'theme'
@@ -789,18 +846,9 @@ def settings_action(command, args):
         save(theme / 'nightlight.json', {'kelvin': int(kelvin), 'from': start, 'to': end})
         run(['oninix-theme-schedule'], timeout=20)
     elif command == 'tz-auto' and len(args) == 1 and args[0] in {'on', 'off'}:
-        if args[0] == 'on':
-            TZ_MANUAL.unlink(missing_ok=True)
-            run(['systemctl', 'start', 'automatic-timezoned.service'], timeout=20)
-        else:
-            TZ_MANUAL.touch()
-            run(['systemctl', 'stop', 'automatic-timezoned.service'], timeout=20)
+        timezone_auto(args[0] == 'on')
     elif command == 'tz-set' and len(args) == 1:
-        if args[0] not in run(['timedatectl', 'list-timezones']).decode().split():
-            raise ValueError('Unknown time zone')
-        TZ_MANUAL.touch()
-        subprocess.run(['systemctl', 'stop', 'automatic-timezoned.service'], capture_output=True, env=ENV)
-        run(['timedatectl', 'set-timezone', args[0]], timeout=20)
+        timezone_set(args[0])
     elif command == 'printer-default' and len(args) == 1:
         if args[0] not in (printers() or {}).get('queues', []):
             raise ValueError('Printer is unavailable')

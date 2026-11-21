@@ -347,6 +347,34 @@ def ask(args):
     say('Applied. `oninix-spirit undo` brings back the previous system.')
     return 0
 
+def set_timezone(zone):
+    if LAYER_PROFILE:
+        raise RuntimeError('Use Control Station to change the host time zone.')
+    if not sys.stdin.isatty() or not sys.stdout.isatty():
+        raise RuntimeError('Open a terminal to change the time zone.')
+    zones = subprocess.check_output(['timedatectl', 'list-timezones'], text=True).split()
+    if zone not in zones:
+        raise ValueError('Unknown time zone.')
+    prepare()
+    original_hash = flake_hash(WORK)
+    settings = WORK / EDITABLE
+    before = settings.read_text()
+    assignment = re.compile(r'(?m)^([ \t]*time\.timeZone[ \t]*=[ \t]*)"[A-Za-z0-9_+./-]+"([ \t]*;)')
+    after, count = assignment.subn(lambda match: match[1] + json.dumps(zone) + match[2], before)
+    if count != 1:
+        raise RuntimeError('Set time.timeZone directly in settings.nix and rebuild this system.')
+    settings.unlink()
+    settings.write_text(after)
+    say(f'Setting the time zone to {zone}.', BRASS)
+    result = build()
+    localtime = result / 'etc/localtime'
+    if not localtime.is_symlink() or os.readlink(localtime) != f'/etc/zoneinfo/{zone}':
+        raise RuntimeError('The proposed system uses a different time zone. Check time.timeZone in your configuration.')
+    apply_system(before, after, result, original_hash)
+    record({'request': 'set-timezone', 'summary': zone, 'agent': ''})
+    say('Time zone applied. `oninix-spirit undo` brings back the previous system.')
+    return 0
+
 def install_settings(text):
     with tempfile.NamedTemporaryFile(dir=STATE, mode='w') as source:
         source.write(text)
@@ -481,6 +509,10 @@ def main(args):
     if args[:1] == ['ask']:
         args = args[1:]
     action = undo if undo_requested else lambda: ask(args)
+    if args[:1] == ['set-timezone']:
+        if len(args) != 2:
+            raise SystemExit('Usage: oninix-spirit set-timezone TIMEZONE')
+        action = lambda: set_timezone(args[1])
     STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
     STATE.chmod(0o700)
     lock_path = Path(LAYER_PROFILE).with_name('lock') if LAYER_PROFILE else STATE / 'lock'

@@ -44,11 +44,13 @@ ColumnLayout {
         readonly property var tz: (DesktopData.settings || {}).timezone || null
         visible: root.tab === "general" && tz !== null
         title: "Time zone"
-        footer: !tz ? "" : tz.auto && !tz.service ? "Automatic: waiting for a location fix (or the next system rebuild)."
-            : tz.auto ? "Follows your location. Picking a zone by hand turns Automatic off." : "Set by hand."
+        footer: !tz ? "" : tz.mode === "nixos" ? "Changing the time zone rebuilds NixOS and requires administrator authentication."
+            : tz.mode === "readonly" ? "Choose a time zone in the installer or in your NixOS configuration."
+            : tz.mode === "automatic" ? "Automatic time zone is managed by your NixOS configuration."
+            : tz.auto ? "Turn off automatic time zone to choose one by hand." : ""
         SettingsRow {
+            visible: !!tzGroup.tz && tzGroup.tz.service
             title: "Set automatically"
-            subtitle: tzGroup.tz ? tzGroup.tz.zone : ""
             UiButton {
                 glyph: tzGroup.tz && tzGroup.tz.auto ? "\u{F0132}" : "\u{F0131}"
                 text: tzGroup.tz && tzGroup.tz.auto ? "On" : "Off"
@@ -59,7 +61,10 @@ ColumnLayout {
         }
         SettingsRow {
             title: "Time zone"
+            subtitle: tzGroup.tz ? tzGroup.tz.zone : ""
             SettingCombo {
+                visible: !!tzGroup.tz && ["nixos", "host"].includes(tzGroup.tz.mode)
+                enabled: visible && !tzGroup.tz.auto
                 id: zonePick
                 Layout.preferredWidth: Shared.DesktopStyle.px(260)
                 editable: true
@@ -67,8 +72,10 @@ ColumnLayout {
                 currentIndex: tzGroup.tz ? tzGroup.tz.zones.indexOf(tzGroup.tz.zone) : -1
             }
             UiButton {
+                visible: zonePick.visible
                 text: "Set"
-                enabled: !DesktopData.busy && !!tzGroup.tz && tzGroup.tz.zones.includes(zonePick.editText)
+                enabled: zonePick.enabled && !DesktopData.busy && zonePick.editText !== tzGroup.tz.zone
+                    && tzGroup.tz.zones.includes(zonePick.editText)
                 onClicked: DesktopData.act("tz-set", [zonePick.editText])
             }
         }
