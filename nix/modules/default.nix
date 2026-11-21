@@ -12,6 +12,7 @@ in
     ./updates.nix
     ./maintenance.nix
     ./backup.nix
+    ./game-defer.nix
     ./voice.nix
     ./spirit.nix
   ];
