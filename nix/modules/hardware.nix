@@ -1,4 +1,4 @@
-{ config, lib, ... }:
+{ config, lib, pkgs, ... }:
 let
   cfg = config.oninix.hardware;
 in
@@ -21,5 +21,8 @@ lib.mkIf config.oninix.enable (lib.mkMerge [
   (lib.mkIf cfg.laptop {
     services.logind.settings.Login.HandleLidSwitch = "suspend";
     services.thermald.enable = lib.mkDefault true;
+    systemd.services.thermald.serviceConfig.ExecCondition =
+      lib.mkIf (config.services.thermald.enable && !config.services.thermald.ignoreCpuidCheck)
+        "${lib.getExe pkgs.gnugrep} -q '^vendor_id[[:space:]]*:[[:space:]]*GenuineIntel$' /proc/cpuinfo";
   })
 ])
