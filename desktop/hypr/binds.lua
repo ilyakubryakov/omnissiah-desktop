@@ -198,7 +198,7 @@ bind("SUPER + Print", hl.dsp.exec_cmd(scripts .. "capture.sh colour"), "pick a c
 bind("SUPER + ALT + Print", hl.dsp.exec_cmd(scripts .. "capture.sh text"), "text from a region (OCR)")
 bind("SUPER + CTRL + Print", hl.dsp.exec_cmd(scripts .. "capture.sh qr"), "QR code from a region")
 bind("ALT + Print", hl.dsp.exec_cmd(scripts .. "screenrecord.sh"), "record screen / stop")
-bind("ALT + SHIFT + Print", hl.dsp.exec_cmd(scripts .. "screenrecord.sh region"), "record region / stop")
+bind("SUPER + SHIFT + Print", hl.dsp.exec_cmd(scripts .. "screenrecord.sh region"), "record region / stop")
 
 local locked = { locked = true }
 local held = { locked = true, repeating = true }
