@@ -301,7 +301,9 @@ def undo_layer():
     saved = STATE / 'layer-undo.json'
     entry = json.loads(saved.read_text()) if saved.exists() else {}
     rollback = [*NIX, 'profile', 'rollback', '--profile', LAYER_PROFILE]
-    if entry.get('current') == os.readlink(profile):
+    if entry:
+        if entry['current'] != os.readlink(profile):
+            raise RuntimeError('The OniNix profile changed after the last spirit request. Ask the spirit to reverse the package change in the current profile.')
         if (FLAKE / EDITABLE).read_text() != entry['after']:
             raise RuntimeError('The layer flake has edits since the last spirit change. Save them before undoing.')
         rollback += ['--to', entry['previous'].rsplit('-', 2)[-2]]

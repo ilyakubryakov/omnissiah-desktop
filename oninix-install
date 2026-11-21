@@ -158,7 +158,7 @@ if [[ $action == uninstall ]]; then
         [[ -L $unit && $(readlink -- "$unit") == "$session_units/${unit##*/}" ]] && rm -- "$unit"
     done
     systemctl --user daemon-reload 2>/dev/null || true
-    rm -f -- "$profile" "$profile"-[0-9]*-link
+    rm -f -- "$profile" "$profile"-[0-9]*-link "$state_home/oninix/spirit/layer-undo.json"
     log 'Removed. Your OniNix settings, Nix installation and system packages are still available.'
     exit 0
 fi
