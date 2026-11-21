@@ -4,16 +4,28 @@ set -eu
 export ONINIX_LAYER_DIRECT="${ONINIX_LAYER_DIRECT:-0}"
 export XDG_CURRENT_DESKTOP=Hyprland XDG_SESSION_DESKTOP=Hyprland XDG_SESSION_TYPE=wayland
 export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}"
+idle_override="$ONINIX_LAYER_PROFILE/share/oninix-layer/hypridle.conf"
+idle_dropin="$XDG_RUNTIME_DIR/systemd/user/hypridle.service.d/oninix-layer.conf"
 cleanup() {
     systemctl --user stop oninix-layer.target || :
     systemctl --user unset-environment ONINIX_LAYER_DIRECT || :
+    if [ "$(readlink "$idle_dropin" 2>/dev/null || :)" = "$idle_override" ]; then
+        rm -f -- "$idle_dropin"
+        systemctl --user daemon-reload || :
+    fi
     if [ "${ONINIX_LAYER_DIRECT:-0}" = 1 ]; then
         systemctl --user stop xdg-desktop-portal.service xdg-desktop-portal-hyprland.service || :
         systemctl --user unset-environment WAYLAND_DISPLAY DISPLAY HYPRLAND_INSTANCE_SIGNATURE XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP XDG_SESSION_TYPE || :
     fi
 }
 trap cleanup EXIT
-trap 'kill -TERM "$compositor" 2>/dev/null || :' HUP INT TERM
+trap 'if [ -n "${compositor:-}" ]; then kill -TERM "$compositor" 2>/dev/null || :; else exit 1; fi' HUP INT TERM
+mkdir -p -- "$(dirname -- "$idle_dropin")"
+if [ "$(readlink "$idle_dropin" 2>/dev/null || :)" != "$idle_override" ]; then
+    ln -s -- "$idle_override" "$idle_dropin"
+fi
+systemctl --user set-environment "ONINIX_LAYER_DIRECT=$ONINIX_LAYER_DIRECT"
+systemctl --user daemon-reload
 config=$(realpath "$ONINIX_SHARE/hypr/hyprland.lua")
 if [ -x /usr/bin/Hyprland ]; then
     /usr/bin/Hyprland --config "$config" &

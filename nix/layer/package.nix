@@ -126,6 +126,10 @@ let
       AccuracySec=1s
     '';
   };
+  idleOverride = writeText "oninix-layer-idle.conf" ''
+    [Unit]
+    ConditionEnvironment=!ONINIX_LAYER_DIRECT
+  '';
   integration = runCommand "oninix-layer-integration" { } ''
     mkdir -p "$out/bin" "$out/share/oninix-layer/systemd/user"
     cp ${./oninix-layer-session} "$out/bin/oninix-layer-session"
@@ -134,6 +138,7 @@ let
     cp ${./oninix-layer-run} "$out/bin/oninix-layer-run"
     cp ${../../oninix-install} "$out/bin/oninix-install"
     cp ${./environment} "$out/share/oninix-layer/environment"
+    ln -s ${idleOverride} "$out/share/oninix-layer/hypridle.conf"
     ln -s ${fontConfig} "$out/share/oninix-layer/fonts.conf"
     chmod +x "$out/bin/"*
     ${lib.concatStringsSep "\n" (lib.mapAttrsToList (file: content:

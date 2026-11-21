@@ -680,7 +680,8 @@ def scanners_refresh():
         (runtime() / 'scanners.pending').unlink(missing_ok=True)
 
 def restart_idle():
-    run(['systemctl', '--user', 'restart', 'hypridle.service'])
+    unit = 'oninix-idle.service' if os.environ.get('ONINIX_LAYER') == '1' else 'hypridle.service'
+    run(['systemctl', '--user', 'restart', unit])
 
 def set_input(key, value):
     paths = {'layouts': 'kb_layout', 'repeat_rate': 'repeat_rate', 'repeat_delay': 'repeat_delay',
