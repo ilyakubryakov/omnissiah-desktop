@@ -110,7 +110,6 @@ HYPR_LABELS = {
     'displays off / on': ('Session & displays', 'Turn displays off / on', 'dpms Погасить / включить экраны Сеанс и экраны'),
     'keep awake on / off': ('Session & displays', 'Toggle Keep awake', 'idle awake сон Не засыпать: включить / выключить Сеанс и экраны'),
     'night light on / off': ('Session & displays', 'Toggle Night light', 'night light Ночной свет Сеанс и экраны'),
-    'TV on / off': ('Session & displays', 'Turn TV on / off', 'tv Включить / выключить телевизор Сеанс и экраны'),
     'TV workspace': ('Session & displays', 'Switch to the TV workspace', 'tv Перейти на стол телевизора Сеанс и экраны'),
     'send window to TV workspace': ('Session & displays', 'Move window to the TV', 'tv Перенести окно на телевизор Сеанс и экраны'),
     'brightness up': ('Session & displays', 'Increase brightness', 'brightness Увеличить яркость Сеанс и экраны'),

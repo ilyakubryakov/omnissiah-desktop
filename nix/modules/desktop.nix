@@ -194,6 +194,9 @@ lib.mkIf cfg.enable {
     cliphist
     grim
     slurp
+    hyprpicker
+    (tesseract.override { enableLanguages = [ "eng" "rus" ]; })
+    zbar
     brightnessctl
     playerctl
     pavucontrol

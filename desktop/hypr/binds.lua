@@ -12,13 +12,25 @@ end
 local home = os.getenv("HOME")
 local scripts = (os.getenv("ONINIX_SHARE") or "/run/current-system/sw/share/oninix") .. "/hypr/scripts/"
 
+local function installed(cmd)
+    local path = (os.getenv("PATH") or "") .. ":" .. home .. "/.nix-profile/bin"
+        .. ":/etc/profiles/per-user/" .. (os.getenv("USER") or "") .. "/bin"
+    for dir in path:gmatch("[^:]+") do
+        local file = io.open(dir .. "/" .. cmd, "r")
+        if file then file:close(); return true end
+    end
+    return false
+end
+
 bind("SUPER + Return", app("kitty"), "terminal")
 bind("SUPER + space", hl.dsp.exec_cmd("oninix-launcher"), "launcher: apps, projects, files")
 bind("SUPER + D", hl.dsp.exec_cmd("oninix-shell ipc call launchpad toggle"), "launchpad: apps in folders")
 bind("SUPER + E", app("dolphin"), "files")
 bind("SUPER + N", hl.dsp.exec_cmd("oninix-shell ipc call notebook toggle"), "notebook: notes, calculator and timers")
 bind("SUPER + SHIFT + N", hl.dsp.exec_cmd("oninix-shell ipc call notebook capture"), "notebook: add selected text to the open note")
-bind("CTRL + ALT + space", app("1password --quick-access"), "1Password quick access")
+if installed("1password") then
+    bind("CTRL + ALT + space", app("1password --quick-access"), "1Password quick access")
+end
 local function panel(page)
     return hl.dsp.exec_cmd("oninix-shell ipc call desktop toggle " .. page)
 end
@@ -45,13 +57,6 @@ end
 local function focus_or_start(class, cmd)
 	return hl.dsp.exec_cmd(scripts .. "launch-or-focus.sh '" .. class .. "' " .. cmd)
 end
-local function installed(cmd)
-	for _, dir in ipairs({ "/run/current-system/sw/bin/", home .. "/.nix-profile/bin/", "/etc/profiles/per-user/" .. (os.getenv("USER") or "") .. "/bin/" }) do
-		local f = io.open(dir .. cmd, "r")
-		if f then f:close(); return true end
-	end
-	return false
-end
 for _, app in ipairs({
 	{ "SUPER + ALT + B", "google-chrome", "google-chrome-stable", "Chrome (focus or start)" },
 	{ "SUPER + ALT + S", "slack", "slack", "Slack" },
@@ -67,7 +72,7 @@ bind("SUPER + SHIFT + H", hl.dsp.exec_cmd("oninix-shell ipc call cheat toggle"),
 local function tv_workspace(move)
     local tv = require("outputs").tv_monitor()
     if not tv then
-        hl.notification.create({ text = "Enable the TV in Control Center first", timeout = 2000 })
+        hl.notification.create({ text = "Configure and enable a TV display first", timeout = 2000 })
         return
     end
     hl.dispatch(move and hl.dsp.window.move({ workspace = "11", follow = false }) or hl.dsp.focus({ workspace = "11" }))
@@ -194,7 +199,6 @@ bind("SUPER + ALT + Print", hl.dsp.exec_cmd(scripts .. "capture.sh text"), "text
 bind("SUPER + CTRL + Print", hl.dsp.exec_cmd(scripts .. "capture.sh qr"), "QR code from a region")
 bind("ALT + Print", hl.dsp.exec_cmd(scripts .. "screenrecord.sh"), "record screen / stop")
 bind("ALT + SHIFT + Print", hl.dsp.exec_cmd(scripts .. "screenrecord.sh region"), "record region / stop")
-bind("SUPER + SHIFT + T", hl.dsp.exec_cmd(scripts .. "tv-toggle.sh"), "TV on / off")
 
 local locked = { locked = true }
 local held = { locked = true, repeating = true }
