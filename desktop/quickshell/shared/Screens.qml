@@ -14,7 +14,7 @@ Singleton {
     }
     readonly property var docked: {
         if (Quickshell.env("ONINIX_LAPTOP") !== "1") return null
-        const outside = Quickshell.screens.filter(s => s.name !== output("main"))
+        const outside = Quickshell.screens.filter(s => s.name !== output("main") && s.name !== output("tv"))
             .sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0)
         return outside.find(s => s.name === primaryOutput) || outside[0] || null
     }

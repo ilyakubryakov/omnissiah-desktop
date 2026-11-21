@@ -24,6 +24,7 @@ local _, saved = read_ini(io.open(state .. "/oninix/monitors.conf", "r"), "^%[(.
 local by_output = {}
 for _, role in ipairs(roles) do by_output[role.output] = role end
 
+local tv_output = by_name.tv and by_name.tv.output
 local internal = os.getenv("ONINIX_LAPTOP") == "1" and by_name.main and by_name.main.output or nil
 local lid_closed = false
 local lid_state_path
@@ -49,7 +50,7 @@ local function external_monitor(preferred)
     local ok, list = pcall(hl.get_monitors)
     local first = nil
     for _, m in ipairs(ok and list or {}) do
-        if m.name ~= internal then
+        if m.name ~= internal and m.name ~= tv_output then
             if m.name == preferred then return m end
             if not first or m.name < first.name then first = m end
         end
@@ -165,7 +166,9 @@ local function main_monitor()
     local main = (primary and hl.get_monitor(primary)) or (by_name.main and hl.get_monitor(by_name.main.output))
     if main then return main end
     local ok, list = pcall(hl.get_monitors)
-    return ok and list[1] or nil
+    for _, monitor in ipairs(ok and list or {}) do
+        if monitor.name ~= tv_output then return monitor end
+    end
 end
 local bound_main, tv_geometry = nil, nil
 local function reconcile(main)
