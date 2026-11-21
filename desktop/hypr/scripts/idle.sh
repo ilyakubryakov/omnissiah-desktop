@@ -15,7 +15,7 @@ fi
 
 dpms() { printf "hyprctl eval 'hl.dispatch(hl.dsp.dpms({ action = \"%s\" }))'" "$1"; }
 {
-    printf 'general {\n    ignore_systemd_inhibit = false\n'
+    printf 'general {\n    ignore_systemd_inhibit = false\n    inhibit_sleep = 3\n'
     printf '    lock_cmd = "%s/lock.sh"\n' "$scripts"
     printf '    before_sleep_cmd = loginctl lock-session\n'
     printf '    after_sleep_cmd = %s\n}\n' "$(dpms enable)"
