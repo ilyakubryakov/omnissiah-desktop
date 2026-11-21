@@ -88,14 +88,16 @@ def changed(locked, latest):
 def assess(item, now):
     if item['status'] == 'unknown':
         return {'level': 'error', 'count': 0, 'reasons': [], 'summary': item['detail'],
-                'blocker': '', 'unreachable': [item['name']], 'nixpkgsAgeDays': 0}
-    age = max(0, int((now - (item.get('lockedAt') or now)) / DAY))
+                'blocker': '', 'unreachable': [item['name']], 'nixpkgsAgeDays': None}
+    locked_at = item.get('lockedAt')
+    age = max(0, int((now - locked_at) / DAY)) if locked_at and locked_at > 0 else None
     if item['status'] != 'available':
         return {'level': 'current', 'count': 0, 'reasons': [], 'summary': 'Everything is up to date',
                 'blocker': '', 'unreachable': [], 'nixpkgsAgeDays': age}
-    reasons = ['OniNix is ' + str(age) + ' days behind'] if age >= DUE_AGE_DAYS else []
+    reasons = ['OniNix is ' + str(age) + ' days behind'] if age is not None and age >= DUE_AGE_DAYS else []
+    summary = 'An OniNix update is waiting. Installed release date unknown.' if age is None else 'An OniNix update is waiting, no rush'
     return {'level': 'due' if reasons else 'available', 'count': 1, 'reasons': reasons,
-            'summary': 'Time to update: ' + ', '.join(reasons) if reasons else 'An OniNix update is waiting, no rush',
+            'summary': 'Time to update: ' + ', '.join(reasons) if reasons else summary,
             'blocker': '', 'unreachable': [], 'nixpkgsAgeDays': age}
 
 def check():
@@ -112,7 +114,7 @@ def check():
             newer = changed(locked, latest)
             item = {'name': 'OniNix', 'kind': 'release', 'status': 'available' if newer else 'current',
                     'current': current[:12], 'latest': candidate[:12],
-                    'lockedAt': locked.get('lastModified', now),
+                    'lockedAt': locked.get('lastModified') or None,
                     'detail': current[:12] + (' → ' + candidate[:12] if newer else ' · No newer release')}
         except (OSError, ValueError, KeyError, RuntimeError, subprocess.SubprocessError):
             item = {'name': 'OniNix', 'kind': 'error', 'status': 'unknown',
@@ -207,7 +209,10 @@ def apply_layer():
 
 def daily():
     cached = read_json(CHECK, {})
-    if time.time() - cached.get('checkedAt', 0) >= DAY:
+    legacy_due = cached.get('assessment', {}).get('level') == 'due' and any(
+        item.get('kind') == 'release' and not item.get('lockedAt') for item in cached.get('items', [])
+    )
+    if legacy_due or time.time() - cached.get('checkedAt', 0) >= DAY:
         cached = check()
     if cached.get('assessment', {}).get('level') != 'due':
         return
