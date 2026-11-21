@@ -306,6 +306,9 @@ def gather_workspaces(output):
               'local n = tonumber(ws.name) if not ws.special and n and n >= 1 and n <= 10 and ws.monitor and ws.monitor.name ~= '
               + lua_string(output) + ' then hl.dispatch(hl.dsp.workspace.move({ workspace = ws, monitor = m })) end end end')
 
+def fit_control_station():
+    hypr_eval('local outputs = require("outputs") if outputs.fit_control_station then outputs.fit_control_station() end')
+
 def apply_layout(request):
     live = monitors(everything=True)
     config = roles()
@@ -329,6 +332,7 @@ def apply_layout(request):
     saved['primary'].update({'display': primary, 'output': entries[primary]['output']})
     commit(render(saved), before, tv_on, old_primary)
     move_workspaces(old_primary, entries[primary]['output'])
+    fit_control_station()
 
 def forget(key):
     saved = overlay()
@@ -340,6 +344,7 @@ def forget(key):
     if saved.has_section('primary') and saved['primary'].get('display') == key:
         saved.remove_section('primary')
     commit(render(saved), before, primary=old_primary)
+    fit_control_station()
 
 def confirm():
     subprocess.run(['systemctl', '--user', 'stop', REVERT_UNIT + '.timer'], stderr=subprocess.DEVNULL)
@@ -356,6 +361,7 @@ def revert():
     REVERT.unlink(missing_ok=True)
     subprocess.run(['hyprctl', 'reload'], check=True, stdout=subprocess.DEVNULL)
     gather_workspaces(before.get('primary'))
+    fit_control_station()
 
 def main():
     args = sys.argv[1:]

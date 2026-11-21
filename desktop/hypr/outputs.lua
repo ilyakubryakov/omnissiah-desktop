@@ -227,7 +227,28 @@ hl.on("config.reloaded", reconcile_displays)
 hl.on("monitor.removed", reconcile_displays)
 reconcile_displays()
 
+local function fit_control_station()
+    for _, window in ipairs(hl.get_windows()) do
+        local m = window.monitor
+        if window.class == "org.quickshell" and window.title == "Control Station" and window.mapped and window.floating
+            and window.workspace and not window.workspace.special and m and window.at and window.size then
+            local w, h = m.width / m.scale, m.height / m.scale
+            if (m.transform or 0) % 2 ~= 0 then w, h = h, w end
+            local width = math.min(window.size.x, math.max(1, math.floor(w - 40)))
+            local height = math.min(window.size.y, math.max(1, math.floor(h - 80)))
+            local clipped = window.at.x < m.x or window.at.y < m.y
+                or window.at.x + window.size.x > m.x + w or window.at.y + window.size.y > m.y + h
+            if width < window.size.x or height < window.size.y then
+                hl.dispatch(hl.dsp.window.resize({ window = window, relative = false, x = width, y = height }))
+                clipped = true
+            end
+            if clipped then hl.dispatch(hl.dsp.window.center({ window = window })) end
+        end
+    end
+end
+
 return {
     tv_monitor = function() return by_name.tv and hl.get_monitor(by_name.tv.output) end,
     main_monitor = main_monitor,
+    fit_control_station = fit_control_station,
 }
