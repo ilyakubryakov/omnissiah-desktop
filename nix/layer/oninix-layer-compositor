@@ -6,6 +6,8 @@ export XDG_CURRENT_DESKTOP=Hyprland XDG_SESSION_DESKTOP=Hyprland XDG_SESSION_TYP
 export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}"
 idle_override="$ONINIX_LAYER_PROFILE/share/oninix-layer/hypridle.conf"
 idle_dropin="$XDG_RUNTIME_DIR/systemd/user/hypridle.service.d/oninix-layer.conf"
+exec 9>"$XDG_RUNTIME_DIR/oninix-layer-session.lock"
+flock -n 9
 cleanup() {
     systemctl --user stop oninix-layer.target || :
     systemctl --user unset-environment ONINIX_LAYER_DIRECT || :
@@ -24,15 +26,14 @@ mkdir -p -- "$(dirname -- "$idle_dropin")"
 if [ "$(readlink "$idle_dropin" 2>/dev/null || :)" != "$idle_override" ]; then
     ln -s -- "$idle_override" "$idle_dropin"
 fi
-systemctl --user set-environment "ONINIX_LAYER_DIRECT=$ONINIX_LAYER_DIRECT"
 systemctl --user daemon-reload
 config=$(realpath "$ONINIX_SHARE/hypr/hyprland.lua")
 if [ -x /usr/bin/Hyprland ]; then
-    /usr/bin/Hyprland --config "$config" &
+    /usr/bin/Hyprland --config "$config" 9>&- &
 elif [ -x /usr/bin/hyprland ]; then
-    /usr/bin/hyprland --config "$config" &
+    /usr/bin/hyprland --config "$config" 9>&- &
 else
-    /usr/bin/start-hyprland -- --config "$config" &
+    /usr/bin/start-hyprland -- --config "$config" 9>&- &
 fi
 compositor=$!
 wait "$compositor"

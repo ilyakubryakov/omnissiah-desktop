@@ -127,8 +127,8 @@ let
     '';
   };
   idleOverride = writeText "oninix-layer-idle.conf" ''
-    [Unit]
-    ConditionEnvironment=!ONINIX_LAYER_DIRECT
+    [Service]
+    ExecCondition=/usr/bin/flock -n %t/oninix-layer-session.lock /usr/bin/true
   '';
   integration = runCommand "oninix-layer-integration" { } ''
     mkdir -p "$out/bin" "$out/share/oninix-layer/systemd/user"
