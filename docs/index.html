@@ -68,7 +68,7 @@ footer { padding: 64px 0 48px; color: var(--dim); font-size: 14px; text-align: c
     <p class="lead">My Hyprland desktop on NixOS, with local dictation and a machine spirit that builds and previews the system changes you ask for.</p>
     <div class="cta">
       <a class="btn primary" href="#install">Install</a>
-      <a class="btn ghost" href="https://github.com/ilyakubryakov/omnissiah-desktop/tree/oninix">Source</a>
+      <a class="btn ghost" href="https://github.com/ilyakubryakov/omnissiah-desktop/">Source</a>
     </div>
     <img class="shot hero-shot" width="1920" height="1080" decoding="async" src="screenshots/control-station.png" alt="Control Station on the OniNix desktop">
   </header>
@@ -142,11 +142,11 @@ footer { padding: 64px 0 48px; color: var(--dim); font-size: 14px; text-align: c
   <section id="install">
     <h2>Install</h2>
     <p class="sub">Build the ISO with Nix on x86-64 Linux. Repository access is required.</p>
-<pre>git clone --branch oninix git@github.com:ilyakubryakov/omnissiah-desktop.git
+<pre>git clone git@github.com:ilyakubryakov/omnissiah-desktop.git
 cd omnissiah-desktop
 nix --extra-experimental-features 'nix-command flakes' build .#iso</pre>
     <p class="sub">Write the ISO from <code>result/iso/</code> to a USB stick as a disk image. Boot in UEFI mode with Secure Boot disabled, then choose Install OniNix. The installer needs a network connection and a target disk of at least 32 GB. Review your disk, optional encryption and package sets before confirming the erase.</p>
-    <p class="sub">I also run this desktop as a Nix layer on Ubuntu, Fedora and Arch. Run <code>./oninix-install</code> from the checkout and choose OniNix at the login screen. Fedora requires the community Hyprland COPR. <a href="https://github.com/ilyakubryakov/omnissiah-desktop/tree/oninix#on-ubuntu-fedora-or-arch">Layer setup</a></p>
+    <p class="sub">I also run this desktop as a Nix layer on Ubuntu, Fedora and Arch. Run <code>./oninix-install</code> from the checkout and choose OniNix at the login screen. Fedora requires the community Hyprland COPR. <a href="https://github.com/ilyakubryakov/omnissiah-desktop#on-ubuntu-fedora-or-arch">Layer setup</a></p>
   </section>
 </div>
 <footer>

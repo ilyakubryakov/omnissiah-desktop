@@ -73,7 +73,7 @@ The screenshots use a demo account. [Desktop layer on Arch](docs/screenshots/arc
 Build from a checkout on x86-64 Linux with Nix. Access to this repository is required.
 
 ```sh
-git clone --branch oninix git@github.com:ilyakubryakov/omnissiah-desktop.git
+git clone git@github.com:ilyakubryakov/omnissiah-desktop.git
 cd omnissiah-desktop
 nix --extra-experimental-features 'nix-command flakes' build .#iso
 ```
@@ -95,7 +95,7 @@ Your machine config lives in `/etc/nixos`: `settings.nix` is yours (and the spir
 
 ## On Ubuntu, Fedora or Arch
 
-I made this desktop available as a Nix layer on x86-64. From a clone of the `oninix` branch, run:
+I made this desktop available as a Nix layer on x86-64. From a clone of this repository, run:
 
 ```sh
 ./oninix-install
@@ -105,7 +105,7 @@ I tested Ubuntu 26.10, Fedora 45 and current Arch. On Fedora, run `./oninix-inst
 
 The layer uses Hyprland's Lua configuration and needs Hyprland 0.55 or newer. Ubuntu 26.04 LTS ships an older version. I run the installer with my regular user and authenticate through sudo if asked.
 
-On first install you can pipe a downloaded installer into `bash -s -- --source FLAKE`. With no `--source`, the script uses this GitHub branch over SSH. Reinstalling keeps the source in your saved layer flake.
+On first install you can pipe a downloaded installer into `bash -s -- --source FLAKE`. With no `--source`, the script uses this GitHub repository over SSH. Reinstalling keeps the source in your saved layer flake.
 
 I use the distro's Hyprland, lock screen, login, audio and graphics drivers. The same OniNix panels and tools come from Nix. The panels use Qt software rendering and the layer currently profiles Whisper on the CPU. Apps I add that need OpenGL or Vulkan may need a driver wrapper.
 

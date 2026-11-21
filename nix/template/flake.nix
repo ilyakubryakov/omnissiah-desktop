@@ -1,5 +1,5 @@
 {
-  inputs.oninix.url = "github:ilyakubryakov/omnissiah-desktop/oninix";
+  inputs.oninix.url = "github:ilyakubryakov/omnissiah-desktop";
   inputs.nixpkgs.follows = "oninix/nixpkgs";
 
   outputs = { oninix, nixpkgs, ... }: {

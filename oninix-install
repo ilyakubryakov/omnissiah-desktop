@@ -224,7 +224,7 @@ if [[ ! -e $flake/flake.nix ]]; then
                 source_ref="path:$repo"
             fi
         else
-            source_ref='git+ssh://git@github.com/ilyakubryakov/omnissiah-desktop.git?ref=oninix'
+            source_ref='git+ssh://git@github.com/ilyakubryakov/omnissiah-desktop.git'
         fi
     fi
     [[ $source_ref != *$'\n'* && $source_ref != *$'\r'* ]] || die 'Invalid flake source'
