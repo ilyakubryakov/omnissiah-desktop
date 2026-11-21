@@ -46,7 +46,8 @@ RowLayout {
         }
         Seg {
             glyph: "\u{F030C}"
-            label: Hypr.layout.toLowerCase().startsWith("russian") ? "ru" : "us"
+            label: Hypr.layout || "--"
+            toolTip: Hypr.layoutName || "Switch keyboard layout"
             sep: true
             onClicked: Hyprland.dispatch("hl.dsp.exec_cmd(\"hyprctl switchxkblayout all next\")")
         }

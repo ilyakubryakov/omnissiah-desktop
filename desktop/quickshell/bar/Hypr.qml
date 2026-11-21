@@ -11,6 +11,7 @@ Singleton {
     property var monitors: []
     property var active: ({})
     property string layout: ""
+    property string layoutName: ""
 
     function exec(cmd) {
         Hyprland.dispatch("hl.dsp.exec_cmd(" + JSON.stringify("oninix-app " + cmd) + ")")
@@ -72,8 +73,8 @@ Singleton {
     Connections {
         target: Hyprland
         function onRawEvent(event) {
-            if (event.name === "activelayout")
-                root.layout = event.data.split(",").slice(1).join(",")
+            if (event.name === "activelayout" || event.name === "configreloaded")
+                keyboardDebounce.restart()
             root.refresh()
         }
     }
@@ -111,14 +112,27 @@ Singleton {
         }
     }
 
+    Timer {
+        id: keyboardDebounce
+        interval: 60
+        onTriggered: {
+            if (devicesProc.running) devicesProc.again = true
+            else devicesProc.running = true
+        }
+    }
+
     Process {
         id: devicesProc
+        property bool again: false
+        onExited: if (again) { again = false; running = true }
         command: ["hyprctl", "devices", "-j"]
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
-                    const kb = JSON.parse(text).keyboards.find(k => k.main) || JSON.parse(text).keyboards[0]
-                    if (kb) root.layout = kb.active_keymap
+                    const keyboards = JSON.parse(text).keyboards
+                    const kb = keyboards.find(k => k.main) || keyboards[0]
+                    root.layout = kb?.layout?.split(",")[kb.active_layout_index]?.trim() || ""
+                    root.layoutName = kb?.active_keymap || ""
                 } catch (e) {}
             }
         }
