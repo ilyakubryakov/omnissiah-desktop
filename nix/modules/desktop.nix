@@ -4,6 +4,8 @@ let
   share = pkgs.callPackage ../pkgs/share.nix { };
   autoLogin = config.services.displayManager.autoLogin;
   keyboardLayout = config.services.xserver.xkb.layout;
+  browserThemeInput = "${config.users.users.${cfg.user.name}.home}/.local/state/theme/chrome-policy.json";
+  browserThemePath = "opt/chrome/policies/recommended/oninix-theme.json";
   checkGraphics = pkgs.writeShellScript "oninix-check-graphics" ''
     for attempt in 1 2 3 4 5 6; do
       for card in /dev/dri/card[0-9]*; do
@@ -255,6 +257,36 @@ lib.mkIf cfg.enable {
       SpellcheckEnabled = true;
       SpellcheckLanguage = [ "en-US" "ru" ];
     };
+  };
+
+  environment.etc."${browserThemePath}".source = "/run/oninix-browser-theme/theme.json";
+  systemd.paths.oninix-browser-theme = {
+    wantedBy = [ "multi-user.target" ];
+    pathConfig.PathChanged = browserThemeInput;
+  };
+  systemd.services.oninix-browser-theme = {
+    description = "Publish the desktop palette as a recommended Chrome theme";
+    wantedBy = [ "multi-user.target" ];
+    path = [ pkgs.coreutils pkgs.jq pkgs.util-linux ];
+    serviceConfig = {
+      Type = "oneshot";
+      RuntimeDirectory = "oninix-browser-theme";
+      RuntimeDirectoryPreserve = true;
+      NoNewPrivileges = true;
+    };
+    script = ''
+      input=$(timeout 2 runuser -u ${lib.escapeShellArg cfg.user.name} -- head -c 512 -- ${lib.escapeShellArg browserThemeInput} 2>/dev/null) || exit 0
+      color=$(printf '%s' "$input" | jq -er '.BrowserThemeColor | strings | select(test("^#[0-9A-Fa-f]{6}$"))') || exit 0
+      file="$RUNTIME_DIRECTORY/theme.json"
+      temp=$(mktemp "$RUNTIME_DIRECTORY/.theme.XXXXXX")
+      trap 'rm -f "$temp"' EXIT
+      jq -n --arg color "$color" '{BrowserThemeColor: $color}' > "$temp"
+      if ! cmp -s "$temp" "$file"; then
+        chmod 0644 "$temp"
+        mv -f "$temp" "$file"
+        touch -h /etc/${browserThemePath}
+      fi
+    '';
   };
 
   hardware.bluetooth.enable = true;

@@ -187,6 +187,10 @@ install_state() {
         mkdir -p "$HOME/.config/REAPER"
         ln -sfn "$CURRENT_LINK/libSwell-user.colortheme" "$HOME/.config/REAPER/libSwell-user.colortheme"
         install_policy "$CURRENT_LINK/chrome-policy.json" "$STATE/chrome-policy.json"
+        if [ -L /etc/opt/chrome/policies/recommended/oninix-theme.json ] && [ "$STATE" != "$HOME/.local/state/theme" ]; then
+            mkdir -p "$HOME/.local/state/theme"
+            install_policy "$CURRENT_LINK/chrome-policy.json" "$HOME/.local/state/theme/chrome-policy.json"
+        fi
     fi
 
     if [ "$OS" = macos ] && [ -d /Applications/iTerm.app ]; then
