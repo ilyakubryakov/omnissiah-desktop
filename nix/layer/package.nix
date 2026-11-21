@@ -68,6 +68,8 @@ let
       ExecStart=${launch} mako --config=%S/theme/mako.conf
     '';
     "oninix-idle.service" = service "OniNix idle and lock actions" "sh -c 'exec \"$$ONINIX_SHARE/hypr/scripts/idle.sh\"'" "";
+    "oninix-keep-awake.service" = service "Suspend automatic idle actions while the desktop is in use"
+      "systemd-inhibit --what=idle --who=OniNix --why=Keep-awake sleep infinity" "";
     "oninix-dictation.service" = service "Hold-to-talk OniNix dictation" "oninix-dictation --serve" ''
       UMask=0077
       NoNewPrivileges=yes

@@ -83,6 +83,7 @@ bind("SUPER + CTRL + SHIFT + T", function() tv_workspace(true) end, "send window
 bind("SUPER + L", hl.dsp.exec_cmd("loginctl lock-session"), "lock")
 bind("SUPER + SHIFT + E", hl.dsp.exec_cmd(scripts .. "power-menu.sh --logout"), "log out (confirm)")
 bind("SUPER + SHIFT + P", hl.dsp.dpms({ action = "toggle" }), "displays off / on")
+bind("SUPER + CTRL + I", hl.dsp.exec_cmd(scripts .. "keep-awake.sh"), "keep awake on / off")
 bind("SUPER + CTRL + N", hl.dsp.exec_cmd("oninix-theme-schedule --nightlight toggle"), "night light on / off")
 
 bind("SUPER + Q", hl.dsp.window.close(), "close window")
