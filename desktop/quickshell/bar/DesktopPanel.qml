@@ -19,6 +19,7 @@ FloatingWindow {
     property string page: "controls"
     property string section: "network"
     property string appearanceSection: "themes"
+    property bool appsLoaded: false
     property var scrollPositions: ({})
     property string focusText: ""
     property real highlightY: -1
@@ -38,6 +39,7 @@ FloatingWindow {
         if (key === "guide") { openGuide(); return }
         if (opened) remember()
         section = Catalog.page(key).id
+        if (section === "apps") appsLoaded = true
         if (["themes", "panels", "apps"].includes(section)) {
             page = "appearance"; appearanceSection = section
         } else if (["calendars", "modes"].includes(section)) page = section
@@ -76,11 +78,12 @@ FloatingWindow {
         id: restoreScroll; interval: 160
         onTriggered: {
             if (root.focusText) {
-                if (pageLoader.item && pageLoader.item.reveal && pageLoader.item.reveal(root.focusText)) { restart(); return }
-                const label = root.findLabel(pageLoader.item, root.focusText)
+                const item = pageContent.currentLoader.item
+                if (item && item.reveal && item.reveal(root.focusText)) { restart(); return }
+                const label = root.findLabel(item, root.focusText)
                 if (label) {
-                    root.highlightY = Math.max(0, label.mapToItem(pageLoader, 0, 0).y - 8)
-                    scroll.ScrollBar.vertical.position = Math.max(0, Math.min(1 - scroll.ScrollBar.vertical.size, root.highlightY / Math.max(1, pageLoader.height)))
+                    root.highlightY = Math.max(0, label.mapToItem(pageContent, 0, 0).y - 8)
+                    scroll.ScrollBar.vertical.position = Math.max(0, Math.min(1 - scroll.ScrollBar.vertical.size, root.highlightY / Math.max(1, pageContent.height)))
                     highlightDelay.restart()
                 }
             } else scroll.ScrollBar.vertical.position = Math.max(0, Math.min(1 - scroll.ScrollBar.vertical.size, root.scrollPositions[root.section] || 0))
@@ -218,15 +221,28 @@ FloatingWindow {
                     }
                     ScrollView {
                         id: scroll; Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumHeight: 0
-                        clip: true; contentWidth: availableWidth; contentHeight: pageLoader.implicitHeight
+                        clip: true; contentWidth: availableWidth; contentHeight: pageContent.height
                         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-                        Loader {
-                            id: pageLoader; width: scroll.availableWidth - 12; active: root.presented
-                            property real entrance: 1
-                            opacity: entrance
-                            onLoaded: { pageEnter.restart(); restoreScroll.restart() }
-                            NumberAnimation { id: pageEnter; target: pageLoader; property: "entrance"; from: 0; to: 1; duration: Shared.DesktopStyle.fast }
-                            sourceComponent: root.page === "appearance" ? appearance : root.page === "calendars" ? calendars : root.page === "modes" ? modes : controls
+                        Item {
+                            id: pageContent
+                            width: scroll.availableWidth - 12
+                            height: currentLoader.implicitHeight
+                            readonly property Item currentLoader: root.section === "apps" ? appsPage : pageLoader
+                            Loader {
+                                id: pageLoader; width: parent.width; active: root.presented && visible
+                                visible: root.section !== "apps"
+                                property real entrance: 1
+                                opacity: entrance
+                                onLoaded: { pageEnter.restart(); restoreScroll.restart() }
+                                NumberAnimation { id: pageEnter; target: pageLoader; property: "entrance"; from: 0; to: 1; duration: Shared.DesktopStyle.fast }
+                                sourceComponent: root.page === "appearance" ? appearance : root.page === "calendars" ? calendars : root.page === "modes" ? modes : controls
+                            }
+                            Loader {
+                                id: appsPage; width: parent.width; active: root.appsLoaded
+                                visible: root.section === "apps"
+                                sourceComponent: ApplicationSettings {}
+                                onLoaded: restoreScroll.restart()
+                            }
                             Rectangle {
                                 visible: root.highlightY >= 0; y: Math.max(0, root.highlightY); width: parent.width; height: Shared.DesktopStyle.px(40)
                                 radius: Shared.DesktopStyle.px(8); color: "transparent"; border.width: 2; border.color: Colors.accent

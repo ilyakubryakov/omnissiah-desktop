@@ -367,5 +367,4 @@ ColumnLayout {
         }
     }
 
-    ApplicationSettings { visible: root.section === "apps"; Layout.fillWidth: true }
 }
