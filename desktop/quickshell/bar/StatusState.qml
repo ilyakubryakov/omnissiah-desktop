@@ -14,7 +14,7 @@ Singleton {
     }
     Process {
         id: states
-        command: ["sh", "-c", "pgrep -f '(^|/)gpu-screen-recorder( |$)' >/dev/null && echo rec; systemctl --user is-active --quiet oninix-keep-awake.service && echo awake"]
+        command: ["sh", "-c", "systemctl --user is-active --quiet oninix-screenrecord.service && echo rec; systemctl --user is-active --quiet oninix-keep-awake.service && echo awake"]
         stdout: StdioCollector {
             onStreamFinished: {
                 root.recording = text.indexOf("rec") >= 0

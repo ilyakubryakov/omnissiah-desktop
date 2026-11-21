@@ -241,5 +241,6 @@ lib.mkIf cfg.enable {
     glib
     cava
     swappy
+    wf-recorder
   ];
 }
