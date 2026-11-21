@@ -5,10 +5,12 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
 import time
+import unicodedata
 from pathlib import Path
 
 BRASS, GLOW, BONE, CRIMSON, MUTED = '#c1893e', '#e0a95a', '#d9c4a3', '#b8473a', '#a68a6f'
@@ -37,6 +39,8 @@ SYSTEM_UNDO = STATE / 'system-undo.json'
 LAYER_PACKAGES = re.compile(r'(?m)^(\s*extraPackages\s*=\s*with pkgs;\s*\[)([^\]]*)(\]\s*;)')
 PACKAGE_NAME = re.compile(r"[a-zA-Z_][a-zA-Z0-9_'-]*(?:\.[a-zA-Z_][a-zA-Z0-9_'-]*)*")
 EDITABLE = 'flake.nix' if LAYER_PROFILE else 'settings.nix'
+PROPOSAL_LIMIT = 256 * 1024
+AUTH_LIMIT = 1024 * 1024
 PROMPT = """You are the machine spirit of an OniNix computer (NixOS with the OniNix Hyprland desktop).
 The owner asks: {request}
 
@@ -67,10 +71,30 @@ def agent():
             return name
     return None
 
+def read_regular(path, limit):
+    with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), 'rb') as handle:
+        info = os.fstat(handle.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise RuntimeError(f'{path.name} must be a regular file with one link.')
+        if info.st_size > limit:
+            raise RuntimeError(f'{path.name} exceeds {limit} bytes.')
+        data = handle.read(limit + 1)
+        if len(data) > limit:
+            raise RuntimeError(f'{path.name} exceeds {limit} bytes.')
+        return data
+
+def terminal_text(text):
+    return ''.join(character if character in '\n\t' or unicodedata.category(character) not in
+                   ('Cc', 'Cf', 'Cs', 'Zl', 'Zp') else ascii(character)[1:-1]
+                   for character in text)
+
 def keep_refreshed_login(original, copy, initial):
-    if initial is None or copy.is_symlink() or not copy.is_file() or original.is_symlink():
+    if initial is None or original.is_symlink():
         return
-    fresh = copy.read_bytes()
+    try:
+        fresh = read_regular(copy, AUTH_LIMIT)
+    except FileNotFoundError:
+        return
     if fresh == initial:
         return
     try:
@@ -85,8 +109,10 @@ def keep_refreshed_login(original, copy, initial):
             handle.write(fresh)
             handle.flush()
             os.fsync(handle.fileno())
-            if original.is_file() and not original.is_symlink() and original.read_bytes() == initial:
+            if read_regular(original, AUTH_LIMIT) == initial:
                 temporary.replace(original)
+        except FileNotFoundError:
+            pass
         finally:
             temporary.unlink(missing_ok=True)
 
@@ -144,21 +170,27 @@ def run_agent(name, request, before):
         finally:
             try:
                 keep_refreshed_login(auth, auth_copy, initial)
-            except OSError:
+            except (OSError, RuntimeError):
                 say('Could not save the agent login refresh. Sign in again if the next request fails.', CRIMSON)
         if result.returncode != 0:
             detail = (result.stderr or result.stdout).strip()
-            raise RuntimeError(detail[-600:] or f'{name} failed')
-        proposal = job / EDITABLE
-        if proposal.is_symlink() or not proposal.is_file():
-            raise RuntimeError(f'The agent must return a regular {EDITABLE} file.')
+            raise RuntimeError(terminal_text(detail[-600:]) or f'{name} failed')
+        proposal = read_regular(job / EDITABLE, PROPOSAL_LIMIT).decode('utf-8')
+        if '\0' in proposal:
+            raise RuntimeError(f'{EDITABLE} must be UTF-8 text without NUL bytes.')
         lines = [line for line in result.stdout.strip().splitlines() if line.strip()]
-        return proposal.read_text(), lines[-1] if lines else 'Done.'
+        return proposal, terminal_text(lines[-1][-600:]) if lines else 'Done.'
 
 def prepare():
     if WORK.exists():
         shutil.rmtree(WORK)
-    shutil.copytree(FLAKE, WORK, ignore=shutil.ignore_patterns('.git', 'result'))
+    copy_flake(WORK)
+
+def copy_flake(destination):
+    shutil.copytree(FLAKE, destination, symlinks=True, ignore=shutil.ignore_patterns('.git', 'result'))
+
+def flake_hash(path):
+    return subprocess.check_output([*NIX, 'hash', 'path', str(path)], text=True).strip()
 
 def layer_shape(text):
     match = LAYER_PACKAGES.search(text)
@@ -171,7 +203,9 @@ def build():
     out.unlink(missing_ok=True)
     target = 'layer' if LAYER_PROFILE else 'nixosConfigurations.oninix.config.system.build.toplevel'
     say('Building the proposed configuration…', MUTED)
-    subprocess.run([*NIX, 'build', '--no-update-lock-file', '--out-link', str(out), f'path:{WORK}#{target}'], check=True)
+    subprocess.run([*NIX, 'build', '--option', 'pure-eval', 'true', '--option', 'allow-import-from-derivation', 'false',
+                    '--no-accept-flake-config', '--no-update-lock-file',
+                    '--out-link', str(out), f'path:{WORK}#{target}'], check=True)
     return out.resolve(strict=True)
 
 def record(entry):
@@ -199,6 +233,7 @@ def ask(args):
     if not request:
         return 1
     prepare()
+    original_hash = None if LAYER_PROFILE else flake_hash(WORK)
     before = (WORK / EDITABLE).read_text()
     say(f'Asking {name.capitalize()}…', MUTED)
     try:
@@ -213,20 +248,28 @@ def ask(args):
     if after == before:
         say('Nothing to change. ' + summary, BRASS)
         return 0
-    say(summary, BRASS)
-    print(''.join(difflib.unified_diff(before.splitlines(True), after.splitlines(True),
-                                       f'{EDITABLE} (now)', f'{EDITABLE} (proposed)')))
     try:
         result = build()
     except subprocess.CalledProcessError:
         say('The proposed configuration does not build; nothing was changed.', CRIMSON)
         return 1
+    say(summary, BRASS)
+    diff = difflib.unified_diff(before.splitlines(keepends=True), after.splitlines(keepends=True),
+                                f'{EDITABLE} (now)', f'{EDITABLE} (proposed)')
+    for line in diff:
+        if line.endswith('\n'):
+            print(terminal_text(line[:-1]))
+        else:
+            print(terminal_text(line) + '\n\\ No newline at end of file')
+    sys.stdout.flush()
     current = '/run/current-system'
     if LAYER_PROFILE:
         profile = json.loads(subprocess.check_output([*NIX, 'profile', 'list', '--json',
                                                      '--profile', LAYER_PROFILE], text=True))
         current, = profile['elements']['layer']['storePaths']
-    subprocess.run(['nvd', 'diff', current, str(result)])
+    subprocess.run(['nvd', 'diff', current, str(result)], check=True)
+    if not sys.stdin.isatty() or not sys.stdout.isatty():
+        raise RuntimeError('Open the machine spirit in a terminal to review and apply this change.')
     if subprocess.run(['gum', 'confirm', 'Apply this change?', '--default=false']).returncode != 0:
         say('Kept as it was.', MUTED)
         return 0
@@ -235,7 +278,7 @@ def ask(args):
         record({'request': request, 'summary': summary, 'agent': name})
         say('Applied to the OniNix profile. Log out and in to reload the desktop. Undo with oninix-spirit undo.')
         return 0
-    apply_system(before, after, result)
+    apply_system(before, after, result, original_hash)
     record({'request': request, 'summary': summary, 'agent': name})
     say('Applied. `oninix-spirit undo` brings back the previous system.')
     return 0
@@ -257,13 +300,16 @@ def activate(system):
     subprocess.run(['sudo', 'systemd-run', '--collect', '--no-ask-password', '--quiet',
                     '--service-type=exec', '--pipe', str(system / 'bin/switch-to-configuration'), 'switch'], check=True)
 
-def apply_system(before, after, result):
-    if (FLAKE / EDITABLE).read_text() != before or (FLAKE / 'flake.lock').read_bytes() != (WORK / 'flake.lock').read_bytes():
-        raise RuntimeError('The machine configuration changed during the preview. Run the request again.')
+def apply_system(before, after, result, original_hash):
+    subprocess.run(['sudo', '-v'], check=True)
+    with tempfile.TemporaryDirectory(prefix='preview-check-', dir=STATE) as temp:
+        snapshot = Path(temp) / 'flake'
+        copy_flake(snapshot)
+        if flake_hash(snapshot) != original_hash:
+            raise RuntimeError('The machine configuration changed during the preview. Run the request again.')
     previous = SYSTEM_PROFILE.resolve(strict=True)
     if previous != Path('/run/current-system').resolve(strict=True):
         raise RuntimeError('The active and boot-default systems differ. Boot the default generation before applying.')
-    subprocess.run(['sudo', '-v'], check=True)
     install_settings(after)
     try:
         activate(result)
