@@ -8,7 +8,6 @@ lib.mkIf config.oninix.enable {
       ExecStart = "/run/current-system/sw/bin/oninix-maintenance daily";
       Nice = 15;
       IOSchedulingClass = "idle";
-      LogLevelMax = "notice";
     };
   };
   systemd.user.timers.oninix-update-check = {

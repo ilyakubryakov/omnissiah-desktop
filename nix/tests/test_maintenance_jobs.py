@@ -28,6 +28,7 @@ let
 in {
   system = queue c.systemd.services "oninix-backup";
   user = queue c.systemd.user.services "oninix-update-check";
+  updateLogLevel = c.systemd.user.services.oninix-update-check.serviceConfig.LogLevelMax or null;
   backup = script c.systemd.services.oninix-backup.serviceConfig.ExecStart;
   home = c.users.users.${c.oninix.user.name}.home;
 }
@@ -58,6 +59,9 @@ class GameDeferTests(unittest.TestCase):
             for hook in ('condition', 'catchup'):
                 item = cls.config[scope][hook]
                 item['script'] = script_text(item)
+
+    def test_update_check_keeps_successful_completion_in_the_journal(self):
+        self.assertIsNone(self.config['updateLogLevel'])
 
     def setup_queue(self, scope):
         cfg = self.config[scope]

@@ -100,7 +100,6 @@ let
       Type=oneshot
       Nice=15
       IOSchedulingClass=idle
-      LogLevelMax=notice
     '';
     "oninix-update-check.timer" = ''
       [Unit]
