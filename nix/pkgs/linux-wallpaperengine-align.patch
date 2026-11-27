@@ -5,11 +5,11 @@
  #include "WallpaperState.h"
  #include "TextureProvider.h"
  #include "WallpaperEngine/Logging/Log.h"
-@@ -31,15 +32,21 @@
+@@ -31,15 +32,19 @@
  }
  
  // Update Us coordinates for current viewport and projection
-+static float stationAlign (const char* name) {
++static float oninixAlign (const char* name) {
 +    const char* value = std::getenv (name);
 +    const float align = value ? std::strtof (value, nullptr) : 0.5f;
 +    return align < 0.0f ? 0.0f : (align > 1.0f ? 1.0f : align);
@@ -24,14 +24,12 @@
  
 -    const float left = newCenter - viewportCenter;
 -    const float right = newCenter + viewportCenter;
-+    // Station: STATION_ALIGN_X/Y (0..1, default 0.5 = centre) choose which part of a
-+    // filled wallpaper stays visible.
-+    const float left = (newWidth - viewportWidth) * stationAlign ("STATION_ALIGN_X");
++    const float left = (newWidth - viewportWidth) * oninixAlign ("ONINIX_ALIGN_X");
 +    const float right = left + viewportWidth;
  
      this->m_UVs.ustart = left / newWidth;
      this->m_UVs.uend = right / newWidth;
-@@ -50,11 +57,9 @@
+@@ -50,11 +55,9 @@
      const float viewportWidth = this->getViewportWidth ();
      const float viewportHeight = this->getViewportHeight ();
      const int newHeight = viewportWidth / projectionWidth * projectionHeight;
@@ -40,7 +38,7 @@
  
 -    const float down = newCenter - viewportCenter;
 -    const float up = newCenter + viewportCenter;
-+    const float down = (newHeight - viewportHeight) * stationAlign ("STATION_ALIGN_Y");
++    const float down = (newHeight - viewportHeight) * oninixAlign ("ONINIX_ALIGN_Y");
 +    const float up = down + viewportHeight;
  
      if (m_vflip) {

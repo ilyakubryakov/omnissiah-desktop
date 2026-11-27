@@ -1425,9 +1425,18 @@ def valid_color(value):
     except ValueError:
         return False
 
+def service_installed():
+    try:
+        return subprocess.run(['systemctl', '--user', 'cat', 'oninix-livewall.service'],
+                              capture_output=True, timeout=10).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
 def edit_config(args):
     if args.cmd == 'set':
         if args.mode == 'live':
+            if not service_installed():
+                raise Fail('Live wallpapers are not enabled on this system')
             if not args.item or not re.fullmatch(r'[0-9A-Za-z_.-]+', args.item):
                 raise Fail('Choose an installed wallpaper')
             item = find_item(args.item)

@@ -145,9 +145,16 @@ wallpaper_path() {
 
 reload_wallpaper() {
     if [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
-        if ! hyprctl hyprpaper wallpaper ",$(wallpaper_path)" >/dev/null 2>&1; then
+        local image output
+        image=$(wallpaper_path)
+        if ! hyprctl hyprpaper wallpaper ",$image" >/dev/null 2>&1; then
             systemctl --user restart --no-block oninix-wallpaper.service
+            return
         fi
+        hyprctl -j monitors 2>/dev/null | python3 -c 'import json, sys; [print(m["name"]) for m in json.load(sys.stdin)]' 2>/dev/null |
+            while read -r output; do
+                hyprctl hyprpaper wallpaper "$output,$image" >/dev/null 2>&1 || true
+            done
     fi
 }
 

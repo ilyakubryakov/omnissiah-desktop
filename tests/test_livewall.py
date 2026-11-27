@@ -333,5 +333,15 @@ class Query(unittest.TestCase):
         with self.assertRaises(livewall.Fail):
             livewall.query_request(self.args(sort='random'))
 
+
+class LiveNeedsTheService(unittest.TestCase):
+    def test_live_is_refused_without_the_service(self):
+        args = livewall.argparse.Namespace(cmd='set', mode='live', item='7')
+        with patch.object(livewall, 'service_installed', return_value=False), \
+                patch.object(livewall, 'write_json') as write:
+            with self.assertRaises(livewall.Fail):
+                livewall.edit_config(args)
+        write.assert_not_called()
+
 if __name__ == '__main__':
     unittest.main()
