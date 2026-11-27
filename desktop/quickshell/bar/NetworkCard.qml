@@ -9,7 +9,8 @@ ColumnLayout {
     spacing: Shared.DesktopStyle.px(10)
     readonly property var network: DesktopData.network
     readonly property var links: network.links || []
-    readonly property var primary: links.length ? links[0] : ({})
+    readonly property var primary: network.primary === undefined ? (links[0] || ({}))
+        : links.find(link => link.device === network.primary) || ({})
     readonly property string connectivity: network.connectivity || "unknown"
     property var previous: ({})
     property real receiving: -1
@@ -24,13 +25,13 @@ ColumnLayout {
     function rate(before, after, seconds) {
         return Number.isFinite(before) && Number.isFinite(after) && after >= before ? (after - before) / seconds : -1
     }
-    onNetworkChanged: {
-        const now = network.timestamp || 0
-        const sample = previous || ({})
-        if (now && now === sample.timestamp) return
-        const delta = now - (sample.timestamp || 0)
-        const old = sample.link || ({})
-        const link = primary
+    function sample(snapshot) {
+        const now = snapshot.timestamp || 0
+        if (now && now === previous.timestamp) return
+        const delta = now - (previous.timestamp || 0)
+        const old = previous.link || ({})
+        const available = snapshot.links || []
+        const link = (snapshot.primary === undefined ? available[0] : available.find(row => row.device === snapshot.primary)) || ({})
         const sameDevice = delta > 0 && link.device && old.device === link.device && old.uuid === link.uuid
         receiving = sameDevice ? rate(old.received, link.received, delta) : -1
         sending = sameDevice ? rate(old.sent, link.sent, delta) : -1

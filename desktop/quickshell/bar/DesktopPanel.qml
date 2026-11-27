@@ -24,7 +24,7 @@ FloatingWindow {
     property string focusText: ""
     property real highlightY: -1
     screen: Shared.Screens.main
-    visible: presented && screen !== null
+    visible: presented && Shared.Screens.main !== null
     implicitWidth: Math.min(Shared.DesktopStyle.px(1080), screen ? screen.width - Shared.DesktopStyle.px(40) : Shared.DesktopStyle.px(1080))
     implicitHeight: Math.min(Shared.DesktopStyle.px(900), screen ? screen.height - Shared.DesktopStyle.px(80) : Shared.DesktopStyle.px(900))
     minimumSize: Qt.size(Math.min(Shared.DesktopStyle.px(760), implicitWidth), Math.min(Shared.DesktopStyle.px(560), implicitHeight))

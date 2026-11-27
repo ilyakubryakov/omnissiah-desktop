@@ -22,7 +22,11 @@ Singleton {
     signal libraryChanged()
 
     onOpenChanged: if (!open) customizeId = ""
-    onCustomizingChanged: if (!customizing) customizeId = ""
+    onStatusChanged: {
+        if (customizeId && (status.mode !== "live" || status.item?.id !== customizeId
+            || !status.item?.properties?.length))
+            customizeId = ""
+    }
 
     function openCustomize() {
         if (!properties.length) return

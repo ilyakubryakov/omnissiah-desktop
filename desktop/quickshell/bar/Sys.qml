@@ -65,8 +65,8 @@ Singleton {
             }
             if (v.MemTotal && v.MemAvailable !== undefined) {
                 root.mem = Math.round(100 * (1 - v.MemAvailable / v.MemTotal))
-                root.memTotal = v.MemTotal / 1048576
-                root.memUsed = (v.MemTotal - v.MemAvailable) / 1048576
+                root.memTotalGiB = v.MemTotal / 1048576
+                root.memUsedGiB = (v.MemTotal - v.MemAvailable) / 1048576
             }
         }
     }

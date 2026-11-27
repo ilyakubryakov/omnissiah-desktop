@@ -37,8 +37,7 @@ PanelWindow {
         id: debounce
         interval: 80
         onTriggered: {
-            if (read.running) root.refreshQueued = true
-            else if (probe.running) root.refreshQueued = true
+            if (read.running || probe.running) root.refreshQueued = true
             else probe.running = true
         }
     }
