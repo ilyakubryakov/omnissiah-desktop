@@ -1,0 +1,1584 @@
+#!/usr/bin/env python3
+import argparse
+import fcntl
+import hashlib
+import contextlib
+from contextlib import contextmanager
+import json
+import math
+import os
+from pathlib import Path
+import re
+import select
+import shutil
+import signal
+import socket
+import struct
+import zlib
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+
+APPID = '431960'
+HOME = Path.home()
+STATE_DIR = Path(os.environ.get('XDG_STATE_HOME', str(HOME / '.local/state')))
+CONFIG = STATE_DIR / 'theme/livewall.json'
+STATUS = Path(os.environ.get('XDG_RUNTIME_DIR', f'/run/user/{os.getuid()}')) / 'oninix-livewall/status.json'
+RUNTIME = Path(os.environ.get('XDG_RUNTIME_DIR', f'/run/user/{os.getuid()}')) / 'oninix-livewall'
+KEY_CACHE = RUNTIME / 'webapi-key'
+KEY_FILE = STATE_DIR / 'oninix/livewall/steam-webapi-key'
+CACHE = Path(os.environ.get('XDG_CACHE_HOME', str(HOME / '.cache'))) / 'oninix/livewall'
+MODE_FILE = Path(os.environ.get('XDG_RUNTIME_DIR', f'/run/user/{os.getuid()}')) / 'oninix-desktop/mode.json'
+STEAM_ROOTS = [HOME / '.local/share/Steam', HOME / '.steam/steam']
+QUERY_URL = 'https://api.steampowered.com/IPublishedFileService/QueryFiles/v1/'
+
+TYPES = ['Scene', 'Video', 'Web', 'Application']
+RATINGS = ['Everyone', 'Questionable', 'Mature']
+GENRES = ['Abstract', 'Animal', 'Anime', 'Cartoon', 'CGI', 'Cyberpunk', 'Fantasy', 'Game',
+          'Girls', 'Guys', 'Landscape', 'Medieval', 'Memes', 'MMD', 'Music', 'Nature',
+          'Pixel art', 'Relaxing', 'Retro', 'Sci-Fi', 'Sports', 'Technology', 'Television',
+          'Vehicle', 'Unspecified']
+RESOLUTIONS = ['1920 x 1080', '2560 x 1440', '3840 x 2160', '2560 x 1080', '3440 x 1440',
+               '5120 x 1440', 'Dynamic resolution', 'Other resolution']
+MISC = ['Audio responsive', 'Customizable']
+SORTS = {'trend': 3, 'newest': 1, 'top': 0, 'subscribed': 9, 'updated': 21}
+RENDERABLE = {'video', 'scene', 'web'}
+VIDEO_FORMATS = 'mov,mp4,m4a,3gp,3g2,mj2,matroska,webm,avi'
+IMAGE_FORMATS = 'png_pipe,jpeg_pipe,gif,webp_pipe,image2'
+
+class Fail(Exception):
+    pass
+
+class Deferred(Fail):
+    """Not started now, on purpose: tried again later, never counted as a failure."""
+
+class NoVram(Deferred):
+    """Not started: too little free video memory (or it cannot be measured)."""
+
+def vdf_paths(text):
+    return [Path(m.replace('\\\\', '\\')) for m in re.findall(r'"path"\s+"([^"]+)"', text)]
+
+def libraries():
+    roots = []
+    for root in STEAM_ROOTS:
+        vdf = root / 'steamapps/libraryfolders.vdf'
+        try:
+            roots += vdf_paths(vdf.read_text(errors='replace'))
+        except OSError:
+            continue
+    roots += STEAM_ROOTS
+    seen, out = set(), []
+    for root in roots:
+        try:
+            key = root.resolve()
+        except OSError:
+            continue
+        if key not in seen and (root / 'steamapps').is_dir():
+            seen.add(key)
+            out.append(root)
+    return out
+
+def app_dir():
+    for root in libraries():
+        path = root / 'steamapps/common/wallpaper_engine'
+        if (path / 'assets').is_dir():
+            return path
+    return None
+
+def workshop_dirs():
+    return [d for d in (root / 'steamapps/workshop/content' / APPID for root in libraries()) if d.is_dir()]
+
+def inside(folder, name):
+    if not isinstance(name, str) or not name or '\0' in name:
+        return None
+    try:
+        root = folder.resolve()
+        path = (folder / name).resolve()
+    except (OSError, RuntimeError):
+        return None
+    return path if path.is_relative_to(root) and path.is_file() else None
+
+def project_item(folder):
+    try:
+        project = json.loads((folder / 'project.json').read_text(encoding='utf-8-sig'))
+        updated = int(folder.stat().st_mtime)
+    except (OSError, ValueError):
+        return None
+    if not isinstance(project, dict):
+        return None
+    kind = str(project.get('type', '')).strip().lower()
+    preview = inside(folder, project.get('preview'))
+    preview = preview if preview and preview.suffix.lower() in {'.png', '.jpg', '.jpeg', '.gif', '.webp'} else None
+    video = inside(folder, project.get('file'))
+    video = video if video and video.suffix.lower() in {'.mp4', '.webm', '.mkv', '.mov', '.avi', '.m4v'} else None
+    tags = [str(t) for t in project.get('tags') or [] if isinstance(t, (str, int))] if isinstance(project.get('tags'), list) else []
+    item = {
+        'id': folder.name,
+        'title': str(project.get('title') or folder.name),
+        'type': kind or 'unknown',
+        'preview': str(preview) if preview else '',
+        'tags': tags,
+        'rating': str(project.get('contentrating') or ''),
+        'supported': True,
+        'reason': '',
+        'path': str(folder),
+        'file': str(video) if video else '',
+        'updated': updated,
+    }
+    if kind not in RENDERABLE:
+        item.update(supported=False, reason=f'{kind or "Unknown"} wallpapers do not run on Linux')
+    elif kind == 'video' and not video:
+        item.update(supported=False, reason='Video file is missing')
+    return item
+
+def library():
+    items = []
+    folders = []
+    for root in workshop_dirs():
+        try:
+            folders += [d for d in root.iterdir() if d.is_dir()]
+        except OSError:
+            continue
+    app = app_dir()
+    if app and (app / 'projects/defaultprojects').is_dir():
+        try:
+            folders += [d for d in (app / 'projects/defaultprojects').iterdir() if d.is_dir()]
+        except OSError:
+            pass
+    for folder in folders:
+        item = project_item(folder)
+        if item:
+            items.append(item)
+    items.sort(key=lambda i: i['updated'], reverse=True)
+    return items
+
+def find_item(item_id):
+    for item in library():
+        if item['id'] == str(item_id):
+            return item
+    return None
+
+def read_config():
+    try:
+        data = json.loads(CONFIG.read_text())
+        if isinstance(data, dict) and data.get('mode') in {'static', 'live'}:
+            placement = data.get('placement') if isinstance(data.get('placement'), dict) else {}
+            properties = data.get('properties') if isinstance(data.get('properties'), dict) else {}
+            broken = [str(i) for i in data.get('broken') or [] if isinstance(i, (str, int))]
+            return {'mode': data['mode'], 'item': str(data.get('item') or ''), 'placement': placement,
+                    'properties': properties, 'broken': broken}
+    except (OSError, ValueError):
+        pass
+    return {'mode': 'static', 'item': '', 'placement': {}, 'properties': {}, 'broken': []}
+
+PROPERTY_TYPES = {'bool', 'slider', 'combo', 'color', 'textinput'}
+
+def order_of(value):
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return 0.0
+    return number if math.isfinite(number) else 0.0
+
+def item_properties(item, config):
+    try:
+        project = json.loads((Path(item['path']) / 'project.json').read_text(encoding='utf-8-sig'))
+        general = project.get('general') if isinstance(project, dict) else None
+        defined = general.get('properties') if isinstance(general, dict) else None
+    except (OSError, ValueError):
+        return []
+    if not isinstance(defined, dict):
+        return []
+    saved = config.get('properties', {}).get(item['id'], {})
+    saved = saved if isinstance(saved, dict) else {}
+    result = []
+    for key, prop in defined.items():
+        if not isinstance(prop, dict) or prop.get('type') not in PROPERTY_TYPES:
+            continue
+        entry = {'key': key, 'text': re.sub(r'<[^>]+>', '', str(prop.get('text') or key)), 'type': prop['type'],
+                 'default': prop.get('value'), 'value': saved.get(key, prop.get('value')),
+                 'order': order_of(prop.get('order')), 'condition': str(prop.get('condition') or '')}
+        if prop['type'] == 'combo':
+            options = prop.get('options') if isinstance(prop.get('options'), list) else []
+            entry['options'] = [{'label': str(o.get('label')), 'value': str(o.get('value'))}
+                                for o in options if isinstance(o, dict)]
+        if prop['type'] == 'slider':
+            entry.update(min=prop.get('min', 0), max=prop.get('max', 1), step=prop.get('step', 0.01),
+                         integer=bool(prop.get('fraction') is False))
+        result.append(entry)
+    result.sort(key=lambda e: (e['order'], e['text'].lower()))
+    return result
+
+def property_args(item, config):
+    args = []
+    saved = config.get('properties', {}).get(item['id'], {})
+    for key, value in sorted(saved.items() if isinstance(saved, dict) else []):
+        if isinstance(value, bool):
+            value = '1' if value else '0'
+        args += ['--set-property', f'{key}={value}']
+    return args
+
+DEFAULT_PLACEMENT = {'fit': 'fill', 'x': 0.5, 'y': 0.5}
+
+def placement_of(config, item_id):
+    saved = config.get('placement', {}).get(str(item_id))
+    result = dict(DEFAULT_PLACEMENT)
+    if isinstance(saved, dict):
+        if saved.get('fit') in {'fill', 'fit'}:
+            result['fit'] = saved['fit']
+        for axis in ('x', 'y'):
+            try:
+                result[axis] = min(1.0, max(0.0, float(saved.get(axis, result[axis]))))
+            except (TypeError, ValueError):
+                pass
+    return result
+
+@contextmanager
+def config_lock():
+    CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    with open(CONFIG.with_name('.livewall.lock'), 'w') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        yield
+
+def write_json(path, data, mode=0o644):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, name = tempfile.mkstemp(prefix='.' + path.name + '-', dir=path.parent)
+    try:
+        with os.fdopen(fd, 'w') as stream:
+            json.dump(data, stream)
+            stream.write('\n')
+        os.chmod(name, mode)
+        os.replace(name, path)
+    finally:
+        Path(name).unlink(missing_ok=True)
+
+def status():
+    config = read_config()
+    try:
+        live = json.loads(STATUS.read_text())
+    except (OSError, ValueError):
+        live = {}
+    item = find_item(config['item']) if config['item'] else None
+    if item:
+        item['broken'] = item['id'] in config['broken']
+        item['placement'] = placement_of(config, item['id'])
+        item['properties'] = item_properties(item, config)
+    running = daemon_running()
+    state = live.get('state', 'stopped') if running else 'stopped'
+    error = live.get('error', '') if running else ('' if config['mode'] == 'static' else 'The live wallpaper service is not running')
+    return {
+        'mode': config['mode'], 'item': item,
+        'state': state if config['mode'] == 'live' else 'stopped',
+        'reason': live.get('reason', '') if running and config['mode'] == 'live' else '',
+        'error': error, 'output': live.get('output') or main_output(),
+        'assets': app_dir() is not None, 'key': bool(api_key(quiet=True)),
+        'workshop_dir': str(workshop_dirs()[0]) if workshop_dirs() else '',
+    }
+
+def daemon_running():
+    return subprocess.run(['systemctl', '--user', 'is-active', '--quiet', 'oninix-livewall.service']).returncode == 0
+
+def first_output():
+    try:
+        monitors = json.loads(subprocess.run(['hyprctl', '-j', 'monitors'], capture_output=True, text=True, timeout=5).stdout)
+        return monitors[0]['name'] if monitors else ''
+    except (OSError, ValueError, KeyError, subprocess.SubprocessError):
+        return ''
+
+def main_output():
+    try:
+        out = subprocess.run(['oninix-display', 'output', 'main'], capture_output=True, text=True, timeout=10)
+        return out.stdout.strip() or first_output()
+    except (OSError, subprocess.SubprocessError):
+        return first_output()
+
+KEY_RE = re.compile(r'[0-9A-Fa-f]{32}')
+
+def store_key(key):
+    KEY_FILE.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    fd, name = tempfile.mkstemp(prefix='.webapi-key-', dir=KEY_FILE.parent)
+    try:
+        with os.fdopen(fd, 'w') as stream:
+            stream.write(key + '\n')
+        os.replace(name, KEY_FILE)
+    finally:
+        Path(name).unlink(missing_ok=True)
+
+def cache_key(key):
+    RUNTIME.mkdir(parents=True, exist_ok=True, mode=0o700)
+    fd, name = tempfile.mkstemp(prefix='.webapi-key-', dir=RUNTIME)
+    try:
+        with os.fdopen(fd, 'w') as stream:
+            stream.write(key + '\n')
+        os.replace(name, KEY_CACHE)
+    finally:
+        Path(name).unlink(missing_ok=True)
+
+@contextmanager
+def key_lock():
+    RUNTIME.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with open(RUNTIME / '.key.lock', 'w') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        yield
+
+def api_key(quiet=False):
+    try:
+        key = KEY_CACHE.read_text().strip()
+    except OSError:
+        key = ''
+    if KEY_RE.fullmatch(key):
+        return key
+    with key_lock():
+        return _api_key_slow(quiet)
+
+def _api_key_slow(quiet):
+    try:
+        key = KEY_FILE.read_text().strip()
+    except OSError:
+        key = ''
+    if not KEY_RE.fullmatch(key):
+        if quiet:
+            return ''
+        raise Fail('Steam Web API key missing: run oninix-livewall key set')
+    cache_key(key)
+    return key
+
+def set_key():
+    key = sys.stdin.readline().strip()
+    if not KEY_RE.fullmatch(key):
+        raise Fail('A Steam Web API key is 32 hexadecimal characters')
+    with key_lock():
+        store_key(key)
+        cache_key(key)
+    return {'key': True}
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+def query_request(args):
+    types = {t.capitalize() for t in args.type or []}
+    ratings = {r.capitalize() for r in args.rating or []} or {'Everyone'}
+    required = list(args.tag or [])
+    if args.resolution:
+        required.append(args.resolution)
+    excluded = [t for t in TYPES if types and t not in types] + [r for r in RATINGS if r not in ratings]
+    if not types:
+        excluded.append('Application')
+    sort = args.sort or 'trend'
+    if sort not in SORTS:
+        raise Fail('Unknown sort')
+    request = {
+        'query_type': SORTS[sort],
+        'cursor': args.cursor or '*',
+        'numperpage': max(1, min(100, args.per_page or 30)),
+        'appid': int(APPID), 'creator_appid': int(APPID),
+        'requiredtags': required, 'excludedtags': excluded, 'match_all_tags': True,
+        'filetype': 0, 'return_tags': True, 'return_previews': False,
+        'return_short_description': False, 'return_vote_data': True,
+        'strip_description_bbcode': True,
+    }
+    if args.search:
+        request['search_text'] = args.search
+        if sort == 'trend':
+            request['query_type'] = 12
+    if sort == 'trend':
+        request['days'] = max(1, min(365, args.days or 7))
+        request['include_recent_votes_only'] = False
+    return request
+
+def item_type(tags):
+    for tag in tags:
+        if tag in TYPES:
+            return tag.lower()
+    return 'unknown'
+
+def query(args):
+    request = query_request(args)
+    url = QUERY_URL + '?' + urllib.parse.urlencode({'input_json': json.dumps(request)})
+    http = urllib.request.Request(url, headers={'x-webapi-key': api_key(), 'User-Agent': 'oninix-livewall'})
+    opener = urllib.request.build_opener(NoRedirect)
+    try:
+        with opener.open(http, timeout=20) as reply:
+            body = json.loads(reply.read().decode())
+    except urllib.error.HTTPError as error:
+        raise Fail('Steam rejected the key' if error.code in (401, 403) else f'Steam Workshop answered {error.code}') from None
+    except (urllib.error.URLError, TimeoutError, ValueError):
+        raise Fail('Steam Workshop is unreachable') from None
+    response = body.get('response') or {}
+    installed = set()
+    for root in workshop_dirs():
+        try:
+            installed |= {d.name for d in root.iterdir() if d.is_dir()}
+        except OSError:
+            continue
+    items = []
+    for entry in response.get('publishedfiledetails') or []:
+        if entry.get('result', 1) != 1:
+            continue
+        tags = [t.get('tag', '') for t in entry.get('tags') or [] if isinstance(t, dict)]
+        file_id = str(entry.get('publishedfileid', ''))
+        items.append({
+            'id': file_id, 'title': entry.get('title') or file_id,
+            'preview_url': entry.get('preview_url') or '',
+            'type': item_type(tags), 'tags': [t for t in tags if t not in TYPES and t not in RATINGS],
+            'rating': next((t for t in tags if t in RATINGS), ''),
+            'subscriptions': int(entry.get('lifetime_subscriptions') or entry.get('subscriptions') or 0),
+            'favorited': int(entry.get('lifetime_favorited') or entry.get('favorited') or 0),
+            'file_size': int(entry.get('file_size') or 0),
+            'time_updated': int(entry.get('time_updated') or 0),
+            'installed': file_id in installed,
+        })
+    return {'items': items, 'next_cursor': response.get('next_cursor') or '', 'total': int(response.get('total') or 0)}
+
+def steam_open(url):
+    subprocess.Popen(['steam', url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                     stdin=subprocess.DEVNULL, start_new_session=True)
+    return {}
+
+def session_env():
+    if os.environ.get('HYPRLAND_INSTANCE_SIGNATURE') and os.environ.get('WAYLAND_DISPLAY'):
+        return True
+    out = subprocess.run(['systemctl', '--user', 'show-environment'], capture_output=True, text=True)
+    for line in out.stdout.splitlines():
+        key, _, value = line.partition('=')
+        if key in {'HYPRLAND_INSTANCE_SIGNATURE', 'WAYLAND_DISPLAY', 'DISPLAY', 'XAUTHORITY'} and value and not os.environ.get(key):
+            os.environ[key] = value
+    return bool(os.environ.get('HYPRLAND_INSTANCE_SIGNATURE') and os.environ.get('WAYLAND_DISPLAY'))
+
+def hypr(*args):
+    out = subprocess.run(['hyprctl', '-j', *args], capture_output=True, text=True, timeout=5)
+    return json.loads(out.stdout or 'null')
+
+COVERED = 0.9
+
+def work_area(monitor):
+    scale = float(monitor.get('scale') or 1)
+    width, height = monitor.get('width', 0) / scale, monitor.get('height', 0) / scale
+    if int(monitor.get('transform') or 0) % 2:
+        width, height = height, width
+    left, top, right, bottom = (list(monitor.get('reserved') or []) + [0, 0, 0, 0])[:4]
+    x, y = monitor.get('x', 0), monitor.get('y', 0)
+    return x + left, y + top, x + width - right, y + height - bottom
+
+def covered_share(area, rects):
+    ax1, ay1, ax2, ay2 = area
+    if ax2 <= ax1 or ay2 <= ay1:
+        return 0.0
+    clipped = [(max(x1, ax1), max(y1, ay1), min(x2, ax2), min(y2, ay2)) for x1, y1, x2, y2 in rects]
+    clipped = [r for r in clipped if r[2] > r[0] and r[3] > r[1]]
+    xs = sorted({v for r in clipped for v in (r[0], r[2])})
+    hidden = 0.0
+    for left, right in zip(xs, xs[1:]):
+        spans = sorted((r[1], r[3]) for r in clipped if r[0] <= left and r[2] >= right)
+        height, top, bottom = 0.0, None, None
+        for y1, y2 in spans:
+            if bottom is None or y1 > bottom:
+                height += (bottom - top) if bottom is not None else 0
+                top, bottom = y1, y2
+            else:
+                bottom = max(bottom, y2)
+        height += (bottom - top) if bottom is not None else 0
+        hidden += (right - left) * height
+    return hidden / ((ax2 - ax1) * (ay2 - ay1))
+
+def pause_reason(monitors, clients, output):
+    monitor = next((m for m in monitors or [] if m.get('name') == output), None)
+    if not monitor:
+        return 'dpms'
+    if not monitor.get('dpmsStatus', True):
+        return 'dpms'
+    visible = {(monitor.get('activeWorkspace') or {}).get('name'), (monitor.get('specialWorkspace') or {}).get('name')} - {None, ''}
+    reason, rects = '', []
+    for client in clients or []:
+        if client.get('monitor') != monitor.get('id') or not client.get('mapped', True) or client.get('hidden'):
+            continue
+        if (client.get('workspace') or {}).get('name') not in visible:
+            continue
+        state = int(client.get('fullscreen') or 0)
+        if state & 2:
+            return 'fullscreen'
+        if state & 1:
+            reason = 'maximized'
+        (x, y), (w, h) = client.get('at') or (0, 0), client.get('size') or (0, 0)
+        rects.append((x, y, x + w, y + h))
+    if not reason and rects and covered_share(work_area(monitor), rects) >= COVERED:
+        reason = 'covered'
+    return reason
+
+LAYER_NAMES = {'mpvpaper', 'linux-wallpaperengine'}
+
+def renderer_mapped(output, group):
+    try:
+        layers = hypr('layers')
+        levels = (layers.get(output) or {}).get('levels') or {}
+    except (OSError, ValueError, AttributeError, subprocess.SubprocessError):
+        return None
+    for level in levels.values():
+        for surface in level or []:
+            if surface.get('namespace') not in LAYER_NAMES:
+                continue
+            try:
+                if os.getpgid(int(surface.get('pid', 0))) == group:
+                    return True
+            except (OSError, ValueError, TypeError):
+                continue
+    return False
+
+def game_mode():
+    try:
+        return json.loads(MODE_FILE.read_text()).get('name') == 'game'
+    except (OSError, ValueError, AttributeError):
+        return False
+
+def screen_locked():
+    return subprocess.run(['pgrep', '-x', 'hyprlock'], stdout=subprocess.DEVNULL).returncode == 0
+
+def effective(placement):
+    return placement if placement['fit'] == 'fill' else dict(placement, x=0.5, y=0.5)
+
+def web_sandbox(read_only, writable=()):
+    runtime = os.environ.get('XDG_RUNTIME_DIR', f'/run/user/{os.getuid()}')
+    argv = ['bwrap', '--ro-bind', '/', '/', '--dev-bind', '/dev', '/dev', '--tmpfs', '/dev/shm',
+            '--proc', '/proc', '--unshare-pid', '--unshare-net', '--tmpfs', '/tmp',
+            '--tmpfs', str(HOME), '--tmpfs', runtime]
+    wayland = os.environ.get('WAYLAND_DISPLAY')
+    if wayland:
+        argv += ['--bind', f'{runtime}/{wayland}', f'{runtime}/{wayland}']
+    if Path('/tmp/.X11-unix').is_dir():
+        argv += ['--ro-bind', '/tmp/.X11-unix', '/tmp/.X11-unix']
+    if os.environ.get('XAUTHORITY') and Path(os.environ['XAUTHORITY']).is_file():
+        argv += ['--ro-bind', os.environ['XAUTHORITY'], os.environ['XAUTHORITY']]
+    for path in read_only:
+        argv += ['--ro-bind', str(path), str(path)]
+    for path in writable:
+        argv += ['--bind', str(path), str(path)]
+    return argv + ['--unsetenv', 'DBUS_SESSION_BUS_ADDRESS', '--die-with-parent', '--', 'dbus-run-session', '--']
+
+def group_alive(pgid):
+    try:
+        os.killpg(pgid, 0)
+        return True
+    except (ProcessLookupError, PermissionError):
+        return False
+
+class Renderer:
+    def __init__(self, item, output, placement=None, properties=(), frame=None, layer='background'):
+        self.item, self.output = item, output
+        self.layer = layer
+        self.frame = frame
+        self.size = output_size(output)
+        self.properties = list(properties)
+        self.placement = placement or dict(DEFAULT_PLACEMENT)
+        self.proc = None
+        self.paused = False
+        self.unloaded = False
+        self.started_at = 0.0
+        self.ran, self.settled = 0.0, False
+        self.paused_at = 0.0
+        self.frame_play = 0.0
+        self.ipc = RUNTIME / 'mpv.sock'
+
+    def start(self):
+        kind = self.item['type']
+        if kind != 'video':
+            if not vram_allows_start(fresh=self.layer == 'overlay'):
+                raise NoVram('Waiting for GPU memory')
+            if game_mode() or screen_locked():
+                raise Deferred('Game mode or lock began')
+        self.waiting_vram = False
+        place = effective(self.placement)
+        if kind == 'video':
+            self.ipc.parent.mkdir(parents=True, exist_ok=True)
+            self.ipc.unlink(missing_ok=True)
+            options = (f'really-quiet no-audio loop-file=inf hwdec=auto-safe input-ipc-server={self.ipc} '
+                       f'load-unsafe-playlists=no demuxer=lavf '
+                       f'demuxer-lavf-o=protocol_whitelist=[file],format_whitelist=[{VIDEO_FORMATS}] '
+                       f'panscan={1.0 if place["fit"] == "fill" else 0.0} '
+                       f'video-align-x={place["x"] * 2 - 1:.3f} video-align-y={place["y"] * 2 - 1:.3f}')
+            argv = ['mpvpaper', '-l', 'background', '-o', options, self.output, self.item['file']]
+        else:
+            app = app_dir()
+            if not app:
+                raise Fail('Wallpaper Engine is not installed in Steam')
+            argv = ['linux-wallpaperengine', '--layer', self.layer, '--silent', '--no-fullscreen-pause', '--fps', '30',
+                    '--assets-dir', str(app / 'assets'), '--screen-root', self.output,
+                    '--scaling', place['fit'], *self.properties, '--bg', self.item['path']]
+            CACHE.mkdir(parents=True, exist_ok=True)
+            if self.frame and not frame_ready(self.frame) and not frame_failed(self.frame):
+                self.frame.unlink(missing_ok=True)
+                argv[1:1] = ['--screenshot', str(self.frame), '--screenshot-delay', '60']
+            if kind == 'web':
+                argv = web_sandbox([app / 'assets', self.item['path']], [CACHE]) + argv
+            else:
+                argv = ['dbus-run-session', '--'] + argv
+        env = dict(os.environ, ONINIX_ALIGN_X=f'{place["x"]:.3f}', ONINIX_ALIGN_Y=f'{place["y"]:.3f}')
+        self.proc = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                     stderr=subprocess.DEVNULL, start_new_session=True, env=env)
+        self.paused = False
+        self.unloaded = False
+        self.started_at = time.monotonic()
+        self.ran = 0.0
+        self.settled = False
+
+    def mpv(self, *command):
+        try:
+            with socket.socket(socket.AF_UNIX) as conn:
+                conn.settimeout(2)
+                conn.connect(str(self.ipc))
+                conn.sendall(json.dumps({'command': list(command)}).encode() + b'\n')
+                reply = b''
+                while not reply.endswith(b'\n'):
+                    chunk = conn.recv(4096)
+                    if not chunk:
+                        break
+                    reply += chunk
+        except OSError:
+            return False
+        for line in reply.decode(errors='replace').splitlines():
+            try:
+                answer = json.loads(line)
+            except ValueError:
+                continue
+            if 'error' in answer and 'event' not in answer:
+                return answer['error'] == 'success'
+        return False
+
+    def restart(self):
+        self.stop()
+        try:
+            self.start()
+        except NoVram:
+            self.yield_gpu()
+        except Deferred:
+            self.stop()
+            self.unloaded, self.paused = True, True
+
+    def yield_gpu(self):
+        self.stop()
+        self.unloaded, self.paused, self.waiting_vram = True, True, True
+
+    def configure(self, placement, properties):
+        properties = list(properties)
+        if placement == self.placement and properties == self.properties:
+            return
+        if self.item['type'] != 'video':
+            frame = frame_path(self.item, self.output, placement, properties)
+            if frame != self.frame:
+                self.frame_play = 0.0
+            self.frame = frame
+        if self.unloaded:
+            self.placement, self.properties = placement, properties
+            return
+        if self.item['type'] == 'video' and properties == self.properties and self.alive():
+            place = effective(placement)
+            if all([self.mpv('set_property', 'panscan', 1.0 if place['fit'] == 'fill' else 0.0),
+                    self.mpv('set_property', 'video-align-x', place['x'] * 2 - 1),
+                    self.mpv('set_property', 'video-align-y', place['y'] * 2 - 1)]):
+                self.placement = placement
+            return
+        self.placement, self.properties = placement, properties
+        self.restart()
+
+    def alive(self):
+        return self.unloaded or (self.proc is not None and self.proc.poll() is None)
+
+    def pause(self, value):
+        if not self.alive():
+            return False
+        if value == self.paused:
+            return True
+        if self.item['type'] == 'video':
+            if not self.mpv('set_property', 'pause', value):
+                return False
+        elif self.item['type'] == 'web':
+            if value:
+                self.stop()
+                self.unloaded = True
+            else:
+                try:
+                    self.start()
+                except Deferred as why:
+                    self.waiting_vram = isinstance(why, NoVram)
+                    return False
+        elif not value and self.unloaded:
+            try:
+                self.start()
+            except Deferred as why:
+                self.waiting_vram = isinstance(why, NoVram)
+                return False
+        else:
+            try:
+                os.killpg(self.proc.pid, signal.SIGSTOP if value else signal.SIGCONT)
+            except ProcessLookupError:
+                return False
+        self.paused = value
+        self.paused_at = time.monotonic() if value else 0.0
+        return True
+
+    def unload(self):
+        if self.item['type'] == 'video' or self.unloaded:
+            return
+        self.stop()
+        self.unloaded, self.paused = True, True
+
+    def stop(self):
+        self.unloaded = False
+        if self.proc is None:
+            return
+        if self.proc.poll() is None and self.item['type'] == 'web':
+            try:
+                os.killpg(self.proc.pid, signal.SIGKILL)
+                self.proc.wait(timeout=5)
+            except (ProcessLookupError, subprocess.TimeoutExpired):
+                pass
+        elif self.proc.poll() is None or group_alive(self.proc.pid):
+            try:
+                os.killpg(self.proc.pid, signal.SIGCONT)
+                os.killpg(self.proc.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            deadline = time.monotonic() + 5
+            while group_alive(self.proc.pid) and time.monotonic() < deadline:
+                self.proc.poll()
+                time.sleep(0.1)
+            if group_alive(self.proc.pid):
+                try:
+                    os.killpg(self.proc.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                deadline = time.monotonic() + 1
+                while group_alive(self.proc.pid) and time.monotonic() < deadline:
+                    self.proc.poll()
+                    time.sleep(0.05)
+            self.proc.poll()
+        self.proc = None
+
+_SIZES = {}
+
+def overlay_layers(output):
+    try:
+        levels = (hypr('layers').get(output) or {}).get('levels') or {}
+    except (OSError, ValueError, AttributeError, subprocess.SubprocessError):
+        return None
+    return sorted((str(s.get('namespace')), int(s.get('pid', 0))) for s in levels.get('3') or [])
+
+def overlay_capture(item, output, placement, properties, target, cancelled):
+    capture = Renderer(item, output, placement, properties, frame=None, layer='overlay')
+    CAPTURE_RENDERER[0] = capture
+    raw = RUNTIME / ('.capture-' + target.name)
+    staged = CAPTURE_STAGING / ('.capture-' + target.name)
+    deadline = time.monotonic() + CAPTURE_LIMIT
+
+    def left():
+        return max(0.5, deadline - time.monotonic())
+
+    def stop_now():
+        try:
+            return bool(cancelled())
+        except Exception:
+            return True
+
+    def only_ours(layers):
+        try:
+            return bool(layers) and all(ns in LAYER_NAMES and os.getpgid(pid) == group for ns, pid in layers)
+        except OSError:
+            return False
+    try:
+        capture.start()
+        group = capture.proc.pid
+        while not renderer_mapped(output, group):
+            if stop_now():
+                return 'cancelled'
+            if time.monotonic() > deadline:
+                return 'failed'
+            time.sleep(0.25)
+        settle = time.monotonic() + 3
+        while time.monotonic() < settle:
+            if stop_now():
+                return 'cancelled'
+            time.sleep(0.25)
+        before = overlay_layers(output)
+        if not only_ours(before) or screen_locked() or not capture.alive():
+            return 'failed'
+        RUNTIME.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if subprocess.run(['grim', '-o', output, '-t', 'png', '-l', '1', str(raw)],
+                          capture_output=True, timeout=left()).returncode != 0:
+            return 'failed'
+        if overlay_layers(output) != before or screen_locked() or not capture.alive():
+            return 'failed'
+        if stop_now():
+            return 'cancelled'
+        if is_flat(raw, timeout=left()) is not False or time.monotonic() > deadline:
+            return 'failed'
+        CAPTURE_STAGING.mkdir(parents=True, exist_ok=True, mode=0o700)
+        shutil.copyfile(raw, staged)
+        old = time.time() - 60
+        os.utime(staged, (old, old))
+        if stop_now():
+            return 'cancelled'
+        CACHE.mkdir(parents=True, exist_ok=True)
+        os.replace(staged, target)
+        target.with_suffix('.flat').unlink(missing_ok=True)
+        target.with_suffix('.captured').touch()
+        return 'saved'
+    except Deferred:
+        return 'cancelled'
+    except (Fail, OSError, subprocess.SubprocessError):
+        return 'failed'
+    finally:
+        try:
+            raw.unlink(missing_ok=True)
+            staged.unlink(missing_ok=True)
+        finally:
+            capture.stop()
+            CAPTURE_RENDERER[0] = None
+
+def output_size(output, fresh=False):
+    cached = _SIZES.get(output)
+    if cached and not fresh and time.monotonic() - cached[0] < 30:
+        return cached[1]
+    size = _output_size(output)
+    if size:
+        _SIZES[output] = (time.monotonic(), size)
+    return size
+
+def _output_size(output):
+    try:
+        monitor = next(m for m in hypr('monitors', 'all') if m.get('name') == output)
+        width, height = int(monitor['width']), int(monitor['height'])
+        return (height, width) if int(monitor.get('transform') or 0) % 2 else (width, height)
+    except (StopIteration, KeyError, TypeError, ValueError, OSError, subprocess.SubprocessError):
+        return None
+
+def still_filter(size, placement):
+    placement = effective(placement)
+    width, height = size
+    if placement['fit'] == 'fit':
+        return (f'scale={width}:{height}:force_original_aspect_ratio=decrease,'
+                f'pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black')
+    return (f'scale={width}:{height}:force_original_aspect_ratio=increase,'
+            f'crop={width}:{height}:(iw-{width})*{placement["x"]:.3f}:(ih-{height})*{placement["y"]:.3f}')
+
+def frame_path(item, output, placement, properties):
+    size = output_size(output)
+    if not size:
+        return None
+    place = effective(placement)
+    settings = hashlib.sha1('\0'.join(properties).encode()).hexdigest()[:8]
+    return CACHE / f'frame-{item["id"]}-{size[0]}x{size[1]}-{place["fit"]}-{place["x"]:.3f}-{place["y"]:.3f}-{settings}.png'
+
+def output_size_cached_only(path):
+    found = re.search(r'-(\d+)x(\d+)-', path.name)
+    return (int(found.group(1)), int(found.group(2))) if found else None
+
+def has_image_data(path):
+    try:
+        with open(path, 'rb') as png:
+            png.seek(8)
+            while True:
+                header = png.read(8)
+                if len(header) < 8:
+                    return False
+                length, kind = struct.unpack('>I4s', header)
+                if kind == b'IDAT':
+                    return length > 0
+                if kind == b'IEND':
+                    return False
+                png.seek(length + 4, os.SEEK_CUR)
+    except OSError:
+        return False
+
+_DECODED = {}
+_FLAT = {}
+FLAT_SPREAD = 8
+FLAT_DAYS = 7
+
+def is_flat(path, timeout=20):
+    try:
+        key = (str(path), path.stat().st_mtime_ns)
+    except OSError:
+        return False
+    if key not in _FLAT:
+        try:
+            out = subprocess.run(['ffmpeg', '-v', 'error', '-protocol_whitelist', 'file,pipe', '-i', str(path), '-vf',
+                                  'scale=256:-1,signalstats,metadata=print:file=-', '-f', 'null', '-'],
+                                 capture_output=True, text=True, timeout=timeout).stdout
+        except (OSError, subprocess.SubprocessError):
+            out = ''
+        values = {k: float(v) for k, v in re.findall(r'signalstats\.([YUV](?:MIN|MAX))=([0-9.]+)', out)}
+        if len(values) != 6:
+            return None
+        _FLAT[key] = all(values[c + 'MAX'] - values[c + 'MIN'] < FLAT_SPREAD for c in 'YUV')
+    return _FLAT[key]
+
+def frame_failed(path):
+    if path is None:
+        return False
+    try:
+        return time.time() - path.with_suffix('.flat').stat().st_mtime < FLAT_DAYS * 86400
+    except OSError:
+        return False
+
+def png_decodes(path, width, height):
+    try:
+        key = (str(path), path.stat().st_mtime_ns)
+    except OSError:
+        return False
+    if key in _DECODED:
+        return _DECODED[key]
+    row = 1 + width * 3
+    expected, total, ok = height * row, 0, False
+    inflate = zlib.decompressobj()
+
+    def rows_valid(chunk, start):
+        first = (-start) % row
+        return all(b <= 4 for b in chunk[first::row])
+    try:
+        with open(path, 'rb') as png:
+            png.seek(8)
+            while True:
+                header = png.read(8)
+                if len(header) < 8:
+                    break
+                length, kind = struct.unpack('>I4s', header)
+                if kind == b'IDAT':
+                    data = png.read(length)
+                    crc = png.read(4)
+                    if len(data) != length or struct.unpack('>I', crc)[0] != zlib.crc32(b'IDAT' + data):
+                        break
+                    while data:
+                        out = inflate.decompress(data, 1 << 20)
+                        if not rows_valid(out, total):
+                            data = b''
+                            total = -1
+                            break
+                        total += len(out)
+                        data = inflate.unconsumed_tail
+                    if total < 0:
+                        break
+                elif kind == b'IEND':
+                    rest = inflate.flush()
+                    ok = inflate.eof and rows_valid(rest, total) and total + len(rest) == expected
+                    break
+                else:
+                    png.seek(length + 4, os.SEEK_CUR)
+    except (OSError, zlib.error, struct.error):
+        ok = False
+    _DECODED[key] = ok
+    return ok
+
+def frame_ready(path):
+    try:
+        info = path.stat()
+        if info.st_size < 64 or time.time() - info.st_mtime <= 2:
+            return False
+        with open(path, 'rb') as png:
+            head = png.read(33)
+            png.seek(-12, os.SEEK_END)
+            tail = png.read(12)
+    except (OSError, AttributeError, TypeError):
+        return False
+    if head[:8] != b'\x89PNG\r\n\x1a\n' or head[12:16] != b'IHDR' or tail[4:8] != b'IEND' or not has_image_data(path):
+        return False
+    width, height = struct.unpack('>II', head[16:24])
+    size = output_size_cached_only(path)
+    if not width or not height or head[24:29] != b'\x08\x02\x00\x00\x00':
+        return False
+    if len(head) < 33 or struct.unpack('>I', head[29:33])[0] != zlib.crc32(head[12:29]):
+        return False
+    if size is not None and abs(width / height - size[0] / size[1]) >= 0.02:
+        return False
+    if not png_decodes(path, width, height):
+        return False
+    flat = is_flat(path)
+    if flat is None:
+        return False
+    if flat:
+        with contextlib.suppress(OSError):
+            path.with_suffix('.flat').touch()
+            path.unlink()
+        return False
+    return True
+
+def prune_cache(keep):
+    keep = set(keep) | {p.with_suffix('.flat') for p in keep}
+    captured = sorted(CACHE.glob('frame-*.captured'), key=lambda p: p.stat().st_mtime, reverse=True)
+    for marker in captured[:KEEP_CAPTURED]:
+        keep |= {marker, marker.with_suffix('.png')}
+    for old in (list(CACHE.glob('still-*.png')) + list(CACHE.glob('frame-*.png')) + list(CACHE.glob('frame-*.flat'))
+                + list(CACHE.glob('frame-*.captured'))):
+        if old not in keep:
+            old.unlink(missing_ok=True)
+
+def still_frame(item, output, placement):
+    source = item['file'] if item['type'] == 'video' else item['preview']
+    size = output_size(output)
+    if not source or not Path(source).is_file() or not size:
+        return None
+    CACHE.mkdir(parents=True, exist_ok=True)
+    placement = effective(placement)
+    key = f'{size[0]}x{size[1]}-{placement["fit"]}-{placement["x"]:.3f}-{placement["y"]:.3f}'
+    target = CACHE / f'still-{item["id"]}-{key}.png'
+    if not target.is_file() or target.stat().st_mtime < Path(source).stat().st_mtime:
+        part = target.with_suffix('.part.png')
+        try:
+            done = subprocess.run(['ffmpeg', '-v', 'error', '-y', '-protocol_whitelist', 'file',
+                                   '-format_whitelist', VIDEO_FORMATS if item['type'] == 'video' else IMAGE_FORMATS,
+                                   '-i', source, '-frames:v', '1',
+                                   '-vf', still_filter(size, placement), str(part)],
+                                  stdin=subprocess.DEVNULL, timeout=15).returncode == 0
+        except (OSError, subprocess.SubprocessError):
+            done = False
+        if not done:
+            part.unlink(missing_ok=True)
+            return None
+        part.replace(target)
+    return target
+
+def set_hyprpaper(output, path):
+    if not path:
+        return False
+    try:
+        out = subprocess.run(['hyprctl', 'hyprpaper', 'wallpaper', f'{output},{path}'], capture_output=True,
+                             text=True, timeout=12)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return out.returncode == 0 and out.stdout.strip().lower() in {'', 'ok'}
+
+def hyprpaper_shows(output):
+    try:
+        out = subprocess.run(['hyprctl', 'hyprpaper', 'listactive'], capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    for line in out.stdout.splitlines():
+        name, _, path = line.partition(':')
+        if name.strip() == output:
+            return path.strip()
+    return None
+
+def static_wallpaper():
+    try:
+        out = subprocess.run(['oninix-theme', 'wallpaper-path'], capture_output=True, text=True, timeout=20)
+        return out.stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return ''
+
+STILL_FAILED = {}
+CAPTURE_TRIED = {}
+CAPTURE_WINDOW = 60.0
+CAPTURE_LIMIT = 15.0
+CAPTURE_STAGING = Path(os.environ.get('XDG_CACHE_HOME', str(Path.home() / '.cache'))) / 'oninix/livewall-capture'
+CAPTURE_RETRY = 600.0
+GPU_MIN_FREE_MB = 4096
+GPU_PRESSURE_MB = 1024
+GPU_CHECK = 30.0
+GPU_HOLD = 60.0
+GPU = {'at': -1e9, 'status': 'unknown', 'free': None, 'hold_until': 0.0, 'strikes': 0, 'last_strike': -1e9}
+
+def gpu_measure():
+    try:
+        out = subprocess.run(['nvidia-smi', '--query-gpu=memory.total,memory.free', '--format=csv,noheader,nounits'],
+                             capture_output=True, text=True, timeout=3)
+    except FileNotFoundError:
+        return 'none', None
+    except (OSError, subprocess.SubprocessError):
+        return 'unknown', None
+    rows = []
+    for line in out.stdout.splitlines():
+        try:
+            total, free = (int(v) for v in line.split(','))
+            rows.append((total, free))
+        except ValueError:
+            continue
+    if out.returncode != 0 or not rows:
+        return 'unknown', None
+    return 'ok', max(rows)[1]
+
+def gpu_free_mb(max_age=GPU_CHECK):
+    if time.monotonic() - GPU['at'] >= max_age:
+        GPU['status'], GPU['free'] = gpu_measure()
+        GPU['at'] = time.monotonic()
+    return GPU['status'], GPU['free']
+
+def vram_allows_start(fresh=False):
+    if time.monotonic() < GPU['hold_until']:
+        return False
+    status, free = gpu_free_mb(max_age=0.0 if fresh else 2.0)
+    return status == 'none' or (status == 'ok' and free >= GPU_MIN_FREE_MB)
+
+def vram_strike():
+    now = time.monotonic()
+    GPU['strikes'] = GPU['strikes'] + 1 if now - GPU['last_strike'] < 600 else 1
+    GPU['last_strike'] = now
+    GPU['hold_until'] = now + min(600.0, GPU_HOLD * 2 ** (GPU['strikes'] - 1))
+    GPU['at'] = -1e9
+
+KEEP_CAPTURED = 10
+START_GRACE = 1.0
+LONG_PAUSE = 300.0
+START_LIMIT = 15.0
+WINDOW_REASONS = {'covered', 'maximized', 'fullscreen'}
+
+def in_grace(renderer, output):
+    if renderer.settled:
+        return False
+    if renderer.ran < START_GRACE:
+        return True
+    mapped = renderer.proc is not None and renderer_mapped(output, renderer.proc.pid)
+    frame_done = renderer.frame is None or frame_ready(renderer.frame) or frame_failed(renderer.frame)
+    if mapped and frame_done:
+        renderer.settled = True
+    elif renderer.ran >= START_LIMIT:
+        renderer.settled = True
+        missing = ' and '.join(x for x, ok in (('layer', mapped), ('frame', frame_done)) if not ok)
+        print(f'start grace ended after {START_LIMIT:.0f} s of play without its {missing}', flush=True)
+    return not renderer.settled
+
+def hypr_events():
+    path = Path(os.environ.get('XDG_RUNTIME_DIR', '')) / 'hypr' / os.environ['HYPRLAND_INSTANCE_SIGNATURE'] / '.socket2.sock'
+    conn = socket.socket(socket.AF_UNIX)
+    conn.connect(str(path))
+    conn.setblocking(False)
+    return conn
+
+def daemon():
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+    try:
+        _daemon_loop()
+    finally:
+        for renderer in (CAPTURE_RENDERER[0], CURRENT_RENDERER[0]):
+            if renderer:
+                renderer.stop()
+
+CURRENT_RENDERER = [None]
+CAPTURE_RENDERER = [None]
+
+def _daemon_loop(ticks=None):
+    while not session_env():
+        time.sleep(2)
+    events, renderer, item = None, None, None
+    chosen = None
+    output = main_output()
+    underlay = None
+    underlay_path = None
+    failures, failed_at, reason, refresh, verify_tick = 0, 0.0, '', True, 0
+    waiting_vram = False
+    replaced = False
+    chosen_at = time.monotonic()
+    active_choice = None
+    last_tick = time.monotonic()
+    last_mode = None
+    last_status = None
+
+    def stop_renderer():
+        nonlocal renderer
+        if renderer:
+            renderer.stop()
+            renderer = None
+            CURRENT_RENDERER[0] = None
+
+    static_seen = [0.0, '']
+
+    def show_static():
+        nonlocal underlay, underlay_path
+        if underlay != 'static' or time.monotonic() - static_seen[0] > 30 or not static_seen[1]:
+            static_seen[:] = [time.monotonic(), static_wallpaper()]
+        path = static_seen[1]
+        if (underlay != 'static' or underlay_path != path) and set_hyprpaper(output, path):
+            underlay, underlay_path = 'static', path
+
+    def show_still(item, placement, properties):
+        nonlocal underlay, underlay_path
+        if item['type'] == 'video':
+            key = (item['id'], output, tuple(sorted(placement.items())))
+            failed = STILL_FAILED.get(key)
+            if failed and time.monotonic() - failed < 300:
+                path = None
+            else:
+                path = still_frame(item, output, placement)
+                if path is None:
+                    STILL_FAILED[key] = time.monotonic()
+        else:
+            path = frame_path(item, output, placement, properties)
+            path = path if frame_ready(path) else None
+        if path is None:
+            show_static()
+        elif underlay != ('still', str(path)) and set_hyprpaper(output, path):
+            underlay, underlay_path = ('still', str(path)), str(path)
+            prune_cache({path})
+
+    while ticks is None or ticks > 0:
+        if ticks is not None:
+            ticks -= 1
+        if events is None:
+            try:
+                events = hypr_events()
+                refresh = True
+            except (OSError, KeyError):
+                events = None
+        if events and select.select([events], [], [], 1.0)[0]:
+            try:
+                if not events.recv(65536):
+                    raise OSError
+                refresh = True
+            except BlockingIOError:
+                pass
+            except OSError:
+                events.close()
+                events = None
+                session_env()
+        elif not events:
+            time.sleep(1.0)
+        if refresh:
+            new_output = main_output()
+            if new_output != output:
+                stop_renderer()
+                output, underlay = new_output, None
+        if renderer and (refresh or verify_tick == 29):
+            size = output_size(output, fresh=True)
+            if size and renderer.size is None:
+                renderer.size = size
+            if size and renderer.item['type'] != 'video' and renderer.frame is None:
+                stop_renderer()
+                underlay = None
+            elif size and size != renderer.size:
+                stop_renderer()
+                underlay = None
+        verify_tick = (verify_tick + 1) % 30
+        if underlay and (refresh or verify_tick == 0) and hyprpaper_shows(output) not in {underlay_path, None}:
+            underlay, replaced = None, True
+        config = read_config()
+        try:
+            stamp = CONFIG.stat().st_mtime
+        except OSError:
+            stamp = 0
+        if chosen != (config['mode'], config['item'], stamp):
+            chosen = (config['mode'], config['item'], stamp)
+            if (config['mode'], config['item']) != active_choice:
+                active_choice = (config['mode'], config['item'])
+                chosen_at = time.monotonic()
+            fresh = find_item(config['item']) if config['mode'] == 'live' and config['item'] else None
+            if renderer and (not fresh or fresh['id'] != renderer.item['id']):
+                stop_renderer()
+            item, failures = fresh, 0
+        state, error = 'stopped', ''
+        if config['mode'] != last_mode:
+            static_seen[0] = 0.0
+            last_mode = config['mode']
+        if config['mode'] != 'live':
+            stop_renderer()
+            show_static()
+            reason = ''
+        elif not item:
+            stop_renderer()
+            show_static()
+            state, error, reason = 'error', 'The selected wallpaper is not installed', ''
+        elif not item['supported']:
+            stop_renderer()
+            show_static()
+            state, error, reason = 'error', item['reason'], ''
+        elif game_mode():
+            stop_renderer()
+            show_static()
+            state, reason, waiting_vram = 'unloaded', 'game', False
+        else:
+            placement = placement_of(config, item['id'])
+            if renderer and not renderer.alive():
+                stop_renderer()
+                if item['type'] == 'video' or vram_allows_start(fresh=True):
+                    failures += 1
+                    failed_at = time.monotonic()
+                else:
+                    waiting_vram = True
+                    vram_strike()
+            if failures >= 3 and time.monotonic() - failed_at > 300:
+                failures = 0
+            if renderer and renderer.item['type'] != 'video' and not renderer.unloaded:
+                status, free = gpu_free_mb()
+                if status == 'ok' and free < GPU_PRESSURE_MB:
+                    renderer.yield_gpu()
+                    vram_strike()
+                    print(f'yielded the GPU ({free} MiB free) on {output}, item {item["id"]}', flush=True)
+                    show_static() if game_mode() else show_still(item, renderer.placement, renderer.properties)
+            properties = property_args(item, config)
+            if renderer and replaced and not renderer.unloaded:
+                stop_renderer()
+            replaced = False
+            if renderer is None and failures < 3:
+                show_still(item, placement, properties)
+                if game_mode():
+                    show_static()
+                else:
+                    try:
+                        frame = None if item['type'] == 'video' else frame_path(item, output, placement, properties)
+                        renderer = Renderer(item, output, placement, properties, frame)
+                        CURRENT_RENDERER[0] = renderer
+                        renderer.start()
+                        refresh = True
+                        waiting_vram = False
+                    except Deferred as why:
+                        renderer, waiting_vram = None, isinstance(why, NoVram)
+                        CURRENT_RENDERER[0] = None
+                    except (Fail, OSError) as failure:
+                        renderer, error, failures, failed_at = None, str(failure), 3, time.monotonic()
+                        waiting_vram = False
+            if renderer:
+                renderer.configure(placement, properties)
+                if renderer.unloaded:
+                    show_still(item, renderer.placement, renderer.properties)
+                if refresh or verify_tick % 5 == 0:
+                    if screen_locked():
+                        reason = 'locked'
+                    else:
+                        try:
+                            reason = pause_reason(hypr('monitors', 'all'), hypr('clients'), output)
+                        except (OSError, ValueError, subprocess.SubprocessError):
+                            pass
+                now = time.monotonic()
+                if not renderer.paused and not renderer.unloaded:
+                    renderer.ran += min(now - last_tick, 2.0)
+                    if (renderer.frame is not None and not frame_ready(renderer.frame)
+                            and not frame_failed(renderer.frame)):
+                        renderer.frame_play += min(now - last_tick, 2.0)
+                last_tick = now
+                wants_frame = (renderer.unloaded and reason in WINDOW_REASONS and renderer.item['type'] == 'scene'
+                               and renderer.frame is not None and not frame_ready(renderer.frame)
+                               and not frame_failed(renderer.frame) and renderer.frame_play < START_LIMIT)
+                applied, recaptured = False, False
+                try:
+                    if (renderer.unloaded and (not reason or wants_frame)) and game_mode():
+                        pass
+                    elif wants_frame:
+                        renderer.pause(False)
+                    elif reason in WINDOW_REASONS and not renderer.unloaded and in_grace(renderer, output):
+                        renderer.pause(False)
+                    else:
+                        applied = renderer.pause(bool(reason))
+                except (Fail, OSError) as failure:
+                    stop_renderer()
+                    error, failures, failed_at = str(failure), 3, time.monotonic()
+                    waiting_vram = False
+                if (renderer and renderer.frame is not None and renderer.frame.exists()
+                        and time.monotonic() - chosen_at < CAPTURE_WINDOW):
+                    frame_ready(renderer.frame)
+                if (renderer and not renderer.unloaded and renderer.item['type'] in {'scene', 'web'}
+                        and renderer.frame is not None and frame_failed(renderer.frame)
+                        and time.monotonic() - CAPTURE_TRIED.get(renderer.frame.name, -CAPTURE_RETRY) >= CAPTURE_RETRY
+                        and time.monotonic() - chosen_at < CAPTURE_WINDOW
+                        and renderer.ran >= START_GRACE and reason not in {'locked', 'dpms'}
+                        and not game_mode() and not screen_locked()):
+                    want = (config['mode'], config['item'])
+
+                    def cancelled():
+                        now = read_config()
+                        return (game_mode() or screen_locked() or (now['mode'], now['item']) != want
+                                or pause_reason(hypr('monitors', 'all'), [], output) == 'dpms')
+                    result = overlay_capture(renderer.item, output, renderer.placement, renderer.properties,
+                                             renderer.frame, cancelled)
+                    if result == 'failed':
+                        CAPTURE_TRIED[renderer.frame.name] = time.monotonic()
+                    if result == 'saved':
+                        print('frame captured from the screen', flush=True)
+                        stop_renderer()
+                        underlay = None
+                        recaptured = True
+                if renderer and (applied and reason and renderer.item['type'] == 'scene' and not renderer.unloaded
+                                 and renderer.paused_at and time.monotonic() - renderer.paused_at > LONG_PAUSE):
+                    renderer.unload()
+                    print(f'unloaded after {LONG_PAUSE:.0f} s paused ({reason})', flush=True)
+                    show_still(item, renderer.placement, renderer.properties)
+                if renderer is None:
+                    state = 'starting' if recaptured else 'error'
+                elif getattr(renderer, 'waiting_vram', False) and renderer.unloaded:
+                    state, reason, error = 'waiting', 'gpu', ''
+                elif applied and reason:
+                    state = 'paused'
+                elif applied and not renderer.settled and renderer.ran < START_LIMIT and not renderer_mapped(output, renderer.proc.pid if renderer.proc else -1):
+                    state = 'starting'
+                else:
+                    state = 'playing' if applied else 'starting'
+            elif game_mode():
+                state, reason = 'unloaded', 'game'
+            elif waiting_vram:
+                state, reason, error = 'waiting', 'gpu', ''
+            else:
+                show_static()
+                state, error = 'error', error or 'The renderer keeps crashing'
+        refresh = renderer is not None and (screen_locked() != (reason == 'locked') or state == 'starting')
+        current = {'state': state, 'reason': reason if state in {'paused', 'unloaded', 'waiting'} else '', 'error': error, 'output': output}
+        if current != last_status:
+            write_json(STATUS, current)
+            detail = f' ({current["reason"]})' if current['reason'] else ''
+            detail += f': {current["error"]}' if current['error'] else ''
+            print(f'{current["state"]}{detail} on {output}' + (f', item {item["id"]}' if item else ''), flush=True)
+            last_status = current
+
+def valid_color(value):
+    parts = str(value).split(' ')
+    try:
+        return len(parts) == 3 and all(re.fullmatch(r'\d+(\.\d+)?|\.\d+', p) and 0 <= float(p) <= 1 for p in parts)
+    except ValueError:
+        return False
+
+def edit_config(args):
+    if args.cmd == 'set':
+        if args.mode == 'live':
+            if not args.item or not re.fullmatch(r'[0-9A-Za-z_.-]+', args.item):
+                raise Fail('Choose an installed wallpaper')
+            item = find_item(args.item)
+            if not item:
+                raise Fail('This wallpaper is not installed yet: subscribe to it in Steam first')
+            if not item['supported']:
+                raise Fail(item['reason'])
+        config = read_config()
+        config.update(mode=args.mode, item=args.item or config['item'])
+        write_json(CONFIG, config)
+        return status()
+    elif args.cmd == 'mark':
+        if not re.fullmatch(r'[0-9A-Za-z_.-]+', args.item):
+            raise Fail('Unknown wallpaper')
+        config = read_config()
+        broken = [i for i in config['broken'] if i != args.item]
+        if args.state == 'broken':
+            broken.append(args.item)
+        config['broken'] = broken
+        write_json(CONFIG, config)
+        return {'id': args.item, 'broken': args.state == 'broken'}
+    elif args.cmd == 'prop':
+        item = find_item(args.item)
+        if not item:
+            raise Fail('Unknown wallpaper')
+        config = read_config()
+        known = {p['key']: p for p in item_properties(item, config)}
+        if not args.reset_all and args.key not in known:
+            raise Fail('This wallpaper has no such setting')
+        saved = config['properties'].setdefault(item['id'], {})
+        if args.reset_all:
+            saved.clear()
+        elif args.reset:
+            saved.pop(args.key, None)
+        else:
+            prop = known[args.key]
+            value = args.value if args.value is not None else ''
+            if prop['type'] == 'bool':
+                if value not in {'true', 'false', '1', '0'}:
+                    raise Fail('Use true or false')
+                value = value in {'true', '1'}
+            elif prop['type'] == 'slider':
+                try:
+                    value = float(value)
+                except ValueError:
+                    raise Fail('Use a number') from None
+                value = min(float(prop['max']), max(float(prop['min']), value))
+                value = int(round(value)) if prop.get('integer') else round(value, 4)
+            elif prop['type'] == 'combo' and value not in {o['value'] for o in prop.get('options', [])}:
+                raise Fail('Unknown option')
+            elif prop['type'] == 'color' and not valid_color(value):
+                raise Fail('Colours are three numbers from 0 to 1')
+            elif re.search(r'[\n=]', str(value)):
+                raise Fail('Text cannot contain line breaks or =')
+            saved[args.key] = value
+        if not saved:
+            config['properties'].pop(item['id'], None)
+        write_json(CONFIG, config)
+        return {'id': item['id'], 'properties': item_properties(item, config)}
+    elif args.cmd == 'place':
+        if not re.fullmatch(r'[0-9A-Za-z_.-]+', args.item):
+            raise Fail('Unknown wallpaper')
+        config = read_config()
+        place = placement_of(config, args.item)
+        if args.fit:
+            place['fit'] = args.fit
+        for axis in ('x', 'y'):
+            value = getattr(args, axis)
+            if value is not None:
+                if not 0 <= value <= 1:
+                    raise Fail('Positions run from 0 to 1')
+                place[axis] = round(value, 3)
+        config['placement'][args.item] = place
+        write_json(CONFIG, config)
+        return {'id': args.item, 'placement': place}
+
+def main():
+    parser = argparse.ArgumentParser(prog='oninix-livewall', add_help=True)
+    sub = parser.add_subparsers(dest='cmd', required=True)
+    sub.add_parser('status')
+    sub.add_parser('library')
+    sub.add_parser('tags')
+    q = sub.add_parser('query')
+    q.add_argument('--sort', default='trend')
+    q.add_argument('--days', type=int)
+    q.add_argument('--type', action='append')
+    q.add_argument('--rating', action='append')
+    q.add_argument('--tag', action='append')
+    q.add_argument('--resolution')
+    q.add_argument('--search')
+    q.add_argument('--cursor')
+    q.add_argument('--per-page', type=int)
+    s = sub.add_parser('set')
+    s.add_argument('mode', choices=['static', 'live'])
+    s.add_argument('item', nargs='?')
+    pl = sub.add_parser('place')
+    pl.add_argument('item')
+    pl.add_argument('--fit', choices=['fill', 'fit'])
+    pl.add_argument('--x', type=float)
+    pl.add_argument('--y', type=float)
+    mk = sub.add_parser('mark')
+    mk.add_argument('item')
+    mk.add_argument('state', choices=['broken', 'ok'])
+    pr = sub.add_parser('prop')
+    pr.add_argument('item')
+    pr.add_argument('key', nargs='?')
+    pr.add_argument('value', nargs='?')
+    pr.add_argument('--reset', action='store_true')
+    pr.add_argument('--reset-all', action='store_true')
+    o = sub.add_parser('open')
+    o.add_argument('item')
+    sub.add_parser('open-workshop')
+    sub.add_parser('install')
+    k = sub.add_parser('key')
+    k.add_argument('action', choices=['set'])
+    sub.add_parser('daemon')
+    args = parser.parse_args()
+    try:
+        if args.cmd == 'daemon':
+            return daemon()
+        if args.cmd == 'status':
+            result = status()
+        elif args.cmd == 'library':
+            broken = set(read_config()['broken'])
+            items = library()
+            for item in items:
+                item['broken'] = item['id'] in broken
+            items.sort(key=lambda i: i['broken'])
+            result = {'items': items}
+        elif args.cmd == 'tags':
+            result = {'type': TYPES[:3], 'rating': RATINGS, 'genre': GENRES, 'resolution': RESOLUTIONS, 'misc': MISC}
+        elif args.cmd == 'query':
+            result = query(args)
+        elif args.cmd in {'set', 'mark', 'prop', 'place'}:
+            with config_lock():
+                result = edit_config(args)
+        elif args.cmd == 'open':
+            if not re.fullmatch(r'[0-9]+', args.item):
+                raise Fail('Workshop ids are numeric')
+            result = steam_open(f'steam://url/CommunityFilePage/{args.item}')
+        elif args.cmd == 'open-workshop':
+            result = steam_open(f'steam://url/SteamWorkshopPage/{APPID}')
+        elif args.cmd == 'install':
+            result = steam_open(f'steam://install/{APPID}')
+        else:
+            result = set_key()
+    except Fail as error:
+        print(json.dumps({'error': str(error)}))
+        return 1
+    print(json.dumps(result))
+    return 0
+
+if __name__ == '__main__':
+    sys.exit(main())

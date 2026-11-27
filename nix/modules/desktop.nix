@@ -20,6 +20,18 @@ let
     printf '%s\n' "$message" | tee /dev/console
     exit 1
   '';
+  hyprpaperConfig = pkgs.writeText "oninix-hyprpaper.conf" ''
+    splash = false
+    ipc = on
+  '';
+  applyWallpaper = pkgs.writeShellScript "oninix-wallpaper-apply" ''
+    image=$(${share}/bin/oninix-theme wallpaper-path)
+    for attempt in $(seq 1 40); do
+      if hyprctl hyprpaper wallpaper ",$image" >/dev/null 2>&1; then exit 0; fi
+      sleep 0.25
+    done
+    exit 1
+  '';
   sessionCommand = "${lib.getExe config.programs.uwsm.package} start -F -e -D Hyprland -- /run/current-system/sw/bin/start-hyprland -- --config ${share}/share/oninix/hypr/hyprland.lua";
   session = pkgs.writeTextFile {
     name = "oninix-uwsm";
@@ -175,10 +187,13 @@ lib.mkIf cfg.enable {
     description = "OniNix wallpaper service";
     partOf = [ "graphical-session.target" ];
     after = [ "graphical-session.target" ];
-    script = ''
-      image=$(${share}/bin/oninix-theme wallpaper-path)
-      exec ${lib.getExe pkgs.swaybg} -i "$image" -m fill
-    '';
+    path = [ "/run/wrappers" "/run/current-system/sw" ];
+    serviceConfig = {
+      ExecStart = "${lib.getExe pkgs.hyprpaper} -c ${hyprpaperConfig}";
+      ExecStartPost = "${applyWallpaper}";
+      Restart = "on-failure";
+      RestartSec = 2;
+    };
   };
   systemd.user.services.oninix-keep-awake = {
     description = "Suspend automatic idle actions while the desktop is in use";

@@ -1,8 +1,8 @@
-{ lib, runCommand, nodejs, python3, lua5_4, nix, bash, qt6, ruff, shellcheck }:
+{ lib, runCommand, nodejs, python3, lua5_4, nix, bash, qt6, ruff, shellcheck, ffmpeg-headless }:
 let
   src = lib.cleanSource ../.;
 in
-runCommand "oninix-checks" { nativeBuildInputs = [ nodejs python3 lua5_4 nix bash qt6.qtdeclarative ruff shellcheck ]; } ''
+runCommand "oninix-checks" { nativeBuildInputs = [ nodejs python3 lua5_4 nix bash qt6.qtdeclarative ruff shellcheck ffmpeg-headless ]; } ''
   cp -r ${src} repo
   chmod -R u+w repo
   cd repo
@@ -33,6 +33,7 @@ runCommand "oninix-checks" { nativeBuildInputs = [ nodejs python3 lua5_4 nix bas
   for file in desktop/hypr/*.lua; do
     luac -p "$file"
   done
+  HOME=$TMPDIR python3 -m unittest discover -s tests
   export HOME=$TMPDIR NIX_STATE_DIR=$TMPDIR/nix-state
   ONINIX_TEMPLATE=nix/template python3 -I - <<'EOF'
   import importlib.machinery, importlib.util, json, pathlib, subprocess, tempfile

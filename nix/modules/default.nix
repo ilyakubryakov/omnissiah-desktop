@@ -16,6 +16,7 @@ in
     ./voice.nix
     ./spirit.nix
     ./titlebars.nix
+    ./live-wallpapers.nix
   ];
 
   options.oninix = {
