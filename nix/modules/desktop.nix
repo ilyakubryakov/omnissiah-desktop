@@ -73,6 +73,20 @@ lib.mkIf cfg.enable {
     path = [ config.services.hypridle.package pkgs.python3 pkgs.util-linux "/run/current-system/sw" ];
     serviceConfig.ExecStart = [ "" "${share}/share/oninix/hypr/scripts/idle.sh" ];
   };
+  systemd.user.services.oninix-notify-log = {
+    description = "Log notification arrivals and actions";
+    wantedBy = [ "graphical-session.target" ];
+    partOf = [ "graphical-session.target" ];
+    after = [ "graphical-session.target" ];
+    path = [ config.systemd.package ];
+    serviceConfig = {
+      ExecStart = "${share}/bin/oninix-notify-log --watch";
+      UMask = "0077";
+      NoNewPrivileges = true;
+      Restart = "on-failure";
+      RestartSec = "5s";
+    };
+  };
   qt = {
     enable = lib.mkDefault true;
     platformTheme = lib.mkDefault "qt5ct";

@@ -334,23 +334,52 @@ def network_counters(device):
     return {'received': counter('rx_bytes'), 'sent': counter('tx_bytes')}
 
 def networkmanager_state():
-    links = []
-    lines = run(['nmcli', '-t', '-f', 'DEVICE,TYPE,STATE,CONNECTION', 'device']).decode().splitlines()
-    for fields in map(split_nm, lines):
-        if len(fields) < 4 or fields[1] not in {'ethernet', 'wifi'} or fields[2] != 'connected':
+    fields = ['GENERAL.DEVICE', 'GENERAL.TYPE', 'GENERAL.STATE', 'GENERAL.CONNECTION', 'GENERAL.CON-UUID',
+              'IP4.ADDRESS', 'IP4.GATEWAY', 'IP4.DNS', 'IP6.ADDRESS', 'IP6.GATEWAY', 'IP6.DNS']
+    details = run(['nmcli', '-t', '-f', ','.join(fields), 'device', 'show']).decode().splitlines()
+    devices, values = {}, None
+    for line in details:
+        key, _, raw = line.partition(':')
+        if not raw:
             continue
-        device = fields[0]
-        details = run(['nmcli', '-t', '-f', 'GENERAL.CON-UUID,IP4.ADDRESS,IP4.GATEWAY,IP4.DNS,IP6.DNS', 'device', 'show', device]).decode().splitlines()
-        values = {}
-        for line in details:
-            key, _, value = line.partition(':')
-            values.setdefault(key.split('[')[0], []).append(value.replace('\\:', ':'))
-        def first(key):
-            return next(iter(values.get(key, [])), '')
-        links.append({'device': device, 'name': fields[3], 'type': fields[1],
-                      'uuid': first('GENERAL.CON-UUID'), 'address': first('IP4.ADDRESS'),
-                      'gateway': first('IP4.GATEWAY'), 'dns': values.get('IP4.DNS', []) + values.get('IP6.DNS', []),
+        value = split_nm(raw)[0]
+        if key == 'GENERAL.DEVICE':
+            values = devices.setdefault(value, {})
+        elif values is not None:
+            values.setdefault(key.split('[')[0], []).append(value)
+
+    def first(values, key):
+        return next(iter(values.get(key, [])), '')
+
+    active = {device: values for device, values in devices.items()
+              if first(values, 'GENERAL.TYPE') in {'ethernet', 'wifi'}
+              and first(values, 'GENERAL.STATE').split(' ', 1)[0] == '100'}
+    primary, gateway, family = None, None, 4
+    ip = shutil.which('ip') or '/usr/sbin/ip'
+    for version in (4, 6):
+        try:
+            routes = json.loads(run([ip, '-j', f'-{version}', 'route', 'show', 'default'], timeout=2))
+        except (OSError, ValueError, subprocess.SubprocessError):
+            continue
+        candidates = [route for route in routes
+                      if route.get('dev') in active and 'linkdown' not in route.get('flags', [])]
+        if candidates:
+            route = min(candidates, key=lambda row: row.get('metric', 0))
+            primary, gateway, family = route['dev'], route.get('gateway'), version
+            break
+    if primary is None and active:
+        primary = min(active, key=lambda device: first(active[device], 'GENERAL.TYPE') != 'ethernet')
+
+    links = []
+    for device, values in active.items():
+        prefix = f'IP{family if device == primary else 4}'
+        links.append({'device': device, 'name': first(values, 'GENERAL.CONNECTION'),
+                      'type': first(values, 'GENERAL.TYPE'), 'uuid': first(values, 'GENERAL.CON-UUID'),
+                      'address': first(values, prefix + '.ADDRESS'),
+                      'gateway': (gateway if device == primary else None) or first(values, prefix + '.GATEWAY'),
+                      'dns': values.get('IP4.DNS', []) + values.get('IP6.DNS', []),
                       **network_counters(device)})
+    links.sort(key=lambda link: link['device'] != primary)
     connectivity = run(['nmcli', '-t', '-f', 'CONNECTIVITY', 'general']).decode().strip()
     return {'manager': 'NetworkManager', 'editor': bool(shutil.which('nm-connection-editor')),
             'connectivity': connectivity, 'links': links}
@@ -406,7 +435,8 @@ def network_state():
                 state = fallback
         except (OSError, ValueError, KeyError, subprocess.SubprocessError):
             pass
-    return {**state, 'timestamp': time.time()}
+    primary = next((link['device'] for link in state['links']), None)
+    return {**state, 'primary': primary, 'timestamp': time.monotonic()}
 
 def network_dns(provider, uuid):
     state = network_state()
@@ -996,8 +1026,11 @@ def notification_update(owner, **changes):
         save(runtime() / 'notifications-state.json', state)
 
 def notifications(popup_only=False):
-    owner = notification_owner()
-    result = {'owner': owner}
+    result = {}
+    if popup_only:
+        notes.update_marker()
+    else:
+        result['owner'] = notification_owner()
     for kind, command in ([('current', 'list')] if popup_only else [('current', 'list'), ('history', 'history')]):
         raw = json.loads(run(['makoctl', command, '-j']))
         rows = raw.get('data', []) if isinstance(raw, dict) else raw
@@ -1015,7 +1048,7 @@ def notifications(popup_only=False):
             rows.append(n)
         return {'current': rows}
     ids = {n['id'] for n in result['current'] + result['history'] if isinstance(n.get('id'), int)}
-    state = notification_state(owner)
+    state = notification_state(result['owner'])
     cleared, hidden = state.get('cleared', 0), set(state.get('hidden', []))
     rules = notes.load_rules()
     quiet = set()
@@ -1148,7 +1181,8 @@ def clip_transform(identifier, kind):
             raise ValueError('Not base64-encoded text')
     else:
         raise ValueError('Unknown transform')
-    subprocess.run(['wl-copy'], input=result.encode(), stdout=subprocess.DEVNULL,
+    command = ['wl-copy', '--sensitive'] if kind == 'base64' else ['wl-copy']
+    subprocess.run(command, input=result.encode(), stdout=subprocess.DEVNULL,
                    stderr=subprocess.DEVNULL, timeout=6, check=True, env=ENV)
 
 def clipboard():
@@ -1523,6 +1557,8 @@ def action(command, args):
         game_started()
     elif command == 'game-closed' and not args:
         game_closed()
+    elif command == 'keep-awake' and not args:
+        run([SHARE / 'hypr/scripts/keep-awake.sh'], timeout=15)
     elif command == 'dnd' and not args:
         set_dnd('do-not-disturb' not in modes())
     elif command == 'nightlight' and not args:
@@ -1622,7 +1658,7 @@ def action(command, args):
         code = re.search(r'\b\d{4,8}\b', text)
         if not code:
             raise ValueError('No verification code found')
-        subprocess.run(['wl-copy'], input=code[0].encode(), check=True, timeout=6,
+        subprocess.run(['wl-copy', '--sensitive'], input=code[0].encode(), check=True, timeout=6,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=ENV)
     elif command == 'notification-open' and len(args) == 1 and args[0].isdigit():
         notification_open(int(args[0]))
