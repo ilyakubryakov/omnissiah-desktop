@@ -118,10 +118,16 @@ class DoctorTests(unittest.TestCase):
         identify = (113, 3, 'ata10.00: failed to IDENTIFY (I/O error, err_mask=0x4)')
         recovery = (114, 6, 'ata10.00: configured for UDMA/133')
         disk_error = (110, 3, 'ata10.00: I/O error reading a sector')
-        for rows, expected in [([wake, identify, recovery], 'ok'), ([wake, identify], 'fail'),
-                               ([identify, recovery], 'fail'), ([wake, disk_error, recovery], 'fail')]:
-            stdout = '\n'.join(json.dumps({'__REALTIME_TIMESTAMP': at * 1_000_000, 'PRIORITY': level, 'MESSAGE': message})
-                               for at, level, message in rows)
+        for rows, boots, expected in [
+            ([wake, identify, recovery], ['same'] * 3, 'ok'),
+            ([wake, identify], ['same'] * 2, 'fail'),
+            ([identify, recovery], ['same'] * 2, 'fail'),
+            ([wake, disk_error, recovery], ['same'] * 3, 'fail'),
+            ([wake, identify, recovery], ['previous', 'current', 'current'], 'fail'),
+        ]:
+            stdout = '\n'.join(json.dumps({'__REALTIME_TIMESTAMP': at * 1_000_000, 'PRIORITY': level,
+                                           'MESSAGE': message, '_BOOT_ID': boot})
+                               for (at, level, message), boot in zip(rows, boots))
             with self.subTest(rows=rows), patch.object(doctor, 'command',
                                                       return_value=subprocess.CompletedProcess([], 0, stdout, '')):
                 self.assertEqual(doctor.kernel()[0], expected)

@@ -53,7 +53,7 @@ def storage():
 
 def kernel():
     result = command('journalctl', '-k', '--since', '24 hours ago', '--no-pager',
-                     '-o', 'json', '--output-fields=MESSAGE,PRIORITY')
+                     '-o', 'json', '--output-fields=MESSAGE,PRIORITY,_BOOT_ID')
     if result.returncode or 'not seeing messages' in result.stderr:
         return 'warn', 'Kernel journal is unavailable to this user'
     entries = []
@@ -63,18 +63,20 @@ def kernel():
             stamp = event_time_us(entry) / 1_000_000
             message = entry.get('MESSAGE')
             if stamp and isinstance(message, str):
-                entries.append((stamp, int(entry.get('PRIORITY', 6)), message))
+                entries.append((entry.get('_BOOT_ID'), stamp, int(entry.get('PRIORITY', 6)), message))
         except (ValueError, TypeError, AttributeError):
             continue
-    wakes = [stamp for stamp, _, message in entries if RESUME.search(message)]
-    recovered = [(match[1], stamp) for stamp, _, message in entries if (match := ATA_RECOVERED.match(message))]
+    wakes = [(boot, stamp) for boot, stamp, _, message in entries if RESUME.search(message)]
+    recovered = [(boot, match[1], stamp) for boot, stamp, _, message in entries
+                 if (match := ATA_RECOVERED.match(message))]
     hits, retries = [], 0
-    for stamp, priority, message in entries:
+    for boot, stamp, priority, message in entries:
         if priority > 4 or not DISK_ERROR.search(message):
             continue
         identify = ATA_IDENTIFY.match(message)
-        if (identify and any(0 <= stamp - wake <= 120 for wake in wakes)
-                and any(port == identify[1] and 0 <= at - stamp <= 60 for port, at in recovered)):
+        if (identify and any(seen_boot == boot and 0 <= stamp - wake <= 120 for seen_boot, wake in wakes)
+                and any(seen_boot == boot and port == identify[1] and 0 <= at - stamp <= 60
+                        for seen_boot, port, at in recovered)):
             retries += 1
         else:
             hits.append(message)
