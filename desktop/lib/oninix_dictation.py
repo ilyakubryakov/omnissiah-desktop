@@ -19,13 +19,14 @@ from oninix_notebook import atomic
 
 STATE = Path(os.environ.get('ONINIX_DICTATION_STATE', str(Path.home() / '.local/state/oninix/dictation')))
 CONFIG = Path(os.environ.get('ONINIX_DICTATION_CONFIG', str(Path.home() / '.config/oninix/dictation.json')))
-SESSION_RUNTIME = os.environ.get('XDG_RUNTIME_DIR')
-DEFAULT_RUNTIME = Path(SESSION_RUNTIME) / f'oninix-dictation-{os.getuid()}' if SESSION_RUNTIME else STATE / 'runtime'
+SESSION_RUNTIME = Path(os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}')
+DEFAULT_RUNTIME = SESSION_RUNTIME / f'oninix-dictation-{os.getuid()}'
 RUNTIME = Path(os.environ.get('ONINIX_DICTATION_RUNTIME', DEFAULT_RUNTIME))
 SOCKET = RUNTIME / 'socket'
-VAD = speech.CACHE / 'ggml-silero-v6.2.0.bin'
 ASSISTANT = Path(shutil.which('oninix-spirit') or '/run/current-system/sw/bin/oninix-spirit')
-VAD_HASH = '2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987'
+TERMINALS = {'kitty', 'foot', 'alacritty', 'org.wezfurlong.wezterm', 'com.mitchellh.ghostty',
+             'org.kde.konsole', 'org.gnome.terminal', 'org.gnome.console', 'xfce4-terminal'}
+SHIFT_INSERT = {'emacs', 'xterm', 'uxterm', 'urxvt'}
 
 def settings(values=None):
     value = dict(model=speech.profile().get('model', 'base'), language='auto', vocabulary='')
@@ -41,15 +42,14 @@ def settings(values=None):
         speech.write(CONFIG, value)
     return value
 
-def available_vad():
-    return VAD.is_file() and VAD.stat().st_size == 885098 and speech.read(VAD.with_suffix('.verified')) == VAD_HASH
-
-def focus():
+def focus(allow_empty=False):
     locked = json.loads(subprocess.check_output(['hyprctl','-j','locked'], timeout=2))
     if locked.get('locked', True):
         raise ValueError('Dictation is unavailable on the lock screen.')
     window = json.loads(subprocess.check_output(['hyprctl','-j','activewindow'], timeout=2))
     if not window.get('address') or not window.get('pid'):
+        if allow_empty:
+            return {}
         raise ValueError('Focus a text field in an application first.')
     return {key:window.get(key) for key in ('address','pid','class','title','monitor','xwayland')}
 
@@ -75,17 +75,22 @@ def executable(name):
         raise ValueError(name + ' is not installed.')
     return found
 
-def insert_text(text, target, cancelled):
-    if not target.get('xwayland'):
-        speech.run([executable('wtype'),'-'],cancelled,input_text=text,timeout=10)
-        return
+def paste_shortcut(target):
+    name = str(target.get('class') or '').lower()
+    if name in TERMINALS:
+        return 'CTRL SHIFT', 'code:55'
+    if name in SHIFT_INSERT:
+        return 'SHIFT', 'code:118'
+    return 'CTRL', 'code:55'
 
+def insert_text(text, target, cancelled):
     paste = executable('wl-paste')
     copy = executable('wl-copy')
     types = subprocess.run([paste,'--list-types'],capture_output=True,timeout=3)
     offered = types.stdout.decode().splitlines()
     saved_type = next((t for t in offered if t.startswith('image/')), None)
-    saved_type = saved_type or next((t for t in ('text/html','text/plain;charset=utf-8','text/plain') if t in offered), None)
+    saved_type = saved_type or next((t for t in ('text/uri-list', 'text/html', 'text/plain;charset=utf-8', 'text/plain')
+                                    if t in offered), None)
     if offered and not saved_type:
         raise ValueError('Clipboard format cannot be preserved. Copy the dictation manually.')
     saved = None
@@ -104,15 +109,21 @@ def insert_text(text, target, cancelled):
         address = target.get('address','')
         if not re.fullmatch(r'0x[0-9a-f]+', address):
             raise ValueError('Window address is unknown. Your dictation is kept.')
-        speech.run(['hyprctl','dispatch',"hl.dsp.send_shortcut({mods='CTRL', key='code:55', window='address:" + address + "'})"],cancelled,timeout=3)
+        mods, key = paste_shortcut(target)
+        dispatch = f"hl.dsp.send_shortcut({{mods='{mods}', key='{key}', window='address:{address}'}})"
+        speech.run(['hyprctl', 'dispatch', dispatch], cancelled, timeout=3)
         time.sleep(.6)
     finally:
-        if owner.poll() is None:
-            command = [copy,'--type',saved_type] if saved_type else [copy,'--clear']
-            subprocess.run(command,input=saved,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=3,check=True)
-        if owner.poll() is None:
-            owner.terminate()
-        owner.wait(timeout=3)
+        try:
+            if owner.poll() is None:
+                sensitive = ['--sensitive'] if 'x-kde-passwordManagerHint' in offered else []
+                command = [copy, *sensitive, '--type', saved_type] if saved_type else [copy, '--clear']
+                subprocess.run(command, input=saved, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                               timeout=3, check=True)
+        finally:
+            if owner.poll() is None:
+                owner.terminate()
+            owner.wait(timeout=3)
 
 class Dictation:
     def __init__(self):
@@ -129,7 +140,13 @@ class Dictation:
         self.target = {}
         self.started = 0
         self.level = 0
-        self.text = (STATE / 'draft.txt').read_text() if (STATE / 'draft.txt').exists() else ''
+        self.draft = RUNTIME / 'draft.txt'
+        legacy = STATE / 'draft.txt'
+        if legacy != self.draft and legacy.exists():
+            if not self.draft.exists():
+                atomic(self.draft, legacy.read_text(encoding='utf-8'))
+            legacy.unlink()
+        self.text = self.draft.read_text(encoding='utf-8') if self.draft.exists() else ''
         self.phase = 'review' if self.text else 'error' if (RUNTIME / 'voice.wav').exists() else 'idle'
         self.message = 'Recovered text. Copy it when ready.' if self.text else 'An interrupted recording can be retried.' if self.phase == 'error' else ''
         self.nodes = []
@@ -154,7 +171,7 @@ class Dictation:
                         seconds=max(0,time.monotonic()-self.started) if self.phase=='recording' else 0,
                         monitor=self.target.get('monitor',-1), settings=settings(), devices=nodes,
                         microphone=speech.read(STATE/'device.json',{}).get('name','default'),
-                        ready=speech.model_ready(settings()['model']) and available_vad(), download=self.download,
+                        ready=speech.model_ready(settings()['model']) and speech.vad_ready(), download=self.download,
                         blocked=self.blocked)
 
     def stop_capture(self):
@@ -191,7 +208,7 @@ class Dictation:
                 if self.phase in ('recording','transcribing','cancelling'):
                     return self.status()
                 if self.text and self.phase == 'copied':
-                    self.text=''; (STATE/'draft.txt').unlink(missing_ok=True)
+                    self.text=''; self.draft.unlink(missing_ok=True)
                 if self.text:
                     self.blocked+=1
                     self.message='Previous text is still waiting. Copy or dismiss it, then hold the key again.'
@@ -201,12 +218,12 @@ class Dictation:
                     self.phase='error'; self.message='Voice is off: '+voice.get('reason','')+' Run oninix-voice-profile --force to enable it.'
                     return self.status()
                 config=settings()
-                if not speech.model_ready(config['model']) or not available_vad():
+                if not speech.model_ready(config['model']) or not speech.vad_ready():
                     self.phase='error'; self.message='Download the dictation models in Notebook → Meet → Setup.'
                     return self.status()
                 assistant=request.get('mode')=='assistant'
                 self.mode='assistant' if assistant else 'dictation'
-                self.target=focus()
+                self.target=focus(allow_empty=assistant)
                 expected=request.get('target')
                 if not assistant and expected is not None and (not isinstance(expected,dict) or
                         any(expected.get(k) != self.target.get(k) for k in ('address','pid'))):
@@ -214,7 +231,8 @@ class Dictation:
                 if assistant and not ASSISTANT.exists():
                     raise ValueError('The machine spirit is not set up yet.')
                 if not assistant:
-                    executable('wtype')
+                    executable('wl-copy')
+                    executable('wl-paste')
                 self.ducked=oninix_duck.duck('dictation')>=0
                 nodes=self.devices()
                 selected=speech.read(STATE/'device.json',{}).get('name','default')
@@ -248,19 +266,19 @@ class Dictation:
                     self.phase='cancelling'; self.message='Cancelling…'
                 else:
                     self.clear_audio(); self.phase='idle'; self.message=''; self.text=''
-                    (STATE/'draft.txt').unlink(missing_ok=True)
+                    self.draft.unlink(missing_ok=True)
             elif op == 'retry':
                 if self.phase not in ('error','review') or not (RUNTIME/'voice.wav').exists():
                     raise ValueError('There is no recording to retry.')
                 self.cancelled.clear(); self.config=settings(); self.launch_recognition(False)
             elif op == 'copy':
                 if not self.text: raise ValueError('There is no text to copy.')
-                subprocess.run(['wl-copy'],input=self.text.encode(),stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=3,check=True)
+                subprocess.run(['wl-copy', '--sensitive'],input=self.text.encode(),stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=3,check=True)
                 self.phase='copied'; self.message='Copied. Paste it where you need it.'
             elif op == 'dismiss':
                 if self.phase in ('recording','transcribing','cancelling'): return self.status()
                 self.text=''; self.phase='idle'; self.message=''
-                self.clear_audio(); (STATE/'draft.txt').unlink(missing_ok=True)
+                self.clear_audio(); self.draft.unlink(missing_ok=True)
             else: raise ValueError('Unknown dictation action.')
             if len(self.finished)>128: self.finished={self.token}
         return self.status()
@@ -278,7 +296,7 @@ class Dictation:
             text=''
             if samples and max(abs(s) for s in samples)>32:
                 (RUNTIME/'result.json').unlink(missing_ok=True)
-                command=[speech.binary('whisper-cli'),'-m',str(speech.model_path(self.config['model'])),'-f',str(RUNTIME/'input.wav'),'-l',self.config['language'],*speech.prompt_args(self.config.get('vocabulary', '')),'-t','4','--vad','-vm',str(VAD),'-oj','-of',str(RUNTIME/'result'),'-np']
+                command=[speech.binary('whisper-cli'),'-m',str(speech.model_path(self.config['model'])),'-f',str(RUNTIME/'input.wav'),'-l',self.config['language'],*speech.prompt_args(self.config.get('vocabulary', '')),'-t','4','--vad','-vm',str(speech.VAD),'-oj','-of',str(RUNTIME/'result'),'-np']
                 try:
                     speech.run(command,self.cancelled,timeout=300)
                 except ValueError:
@@ -293,14 +311,14 @@ class Dictation:
                 self.text=text
                 if not text:
                     self.phase='empty'; self.message='No speech detected'; self.clear_audio(); return
-                atomic(STATE/'draft.txt',text)
+                atomic(self.draft,text)
             if auto_insert and self.mode=='assistant':
                 result=subprocess.run([str(ASSISTANT),'ask'],input=text,text=True,stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,timeout=20)
                 with self.lock:
                     if result.returncode:
                         raise ValueError('The machine spirit did not take the text. Copy it and retry.')
                     self.phase='handed'; self.message='Sent to the machine spirit'; self.text=''
-                    (STATE/'draft.txt').unlink(missing_ok=True); self.clear_audio()
+                    self.draft.unlink(missing_ok=True); self.clear_audio()
                 return
             if auto_insert:
                 for _ in range(50):
@@ -310,14 +328,14 @@ class Dictation:
                 if auto_insert and self.keys_up.is_set() and same_window(self.target,focus()):
                     insert_text(text,self.target,self.cancelled)
                     self.phase='inserted'; self.message='Text inserted'; self.text=''
-                    (STATE/'draft.txt').unlink(missing_ok=True)
+                    self.draft.unlink(missing_ok=True)
                 else:
                     self.phase='review'; self.message='Text is ready. Focus changed or a shortcut key is still held; copy it when ready.'
                 self.clear_audio()
         except Exception as exc:
             with self.lock:
                 if self.cancelled.is_set() and not self.closed:
-                    self.phase='idle'; self.text=''; self.message=''; self.clear_audio(); (STATE/'draft.txt').unlink(missing_ok=True)
+                    self.phase='idle'; self.text=''; self.message=''; self.clear_audio(); self.draft.unlink(missing_ok=True)
                 else:
                     self.phase='review' if self.text else 'error'
                     self.message=str(exc) if isinstance(exc,ValueError) else 'Dictation failed. Your recording is kept; check the microphone and retry.'
@@ -343,7 +361,7 @@ class Dictation:
                     if self.process.poll() is not None: raise ValueError('Microphone recording stopped. Check the input device.')
                     if self.microphone not in [n['name'] for n in self.devices()]: raise ValueError('The microphone disconnected.')
                     if int(time.monotonic()*4)%4==0:
-                        focus()
+                        focus(allow_empty=self.mode=='assistant')
                     path=RUNTIME/'voice.wav'
                     if path.exists() and path.stat().st_size>4096:
                         with path.open('rb') as f: f.seek(-4096,2); values=array.array('h',f.read(4096))
@@ -355,13 +373,9 @@ class Dictation:
         try:
             key=settings()['model']
             self.download=dict(state='downloading',progress=0)
-            if not speech.model_ready(key):
-                speech.Meetings.download_model(self,key)
-                if not speech.model_ready(key): raise ValueError('Whisper download failed.')
-            if not available_vad():
-                speech.download_verified(
-                    VAD, 'https://huggingface.co/ggml-org/whisper-vad/resolve/main/' + VAD.name,
-                    885098, VAD_HASH)
+            speech.Meetings.download_model(self, key)
+            if not speech.model_ready(key) or not speech.vad_ready():
+                raise ValueError('Whisper download failed.')
             self.download=dict(state='ready',progress=100)
             if self.phase=='error': self.message='Models ready. Hold Right Alt in a text field.'
         except Exception:

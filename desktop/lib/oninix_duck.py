@@ -8,7 +8,8 @@ from pathlib import Path
 
 LEVEL = 0.2
 STALE = 180
-STATE = Path(os.environ.get('XDG_RUNTIME_DIR', '/run/user/%d' % os.getuid())) / 'oninix-duck.json'
+STATE = Path(os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}') / 'oninix-duck.json'
+QUIET = STATE.with_name('oninix-duck-quiet')
 
 def _run(*command):
     try:
@@ -33,6 +34,12 @@ def _volume(node):
     return float(found[1]) if found else None
 
 def _set(node, value):
+    try:
+        temporary = QUIET.with_suffix('.tmp')
+        temporary.write_text(f'{time.time() + 2:.3f} {value:.3f}\n')
+        temporary.replace(QUIET)
+    except OSError:
+        pass
     _run('wpctl', 'set-volume', str(node), f'{value:.3f}')
 
 def _locked(change):

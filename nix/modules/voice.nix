@@ -17,7 +17,6 @@ in
       (whisper-cpp.override acceleration)
       (llama-cpp.override acceleration)
       ffmpeg-headless
-      wtype
       pciutils
     ];
 

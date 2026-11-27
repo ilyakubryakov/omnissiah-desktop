@@ -160,7 +160,7 @@ buildEnv {
     quickshell fuzzel rofi mako swaybg wl-clipboard cliphist grim slurp swappy wf-recorder
     hyprpicker (tesseract.override { enableLanguages = [ "eng" "rus" ]; }) zbar
     brightnessctl playerctl pavucontrol kdePackages.dolphin papirus-icon-theme
-    libnotify glib jq bubblewrap gum nvd wtype pciutils whisper-cpp ffmpeg-headless btop
+    libnotify glib jq bubblewrap gum nvd pciutils whisper-cpp ffmpeg-headless btop
   ]) ++ extraPackages;
   pathsToLink = [ "/bin" "/share" ];
 }

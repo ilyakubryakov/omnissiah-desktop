@@ -45,6 +45,11 @@ MODELS = {
 }
 LANGUAGE = re.compile(r'auto|[a-z]{2,3}')
 PROFILE = Path(os.environ.get('XDG_STATE_HOME', str(Path.home() / '.local/state'))) / 'oninix/voice.json'
+VAD = CACHE / 'ggml-silero-v6.2.0.bin'
+VAD_SIZE = 885098
+VAD_HASH = '2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987'
+MERGE_GAP = 1.5
+MERGE_LIMIT = 600
 
 def profile():
     return read(PROFILE, {}) or {}
@@ -113,6 +118,17 @@ def model_path(key):
 def model_ready(key):
     p = model_path(key)
     return p.is_file() and p.stat().st_size == MODELS[key][1] and read(p.with_suffix('.verified'), '') == MODELS[key][2]
+
+def vad_ready():
+    try:
+        return VAD.stat().st_size == VAD_SIZE and read(VAD.with_suffix('.verified'), '') == VAD_HASH
+    except (OSError, ValueError):
+        return False
+
+def fetch_vad():
+    if not vad_ready():
+        download_verified(VAD, 'https://huggingface.co/ggml-org/whisper-vad/resolve/main/' + VAD.name,
+                          VAD_SIZE, VAD_HASH)
 
 def download_verified(path, url, size, checksum, progress=None):
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -212,6 +228,28 @@ def file_title(title):
 
 def render_transcript(segments):
     return '\n'.join(f'[{stamp(s["start"])}] {s["source"]}: {s["text"].strip()}' for s in sorted(segments, key=lambda s: s['start']))
+
+def clean_segments(segments):
+    result, last = [], {}
+    for segment in sorted(segments, key=lambda row: row['start']):
+        text = ' '.join(segment['text'].split())
+        key = re.sub(r'\W+', ' ', text.casefold()).strip()
+        if not key:
+            continue
+        start, source = segment['start'], segment['source']
+        end = segment.get('end', start)
+        seen = last.get(source)
+        last[source] = (key, end)
+        if seen and seen[0] == key and start - seen[1] < 30:
+            continue
+        previous = result[-1] if result else None
+        if (previous and previous['source'] == source and start - previous['end'] <= MERGE_GAP
+                and len(previous['text']) + len(text) < MERGE_LIMIT):
+            previous['text'] += ' ' + text
+            previous['end'] = max(previous['end'], end)
+        else:
+            result.append(dict(start=start, end=end, source=source, text=text))
+    return result
 
 def schema():
     return {'type': 'object', 'additionalProperties': False, 'required': ['summary', 'decisions', 'tasks', 'translation'], 'properties': {
@@ -319,7 +357,8 @@ class Meetings:
             body = f'Starts at {start:%H:%M}. Recording begins only when you press Record.'
             actions = ['--action=record=Record']
             if previous:
-                body += f' Last time: {previous[1]} open task' + ('' if previous[1] == 1 else 's') + '.'
+                if previous[1]:
+                    body += f' Last time: {previous[1]} open task' + ('' if previous[1] == 1 else 's') + '.'
                 actions.append('--action=last=Last notes')
             p = subprocess.Popen(['notify-send', '--app-name=OniNix Meetings', '--urgency=critical', '--icon=media-record', '--print-id',
                                   *actions, '--action=dismiss=Dismiss', '--', event['title'], body],
@@ -342,10 +381,7 @@ class Meetings:
         try:
             nodes = devices()
             pick = lambda kind: next((n['name'] for n in nodes if n['kind'] == kind and n['default']), '')
-            self.handle(dict(op='start', title=event['title'], output=pick('output'), mic=pick('mic')))
-            with self.lock:
-                if self.capture:
-                    self.patch(self.capture, event=event)
+            self.handle(dict(op='start', title=event['title'], output=pick('output'), mic=pick('mic')), event=event)
         except Exception as exc:
             subprocess.run(['notify-send', '--app-name=OniNix Meetings', 'Recording did not start', str(exc)[:200]], timeout=3, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
@@ -390,7 +426,8 @@ class Meetings:
                 nodes = self.audio_devices()
             except Exception:
                 nodes = []
-            return dict(jobs=rows, settings=preferences(), devices=nodes, models={key: model_ready(key) for key in MODELS}, download=self.download, engine=bool(shutil.which('whisper-cli') or (Path.home() / '.local/share/oninix/tools/whisper/bin/whisper-cli').exists()))
+            vad = vad_ready()
+            return dict(jobs=rows, settings=preferences(), devices=nodes, models={key: vad and model_ready(key) for key in MODELS}, download=self.download, engine=bool(shutil.which('whisper-cli') or (Path.home() / '.local/share/oninix/tools/whisper/bin/whisper-cli').exists()))
 
     def start_segment(self, job):
         live = {d['name'] for d in self.audio_devices()}
@@ -456,7 +493,7 @@ class Meetings:
                     self.stop_capture(); self.capture = None
                     self.patch(job['id'], state='interrupted', duration=time.time() - job['started'], error=str(exc))
 
-    def handle(self, request):
+    def handle(self, request, *, event=None):
         op = request.get('op')
         if op == 'status':
             return self.status()
@@ -486,7 +523,8 @@ class Meetings:
                     raise ValueError('Choose an available output and microphone.')
                 now = datetime.now().astimezone()
                 title = ' '.join(str(request.get('title', '')).split())[:180]
-                event = None if title else calendar_event(now)
+                if event is None and not title:
+                    event = calendar_event(now)
                 job = dict(id=uuid.uuid4().hex, title=title or (event and event['title']) or 'Meeting', created=now.isoformat(), started=time.time(), state='recording', sources=sources, settings=config, segments=[], error='')
                 if event:
                     job['event'] = event
@@ -519,6 +557,11 @@ class Meetings:
                     self.cancel.set()
                 elif job['state'] == 'queued':
                     self.patch(job['id'], state='interrupted', error='Processing cancelled. Audio is kept.')
+            elif op == 'delete':
+                job = self.get(request.get('id'))
+                if job['state'] in ACTIVE | BUSY or job['id'] in (self.processing, self.capture):
+                    raise ValueError('Stop or cancel this recording before deleting it.')
+                shutil.rmtree(self.folder(job))
             elif op in ('publish', 'tasks'):
                 return self.publish(request.get('id'), tasks=op == 'tasks')
             else:
@@ -531,9 +574,11 @@ class Meetings:
 
         try:
             CACHE.mkdir(parents=True, exist_ok=True)
-            if shutil.disk_usage(CACHE).free < MODELS[key][1] + 256 * 1024 * 1024:
-                raise ValueError('Not enough storage for this model.')
-            fetch_model(key, progress)
+            if not model_ready(key):
+                if shutil.disk_usage(CACHE).free < MODELS[key][1] + 256 * 1024 * 1024:
+                    raise ValueError('Not enough storage for this model.')
+                fetch_model(key, progress)
+            fetch_vad()
             self.download = dict(model=key, state='ready', progress=100)
         except Exception:
             self.download = dict(model=key, state='error', message='Model download or checksum verification failed. Check your connection and free space, then retry.')
@@ -557,8 +602,8 @@ class Meetings:
     def transcribe(self, job):
         engine = binary('whisper-cli')
         key = job['settings']['model']
-        if not model_ready(key):
-            raise ValueError('Download the selected Whisper model, then Retry. Recording is safe.')
+        if not model_ready(key) or not vad_ready():
+            raise ValueError('Download the selected Whisper model and speech filter, then Retry. Recording is safe.')
         folder = self.folder(job)
         segments = []
         parts = [(s, role, name) for s in job['segments'] for role, name in s['files'].items()]
@@ -572,7 +617,7 @@ class Meetings:
                 duration = f.getnframes() / f.getframerate()
             for offset in range(0, math.ceil(duration), 600):
                 self.patch(job['id'], progress=f'Track {index + 1}/{len(parts)} · {stamp(offset)} / {stamp(duration)}')
-                prefix = folder / f'{Path(name).stem}-{offset}-{key}-{job["settings"]["language"]}'
+                prefix = folder / f'{Path(name).stem}-{offset}-{key}-{job["settings"]["language"]}-vad'
                 result = prefix.with_suffix('.json')
                 try:
                     cached = read(result, {})
@@ -587,7 +632,9 @@ class Meetings:
                     if not samples or max(abs(x) for x in samples) < 16:
                         write(result, {'transcription': []})
                         continue
-                    run([engine, '-m', str(model_path(key)), '-f', str(chunk), '-l', job['settings']['language'], *prompt_args(shared_vocabulary()), '-t', '4', '-oj', '-of', str(prefix), '-np'], self.cancel, timeout=7200)
+                    run([engine, '-m', str(model_path(key)), '-f', str(chunk), '-l', job['settings']['language'],
+                         *prompt_args(shared_vocabulary()), '-t', '4', '--vad', '-vm', str(VAD),
+                         '-oj', '-of', str(prefix), '-np'], self.cancel, timeout=7200)
                 value = read(result, {})
                 if not isinstance(value.get('transcription'), list):
                     result.unlink(missing_ok=True)
@@ -595,9 +642,14 @@ class Meetings:
                 for s in value['transcription']:
                     text = s.get('text', '').strip()
                     if text and not re.fullmatch(r'\[.*\]|\(.*\)', text):
-                        segments.append(dict(start=part['offset'] + offset + s['offsets']['from'] / 1000, source='Microphone' if role == 'mic' else 'Meeting audio', text=text))
+                        base = part['offset'] + offset
+                        times = s['offsets']
+                        segments.append(dict(start=base + times['from'] / 1000,
+                                             end=base + times.get('to', times['from']) / 1000,
+                                             source='Microphone' if role == 'mic' else 'Meeting audio', text=text))
             repaired.unlink(missing_ok=True)
             (folder / 'chunk.wav').unlink(missing_ok=True)
+        segments = clean_segments(segments)
         if not segments:
             raise ValueError('No speech was found. Original audio is kept; check the selected devices.')
         write(folder / 'transcript.json', segments)
