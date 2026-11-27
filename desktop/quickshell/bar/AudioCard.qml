@@ -6,10 +6,10 @@ import "../shared" as Shared
 ColumnLayout {
     id: root
     signal detailsRequested()
-    spacing: 14
+    spacing: Shared.DesktopStyle.px(14)
     RowLayout {
         Layout.fillWidth: true
-        UiLabel { text: "SOUND"; color: Colors.accent; font.pixelSize: Shared.DesktopStyle.px(11); font.letterSpacing: 2 }
+        UiLabel { text: "SOUND"; color: Colors.accent; font.pixelSize: Shared.DesktopStyle.px(11); font.letterSpacing: Shared.DesktopStyle.px(2) }
         Item { Layout.fillWidth: true }
         UiButton { text: "Devices & apps"; onClicked: root.detailsRequested() }
     }

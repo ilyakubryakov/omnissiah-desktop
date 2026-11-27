@@ -43,7 +43,7 @@ Dropdown {
             id: entry
             required property var modelData
             Layout.fillWidth: true
-            implicitHeight: modelData.isSeparator ? 9 : row.implicitHeight
+            implicitHeight: modelData.isSeparator ? Shared.DesktopStyle.px(9) : row.implicitHeight
 
             Rectangle {
                 visible: entry.modelData.isSeparator

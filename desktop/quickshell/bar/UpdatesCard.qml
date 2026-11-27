@@ -8,7 +8,7 @@ import "../shared" as Shared
 ColumnLayout {
     id: root
     signal updateRequested()
-    property real maxHeight: 600
+    property real maxHeight: Shared.DesktopStyle.px(600)
     property bool details: false
     readonly property bool layerMode: Quickshell.env("ONINIX_LAYER") === "1"
     readonly property var updates: Shared.UpdatesData
@@ -72,7 +72,7 @@ ColumnLayout {
             font.features: { "tnum": 1 }
         }
         ColumnLayout {
-            Layout.fillWidth: true; spacing: 2
+            Layout.fillWidth: true; spacing: Shared.DesktopStyle.px(2)
             UiLabel { Layout.fillWidth: true; text: root.headline; color: root.tone; wrapMode: Text.Wrap; font.pixelSize: Shared.DesktopStyle.px(15); font.weight: Font.DemiBold }
             Note { text: root.subline; color: Colors.muted }
         }

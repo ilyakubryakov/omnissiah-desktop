@@ -18,6 +18,7 @@ ColumnLayout {
     readonly property string targetSlot: wallpaper.mode === "variant" ? (wallpaperVariant || activeVariant) : "shared"
     readonly property string selectedWallpaper: wallpaper[targetSlot] || wallpaper.shared || ""
     readonly property int sliderWidth: Shared.DesktopStyle.px(300)
+    readonly property int wideGridWidth: Shared.DesktopStyle.px(560)
     function title(id) {
         return ({"tesla-day":"Tesla Day", "tesla-night":"Tesla Night", "graphite":"Graphite", "omnissiah":"Omnissiah", "kanagawa-lotus":"Lotus · light", "kanagawa-dragon":"Dragon · dark"})[id] || id.split("-").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ")
     }
@@ -54,7 +55,7 @@ ColumnLayout {
         SettingsRow {
             stacked: true
             GridLayout {
-                Layout.fillWidth: true; columns: width < 560 ? 2 : 3
+                Layout.fillWidth: true; columns: width < root.wideGridWidth ? 2 : 3
                 columnSpacing: Shared.DesktopStyle.px(12); rowSpacing: Shared.DesktopStyle.px(12)
                 Repeater {
                     model: root.appearance.palettes
@@ -65,7 +66,7 @@ ColumnLayout {
                         Layout.fillWidth: true; implicitHeight: Shared.DesktopStyle.px(84)
                         color: modelData.background
                         radius: Shared.DesktopStyle.radiusSmall
-                        border.width: active ? 2 : 1
+                        border.width: active ? Shared.DesktopStyle.px(2) : 1
                         border.color: active || activeFocus || paletteMouse.containsMouse ? modelData.accent : Colors.selection
                         Behavior on border.color { ColorAnimation { duration: Shared.DesktopStyle.fast } }
                         activeFocusOnTab: true
@@ -79,7 +80,7 @@ ColumnLayout {
                         Keys.onSpacePressed: choose()
                         Column {
                             anchors.fill: parent; anchors.margins: Shared.DesktopStyle.px(14); spacing: Shared.DesktopStyle.px(8)
-                            Rectangle { width: Shared.DesktopStyle.px(32); height: Shared.DesktopStyle.px(4); radius: 2; color: paletteCard.modelData.accent }
+                            Rectangle { width: Shared.DesktopStyle.px(32); height: Shared.DesktopStyle.px(4); radius: Shared.DesktopStyle.px(2); color: paletteCard.modelData.accent }
                             Text { text: root.title(paletteCard.modelData.id); color: paletteCard.modelData.foreground; font.family: Colors.textFont; font.pixelSize: Shared.DesktopStyle.px(15) }
                             Text { text: paletteCard.active ? "Active" : paletteCard.modelData.mode === "light" ? "Light" : "Dark"; color: paletteCard.modelData.accent; font.family: Colors.textFont; font.pixelSize: Shared.DesktopStyle.px(11) }
                         }
@@ -192,7 +193,7 @@ ColumnLayout {
         SettingsRow {
             stacked: true
             GridLayout {
-                columns: width < 560 ? 2 : 4
+                columns: width < root.wideGridWidth ? 2 : 4
                 Layout.fillWidth: true; columnSpacing: Shared.DesktopStyle.px(12); rowSpacing: Shared.DesktopStyle.px(12)
                 Repeater {
                     model: PanelStyle.presets
@@ -203,7 +204,7 @@ ColumnLayout {
                         Layout.fillWidth: true; implicitHeight: Shared.DesktopStyle.px(124)
                         radius: Shared.DesktopStyle.radiusSmall
                         color: Colors.background
-                        border.width: active ? 2 : 1
+                        border.width: active ? Shared.DesktopStyle.px(2) : 1
                         border.color: active || activeFocus ? Colors.accent : Colors.selection
                         activeFocusOnTab: true
                         enabled: !DesktopData.busy
@@ -222,12 +223,12 @@ ColumnLayout {
                                     required property bool modelData
                                     readonly property bool flat: styleCard.modelData.id === "flat"
                                     readonly property bool floating: styleCard.modelData.id === "floating"
-                                    x: flat ? 0 : 7; width: styleCard.modelData.id === "islands" ? parent.width * 0.35 : parent.width - 2 * x; height: Shared.DesktopStyle.px(9)
-                                    y: modelData ? (floating ? 6 : 0) : parent.height - height - (floating ? 6 : 0)
+                                    x: flat ? 0 : Shared.DesktopStyle.px(7); width: styleCard.modelData.id === "islands" ? parent.width * 0.35 : parent.width - 2 * x; height: Shared.DesktopStyle.px(9)
+                                    y: modelData ? (floating ? Shared.DesktopStyle.px(6) : 0) : parent.height - height - (floating ? Shared.DesktopStyle.px(6) : 0)
                                     color: Colors.accent
-                                    topLeftRadius: flat || (!floating && modelData) ? 0 : 4
+                                    topLeftRadius: flat || (!floating && modelData) ? 0 : Shared.DesktopStyle.px(4)
                                     topRightRadius: topLeftRadius
-                                    bottomLeftRadius: flat || (!floating && !modelData) ? 0 : 4
+                                    bottomLeftRadius: flat || (!floating && !modelData) ? 0 : Shared.DesktopStyle.px(4)
                                     bottomRightRadius: bottomLeftRadius
                                 }
                             }

@@ -23,7 +23,8 @@ PanelWindow {
 
     readonly property int cellW: Shared.DesktopStyle.px(136)
     readonly property int cellH: Shared.DesktopStyle.px(136)
-    readonly property int columns: Math.max(4, Math.min(8, Math.floor((width - 160) / cellW)))
+    readonly property int gridGutters: Shared.DesktopStyle.px(160)
+    readonly property int columns: Math.max(1, Math.min(8, Math.floor((width - gridGutters) / cellW)))
     readonly property bool canDrag: query === ""
 
     readonly property var rules: [
@@ -296,7 +297,7 @@ PanelWindow {
             Row {
                 id: header
                 anchors.horizontalCenter: parent.horizontalCenter
-                y: 64
+                y: Shared.DesktopStyle.px(64)
                 spacing: Shared.DesktopStyle.px(12)
 
                 Rectangle {
@@ -310,7 +311,7 @@ PanelWindow {
                     Text {
                         id: lens
                         anchors.verticalCenter: parent.verticalCenter
-                        x: 16
+                        x: Shared.DesktopStyle.px(16)
                         text: "\u{F0349}"
                         color: Colors.muted
                         font.family: Colors.iconFont
@@ -326,7 +327,7 @@ PanelWindow {
                         color: Colors.bright
                         selectionColor: Colors.selection
                         font.family: Colors.textFont
-                        font.pixelSize: Colors.fontSize + 3
+                        font.pixelSize: Colors.fontSize + Shared.DesktopStyle.px(3)
                         clip: true
                         text: root.query
                         onTextEdited: root.query = text
@@ -387,11 +388,11 @@ PanelWindow {
                 Text {
                     visible: root.query !== "" && root.results.length === 0
                     anchors.horizontalCenter: parent.horizontalCenter
-                    y: 40
+                    y: Shared.DesktopStyle.px(40)
                     text: "No apps match"
                     color: Colors.muted
                     font.family: Colors.textFont
-                    font.pixelSize: Colors.fontSize + 3
+                    font.pixelSize: Colors.fontSize + Shared.DesktopStyle.px(3)
                 }
             }
         }
@@ -413,8 +414,8 @@ PanelWindow {
                 id: folderPanel
                 readonly property int cols: Math.min(6, root.columns)
                 anchors.centerIn: parent
-                width: cols * root.cellW + 48
-                height: Math.min(parent.height * 0.75, 96 + Math.max(1, Math.ceil(root.folderApps(root.openFolder).length / cols)) * root.cellH + 24)
+                width: cols * root.cellW + 2 * Shared.DesktopStyle.px(24)
+                height: Math.min(parent.height * 0.75, Shared.DesktopStyle.px(96) + Math.max(1, Math.ceil(root.folderApps(root.openFolder).length / cols)) * root.cellH + Shared.DesktopStyle.px(24))
                 radius: Shared.DesktopStyle.px(24)
                 color: Qt.rgba(Colors.background.r, Colors.background.g, Colors.background.b, 0.88)
                 border.width: 1
@@ -424,8 +425,8 @@ PanelWindow {
                 TextInput {
                     id: title
                     anchors.horizontalCenter: parent.horizontalCenter
-                    y: 26
-                    width: Math.min(parent.width - 160, Math.max(contentWidth + 8, 120))
+                    y: Shared.DesktopStyle.px(26)
+                    width: Math.min(parent.width - Shared.DesktopStyle.px(160), Math.max(contentWidth + Shared.DesktopStyle.px(8), Shared.DesktopStyle.px(120)))
                     horizontalAlignment: TextInput.AlignHCenter
                     text: root.openFolder !== "" && root.st.folders[root.openFolder] ? root.st.folders[root.openFolder].name : ""
                     color: Colors.bright
@@ -439,7 +440,7 @@ PanelWindow {
                 }
                 Rectangle {
                     anchors.bottom: title.bottom
-                    anchors.bottomMargin: -4
+                    anchors.bottomMargin: -Shared.DesktopStyle.px(4)
                     anchors.horizontalCenter: title.horizontalCenter
                     width: title.width
                     height: 1
@@ -448,8 +449,8 @@ PanelWindow {
                 Rectangle {
                     anchors.right: parent.right
                     anchors.rightMargin: Shared.DesktopStyle.px(20)
-                    y: 22
-                    width: ungroupLabel.implicitWidth + 24
+                    y: Shared.DesktopStyle.px(22)
+                    width: ungroupLabel.implicitWidth + Shared.DesktopStyle.px(24)
                     height: Shared.DesktopStyle.px(32)
                     radius: Shared.DesktopStyle.px(16)
                     color: ungroup.containsMouse ? Qt.rgba(Colors.bright.r, Colors.bright.g, Colors.bright.b, 0.1) : "transparent"
@@ -493,7 +494,7 @@ PanelWindow {
                         text: "Drag apps here"
                         color: Colors.muted
                         font.family: Colors.textFont
-                        font.pixelSize: Colors.fontSize + 2
+                        font.pixelSize: Colors.fontSize + Shared.DesktopStyle.px(2)
                     }
                 }
             }
@@ -507,14 +508,14 @@ PanelWindow {
             height: Shared.DesktopStyle.px(80)
             opacity: 0.9
             source: root.drag.startsWith("app:") && root.apps[root.drag.slice(4)] ? root.iconFor(root.apps[root.drag.slice(4)]) : ""
-            sourceSize.width: 128
-            sourceSize.height: 128
+            sourceSize.width: Shared.DesktopStyle.px(128)
+            sourceSize.height: Shared.DesktopStyle.px(128)
             fillMode: Image.PreserveAspectFit
         }
         Rectangle {
             visible: root.drag.startsWith("folder:")
-            x: root.dragPos.x - 40
-            y: root.dragPos.y - 40
+            x: root.dragPos.x - width / 2
+            y: root.dragPos.y - height / 2
             width: Shared.DesktopStyle.px(80)
             height: Shared.DesktopStyle.px(80)
             radius: Shared.DesktopStyle.px(20)

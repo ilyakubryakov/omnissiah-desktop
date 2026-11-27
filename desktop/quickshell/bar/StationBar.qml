@@ -43,7 +43,7 @@ PanelWindow {
         let x = 0
         items.forEach((item, index) => {
             item.x = items.length === 1 ? (panelContent.width - item.width) / 2 : x
-            if (items.length === 3 && index === 1) item.x = Math.max(items[0].width + 8, Math.min((panelContent.width - item.width) / 2, panelContent.width - items[2].width - item.width - 8))
+            if (items.length === 3 && index === 1) item.x = Math.max(items[0].width + Shared.DesktopStyle.px(8), Math.min((panelContent.width - item.width) / 2, panelContent.width - items[2].width - item.width - Shared.DesktopStyle.px(8)))
             x += item.width + gap
         })
         if (backdrop.groups.length !== items.length || items.some((item, i) => item !== backdrop.groups[i])) backdrop.groups = items
@@ -69,7 +69,7 @@ PanelWindow {
                 id: slot
                 required property string modelData
                 required property int index
-                readonly property real budget: Math.max(48, (panelContent.width - 12 * Math.max(0, shellWindow.groups.length - 1)) * shellWindow.weights[modelData] / Math.max(1, shellWindow.weightSum))
+                readonly property real budget: Math.max(Shared.DesktopStyle.px(48), (panelContent.width - Shared.DesktopStyle.px(12) * Math.max(0, shellWindow.groups.length - 1)) * shellWindow.weights[modelData] / Math.max(1, shellWindow.weightSum))
                 readonly property color tone: ShellLayout.toneColor(ShellLayout.toneName(modelData))
                 readonly property real strength: ShellLayout.toneName(modelData) === "none" ? 0 : ShellLayout.groupStrength
                 readonly property real hoverTint: content.item ? content.item.hoverTint : 0
@@ -97,7 +97,7 @@ PanelWindow {
                         Component { id: workspaces; BarWorkspaces { bar: shellWindow; budget: slot.budget } }
                         Component { id: status; BarGroup { group: "status"; BarItems { bar: shellWindow; group: "status" } } }
                         Component { id: media; BarGroup { group: "media"; BarMedia { barWindow: shellWindow; availableWidth: Math.min(panelContent.width, slot.budget * 2.8); cal: shellWindow.cal; onOpenCalendar: shellWindow.openCalendar() } } }
-                        Component { id: window; BarGroup { group: "window"; BarWindow { barWindow: shellWindow; availableWidth: Math.max(0, slot.budget - 230); compact: slot.budget < 245 } } }
+                        Component { id: window; BarGroup { group: "window"; BarWindow { barWindow: shellWindow; availableWidth: Math.max(0, slot.budget - Shared.DesktopStyle.px(230)); compact: slot.budget < Shared.DesktopStyle.px(245) } } }
                         Component { id: metrics; BarGroup { group: "metrics"; BarMetrics { barWindow: shellWindow; availableWidth: panelContent.width } } }
                     }
                 }

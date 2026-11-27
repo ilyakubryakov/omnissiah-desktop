@@ -7,7 +7,7 @@ RowLayout {
     id: root
     required property var barWindow
     implicitHeight: PanelStyle.barHeight
-    spacing: 2
+    spacing: Shared.DesktopStyle.px(2)
     Layout.fillHeight: true
 
     StatusChip {
@@ -25,7 +25,7 @@ RowLayout {
             cardWidth: Shared.DesktopStyle.px(500)
             DoctorCard {
                 Layout.fillWidth: true
-                maxHeight: (root.barWindow.screen ? root.barWindow.screen.height : 1080) * 0.6
+                maxHeight: (root.barWindow.screen ? root.barWindow.screen.height : Shared.DesktopStyle.px(1080)) * 0.6
                 onRepairRequested: doctorPopup.dismiss()
             }
         }
@@ -48,7 +48,7 @@ RowLayout {
             triggerHovered: updatesSeg.hovered
             UpdatesCard {
                 Layout.fillWidth: true
-                maxHeight: (root.barWindow.screen ? root.barWindow.screen.height : 1080) * 0.6
+                maxHeight: (root.barWindow.screen ? root.barWindow.screen.height : Shared.DesktopStyle.px(1080)) * 0.6
                 onUpdateRequested: {
                     updatesPopup.dismiss()
                     updatesSeg.updates.launch()
@@ -58,7 +58,7 @@ RowLayout {
     }
 
     Rectangle {
-        Layout.alignment: Qt.AlignVCenter; Layout.leftMargin: 6; Layout.rightMargin: 6
-        implicitWidth: 1; implicitHeight: 12; color: Colors.dim
+        Layout.alignment: Qt.AlignVCenter; Layout.leftMargin: Shared.DesktopStyle.px(6); Layout.rightMargin: Shared.DesktopStyle.px(6)
+        implicitWidth: 1; implicitHeight: Shared.DesktopStyle.px(12); color: Colors.dim
     }
 }

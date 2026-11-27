@@ -10,19 +10,19 @@ Rectangle {
     property bool showDate: false
     readonly property bool ongoing: Calendar.ongoing(event, now)
     readonly property color tint: (event.kind || event.c) === "work" ? Colors.cyan : (event.kind || event.c) === "personal" ? Colors.magenta : Colors.accent
-    implicitHeight: content.implicitHeight + 24
+    implicitHeight: content.implicitHeight + Shared.DesktopStyle.px(24)
     radius: Shared.DesktopStyle.radiusSmall
     color: ShellLayout.blend(Colors.lightBackground, tint, ongoing ? 0.12 : 0.04)
     border.width: ongoing ? 1 : 0
     border.color: ShellLayout.blend(Colors.lightBackground, tint, 0.45)
     Rectangle {
-        anchors { left: parent.left; top: parent.top; bottom: parent.bottom; margins: 10 }
-        width: 3; radius: 1.5; color: root.tint
+        anchors { left: parent.left; top: parent.top; bottom: parent.bottom; margins: Shared.DesktopStyle.px(10) }
+        width: Shared.DesktopStyle.px(3); radius: Shared.DesktopStyle.px(3) / 2; color: root.tint
     }
     ColumnLayout {
         id: content
-        anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 24; rightMargin: 12; topMargin: 12 }
-        spacing: 5
+        anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: Shared.DesktopStyle.px(24); rightMargin: Shared.DesktopStyle.px(12); topMargin: Shared.DesktopStyle.px(12) }
+        spacing: Shared.DesktopStyle.px(5)
         RowLayout {
             Layout.fillWidth: true
             UiLabel {
@@ -46,9 +46,9 @@ Rectangle {
         }
         Rectangle {
             visible: root.ongoing
-            Layout.fillWidth: true; implicitHeight: 3; radius: 1.5; color: Colors.selection
+            Layout.fillWidth: true; implicitHeight: Shared.DesktopStyle.px(3); radius: Shared.DesktopStyle.px(3) / 2; color: Colors.selection
             Rectangle {
-                height: parent.height; radius: 1.5; color: root.tint
+                height: parent.height; radius: Shared.DesktopStyle.px(3) / 2; color: root.tint
                 width: parent.width * Math.max(0, Math.min(1, (root.now - Date.parse(root.event.s)) / (Calendar.endTime(root.event) - Date.parse(root.event.s))))
                 Behavior on width { NumberAnimation { duration: Shared.DesktopStyle.normal } }
             }

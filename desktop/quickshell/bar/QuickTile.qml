@@ -12,11 +12,11 @@ Rectangle {
     property bool hasDetail: false
     signal clicked()
     signal detail()
-    implicitHeight: 72
-    implicitWidth: 210
+    implicitHeight: Shared.DesktopStyle.px(72)
+    implicitWidth: Shared.DesktopStyle.px(210)
     radius: Shared.DesktopStyle.radiusCard
     color: checked ? Qt.rgba(tint.r, tint.g, tint.b, 0.18) : Colors.lightBackground
-    border.width: activeFocus ? 2 : 1
+    border.width: activeFocus ? Shared.DesktopStyle.px(2) : 1
     border.color: activeFocus ? tint : checked ? Qt.rgba(tint.r, tint.g, tint.b, 0.38) : Colors.selection
     opacity: enabled ? 1 : 0.45
     activeFocusOnTab: true
@@ -32,14 +32,14 @@ Rectangle {
     Rectangle { anchors.fill: parent; radius: parent.radius; color: root.tint; opacity: hit.containsMouse ? 0.06 : 0 }
     MouseArea { id: hit; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.clicked() }
     RowLayout {
-        anchors.fill: parent; anchors.margins: 12; spacing: 10
+        anchors.fill: parent; anchors.margins: Shared.DesktopStyle.px(12); spacing: Shared.DesktopStyle.px(10)
         Text { text: root.glyph; color: root.checked ? root.tint : Colors.foreground; font.family: Colors.iconFont; font.pixelSize: Shared.DesktopStyle.px(22) }
         ColumnLayout {
-            Layout.fillWidth: true; spacing: 3
+            Layout.fillWidth: true; spacing: Shared.DesktopStyle.px(3)
             UiLabel { Layout.fillWidth: true; text: root.title; font.pixelSize: Shared.DesktopStyle.px(14); font.weight: Font.DemiBold; elide: Text.ElideRight; wrapMode: Text.NoWrap }
             UiLabel { Layout.fillWidth: true; text: root.subtitle; color: Colors.muted; font.pixelSize: Shared.DesktopStyle.px(11); maximumLineCount: 2; elide: Text.ElideRight }
         }
-        UiButton { visible: root.hasDetail; text: "›"; implicitWidth: 32; onClicked: root.detail(); Accessible.name: root.title + " settings" }
+        UiButton { visible: root.hasDetail; text: "›"; implicitWidth: Shared.DesktopStyle.px(32); onClicked: root.detail(); Accessible.name: root.title + " settings" }
     }
     BarToolTip { target: root; text: root.title + (root.subtitle ? " · " + root.subtitle : ""); shown: hit.containsMouse }
 }

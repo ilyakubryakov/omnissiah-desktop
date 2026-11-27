@@ -25,21 +25,21 @@ PanelWindow {
         anchorX = anchorItem.mapToItem(barWindow.contentItem, 0, 0).x + anchorItem.width / 2
         return true
     }
-    readonly property int fittedWidth: Math.min(cardWidth, Math.max(200, (screen ? screen.width : 1920) - 16))
+    readonly property int fittedWidth: Math.min(cardWidth, Math.max(Shared.DesktopStyle.px(200), (screen ? screen.width : Shared.DesktopStyle.px(1920)) - Shared.DesktopStyle.px(16)))
     screen: barWindow.screen
     anchors { left: true; top: !root.above; bottom: root.above }
     margins {
-        left: Math.max(8, Math.min((root.screen ? root.screen.width : 1920) - root.fittedWidth - 8,
+        left: Math.max(Shared.DesktopStyle.px(8), Math.min((root.screen ? root.screen.width : Shared.DesktopStyle.px(1920)) - root.fittedWidth - Shared.DesktopStyle.px(8),
             root.barWindow.margins.left + root.anchorX - root.fittedWidth / 2))
-        top: root.above ? 0 : root.barWindow.height + PanelStyle.outerGap + 6
-        bottom: root.above ? root.barWindow.height + PanelStyle.outerGap + 6 : 0
+        top: root.above ? 0 : root.barWindow.height + PanelStyle.outerGap + Shared.DesktopStyle.px(6)
+        bottom: root.above ? root.barWindow.height + PanelStyle.outerGap + Shared.DesktopStyle.px(6) : 0
     }
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "oninix-card"
     WlrLayershell.keyboardFocus: pinned ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     implicitWidth: fittedWidth
-    implicitHeight: column.implicitHeight + 36
+    implicitHeight: column.implicitHeight + Shared.DesktopStyle.px(36)
     color: "transparent"
     visible: opened || conceal.running
 
@@ -99,7 +99,7 @@ PanelWindow {
         border.color: ShellLayout.blend(Colors.background, root.tone, 0.25)
         opacity: root.opened ? 1 : 0
         transform: Translate {
-            y: root.opened ? 0 : (root.above ? 12 : -12)
+            y: root.opened ? 0 : (root.above ? Shared.DesktopStyle.px(12) : -Shared.DesktopStyle.px(12))
             Behavior on y { NumberAnimation { duration: Shared.DesktopStyle.normal; easing.type: Easing.OutCubic } }
         }
         Behavior on opacity { NumberAnimation { duration: Shared.DesktopStyle.normal; easing.type: Easing.OutCubic } }
@@ -107,8 +107,8 @@ PanelWindow {
         Keys.onEscapePressed: root.dismiss()
         ColumnLayout {
             id: column
-            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 18 }
-            spacing: 12
+            anchors { left: parent.left; right: parent.right; top: parent.top; margins: Shared.DesktopStyle.px(18) }
+            spacing: Shared.DesktopStyle.cardSpacing
         }
     }
 }

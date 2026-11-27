@@ -9,7 +9,7 @@ TextField {
     selectedTextColor: Colors.foreground
     font.family: Colors.textFont
     font.pixelSize: Shared.DesktopStyle.px(14)
-    padding: 12
+    padding: Shared.DesktopStyle.controlPadding
     selectByMouse: true
     background: Rectangle {
         radius: Shared.DesktopStyle.radiusSmall

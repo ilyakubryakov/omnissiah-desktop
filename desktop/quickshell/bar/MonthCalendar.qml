@@ -11,9 +11,9 @@ PanelWindow {
     screen: Shared.Screens.main
     visible: (opened || conceal.running) && Shared.Screens.main !== null
     anchors { top: true; right: true }
-    margins { top: 42; right: 20 }
-    implicitWidth: 396
-    implicitHeight: calendar.implicitHeight + 36
+    margins { top: Shared.DesktopStyle.px(42); right: Shared.DesktopStyle.px(20) }
+    implicitWidth: Shared.DesktopStyle.px(396)
+    implicitHeight: calendar.implicitHeight + Shared.DesktopStyle.px(36)
     color: "transparent"
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: WlrLayer.Overlay
@@ -33,10 +33,10 @@ PanelWindow {
         border.color: Colors.selection; border.width: 1
         opacity: root.opened ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: Shared.DesktopStyle.normal } }
-        transform: Translate { y: root.opened ? 0 : -12; Behavior on y { NumberAnimation { duration: Shared.DesktopStyle.normal; easing.type: Easing.OutCubic } } }
+        transform: Translate { y: root.opened ? 0 : -Shared.DesktopStyle.px(12); Behavior on y { NumberAnimation { duration: Shared.DesktopStyle.normal; easing.type: Easing.OutCubic } } }
         CalendarCard {
             id: calendar
-            anchors { top: parent.top; left: parent.left; right: parent.right; margins: 18 }
+            anchors { top: parent.top; left: parent.left; right: parent.right; margins: Shared.DesktopStyle.px(18) }
             cal: root.cal
             onAccountsRequested: { root.opened = false; root.accountsRequested() }
             Keys.onEscapePressed: root.opened = false

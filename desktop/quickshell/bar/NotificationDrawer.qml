@@ -34,20 +34,20 @@ PanelWindow {
     MouseArea { anchors.fill: parent; onClicked: root.opened = false }
     Rectangle {
         id: surface
-        width: Math.min(440, root.width - 24)
-        anchors { top: parent.top; bottom: parent.bottom; right: parent.right; rightMargin: 8; topMargin: PanelStyle.barHeight + PanelStyle.outerGap + 8; bottomMargin: PanelStyle.barHeight + PanelStyle.outerGap + 8 }
+        width: Math.min(Shared.DesktopStyle.px(440), root.width - Shared.DesktopStyle.px(24))
+        anchors { top: parent.top; bottom: parent.bottom; right: parent.right; rightMargin: Shared.DesktopStyle.spaceUnit * 2; topMargin: PanelStyle.barHeight + PanelStyle.outerGap + Shared.DesktopStyle.px(8); bottomMargin: PanelStyle.barHeight + PanelStyle.outerGap + Shared.DesktopStyle.px(8) }
         MouseArea { anchors.fill: parent }
         radius: Shared.DesktopStyle.radiusCard
         color: Colors.background; border.width: 1; border.color: Colors.selection
         opacity: root.opened ? 1 : 0
-        transform: Translate { x: root.opened ? 0 : surface.width + 12; Behavior on x { NumberAnimation { duration: Shared.DesktopStyle.slow; easing.type: Easing.OutCubic } } }
+        transform: Translate { x: root.opened ? 0 : surface.width + Shared.DesktopStyle.px(12); Behavior on x { NumberAnimation { duration: Shared.DesktopStyle.slow; easing.type: Easing.OutCubic } } }
         Behavior on opacity { NumberAnimation { duration: Shared.DesktopStyle.normal; easing.type: Easing.OutCubic } }
         FocusScope {
             id: content
             anchors.fill: parent
             Keys.onEscapePressed: root.opened = false
             ColumnLayout {
-                anchors.fill: parent; anchors.margins: 16; spacing: 16
+                anchors.fill: parent; anchors.margins: Shared.DesktopStyle.cardPadding; spacing: Shared.DesktopStyle.px(16)
                 RowLayout {
                     UiLabel { text: "Notifications"; font.pixelSize: Shared.DesktopStyle.px(19); font.bold: true; Layout.fillWidth: true }
                     UiButton { glyph: "\u{F00D}"; Accessible.name: "Close notifications"; onClicked: root.opened = false }

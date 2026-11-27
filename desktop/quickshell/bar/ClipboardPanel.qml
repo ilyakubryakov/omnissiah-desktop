@@ -7,7 +7,7 @@ import "../shared" as Shared
 
 ColumnLayout {
     id: root
-    spacing: 12
+    spacing: Shared.DesktopStyle.cardSpacing
     property string query: ""
     readonly property var rows: DesktopData.clips.filter(c => c.text.toLowerCase().includes(query.toLowerCase()))
 
@@ -39,7 +39,7 @@ ColumnLayout {
         placeholderText: "Search text and screenshots…"
         color: Colors.foreground; placeholderTextColor: Colors.muted
         font.family: Colors.textFont; font.pixelSize: Shared.DesktopStyle.px(16)
-        padding: 12
+        padding: Shared.DesktopStyle.controlPadding
         background: Rectangle { color: Colors.lightBackground; border.width: 1; border.color: search.activeFocus ? Colors.accent : Colors.selection }
         onTextChanged: root.query = text
         onAccepted: if (root.rows.length && !DesktopData.busy) DesktopData.act("copy", [root.rows[0].id])
@@ -57,18 +57,18 @@ ColumnLayout {
             readonly property string swatch: picture ? "" : root.colorOf(modelData.text)
             readonly property string stamp: picture ? "" : root.timestampOf(modelData.text)
             Layout.fillWidth: true
-            implicitHeight: content.implicitHeight + 24
+            implicitHeight: content.implicitHeight + Shared.DesktopStyle.px(24)
             color: Colors.lightBackground
             border.width: pinned ? 1 : 0; border.color: Colors.accent
             ColumnLayout {
                 id: content
-                anchors { left: parent.left; right: parent.right; top: parent.top; margins: 12 }
-                spacing: 10
+                anchors { left: parent.left; right: parent.right; top: parent.top; margins: Shared.DesktopStyle.px(12) }
+                spacing: Shared.DesktopStyle.px(10)
                 Image {
-                    Layout.fillWidth: true; Layout.preferredHeight: visible ? 160 : 0
+                    Layout.fillWidth: true; Layout.preferredHeight: visible ? Shared.DesktopStyle.px(160) : 0
                     visible: entry.modelData.image !== ""
                     source: entry.modelData.image
-                    sourceSize.width: 580; sourceSize.height: 160
+                    sourceSize.width: Shared.DesktopStyle.px(580); sourceSize.height: Shared.DesktopStyle.px(160)
                     fillMode: Image.PreserveAspectFit
                     asynchronous: true; cache: false
                 }

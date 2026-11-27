@@ -8,15 +8,15 @@ ColumnLayout {
     signal detailsRequested()
     readonly property var laptop: DesktopData.controls.laptop || ({})
     readonly property var battery: laptop.battery
-    spacing: 12
+    spacing: Shared.DesktopStyle.cardSpacing
     RowLayout {
         Layout.fillWidth: true
-        UiLabel { text: "POWER & DISPLAY"; color: Colors.accent; font.pixelSize: Shared.DesktopStyle.px(11); font.letterSpacing: 2; Layout.fillWidth: true }
+        UiLabel { text: "POWER & DISPLAY"; color: Colors.accent; font.pixelSize: Shared.DesktopStyle.px(11); font.letterSpacing: Shared.DesktopStyle.px(2); Layout.fillWidth: true }
         UiLabel { text: root.battery ? root.battery.percent + "%" : "--"; font.pixelSize: Shared.DesktopStyle.px(24) }
     }
     Rectangle {
-        Layout.fillWidth: true; implicitHeight: 6; radius: 3; color: Colors.selection
-        Rectangle { height: parent.height; width: parent.width * (root.battery ? root.battery.percent : 0) / 100; radius: 3; color: Colors.green
+        Layout.fillWidth: true; implicitHeight: Shared.DesktopStyle.px(6); radius: Shared.DesktopStyle.px(3); color: Colors.selection
+        Rectangle { height: parent.height; width: parent.width * (root.battery ? root.battery.percent : 0) / 100; radius: Shared.DesktopStyle.px(3); color: Colors.green
             Behavior on width { NumberAnimation { duration: Shared.DesktopStyle.normal } }
         }
     }
@@ -32,7 +32,7 @@ ColumnLayout {
             Accessible.name: "Display brightness"
             onMoved: DesktopData.setBrightness(Math.round(value))
         }
-        UiLabel { text: Math.round(brightness.value) + "%"; font.pixelSize: Shared.DesktopStyle.px(12); Layout.preferredWidth: 40 }
+        UiLabel { text: Math.round(brightness.value) + "%"; font.pixelSize: Shared.DesktopStyle.px(12); Layout.preferredWidth: Shared.DesktopStyle.px(40) }
     }
     UiLabel { text: "Profile: " + (root.laptop.profile || "Unavailable"); font.pixelSize: Shared.DesktopStyle.px(13); color: Colors.muted }
     UiButton { text: "Power, lock & sleep settings"; Layout.fillWidth: true; onClicked: root.detailsRequested() }

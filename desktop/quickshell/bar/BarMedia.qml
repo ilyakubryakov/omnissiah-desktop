@@ -30,7 +30,7 @@ RowLayout {
     }
     readonly property int meetingIn: meeting ? Math.ceil((Date.parse(meeting.s) - now) / 60000) : 0
 
-        spacing: 8
+        spacing: Shared.DesktopStyle.spaceUnit * 2
 
         TapHandler { acceptedButtons: Qt.RightButton; onTapped: PanelBriefing.toggleView() }
 
@@ -38,16 +38,16 @@ RowLayout {
 
         Item {
             visible: bar.playing
-            implicitWidth: 14; implicitHeight: PanelStyle.barHeight
+            implicitWidth: Shared.DesktopStyle.px(14); implicitHeight: PanelStyle.barHeight
             Layout.fillHeight: true
             Column {
                 anchors.centerIn: parent
-                spacing: 4
+                spacing: Shared.DesktopStyle.spaceUnit
                 Repeater {
                     model: [true, false]
                     Rectangle {
                         required property bool modelData
-                        width: 5; height: 5; radius: 2.5
+                        width: Shared.DesktopStyle.px(5); height: Shared.DesktopStyle.px(5); radius: Shared.DesktopStyle.px(5) / 2
                         color: ShellLayout.buttonColor("media")
                         opacity: modelData === bar.showMedia ? 1 : 0.3
                         Behavior on opacity { NumberAnimation { duration: Shared.DesktopStyle.fast } }
@@ -68,7 +68,7 @@ RowLayout {
         Seg {
             id: track
             visible: bar.showMedia
-            maximumLabelWidth: Math.max(100, bar.availableWidth * 0.2)
+            maximumLabelWidth: Math.max(Shared.DesktopStyle.px(100), bar.availableWidth * 0.2)
             readonly property bool paused: bar.player && bar.player.playbackState === MprisPlaybackState.Paused
             glyph: paused ? "\u{F03E4}" : "\u{F075A}"
             tint: paused ? Colors.muted : Colors.foreground
@@ -90,7 +90,7 @@ RowLayout {
         SpectrumBars {
             visible: bar.showMedia
             tone: ShellLayout.buttonColor("media")
-            Layout.rightMargin: 4
+            Layout.rightMargin: Shared.DesktopStyle.spaceUnit
             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: playerPopup.togglePinned() }
         }
 
@@ -101,7 +101,7 @@ RowLayout {
                 : bar.meeting ? Qt.formatTime(new Date(Date.parse(bar.meeting.s)), "HH:mm") : ""
             visible: bar.meeting !== null
             sep: track.visible
-            maximumLabelWidth: Math.max(120, bar.availableWidth * 0.16)
+            maximumLabelWidth: Math.max(Shared.DesktopStyle.px(120), bar.availableWidth * 0.16)
             glyph: "\u{F00F0}"
             label: !bar.meeting ? "" : when
             tint: bar.meetingIn <= 0 && bar.meetingIn > -5 ? Colors.red

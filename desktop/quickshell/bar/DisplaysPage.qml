@@ -129,7 +129,7 @@ ColumnLayout {
         Item {
             id: canvas
             Layout.fillWidth: true
-            implicitHeight: 230
+            implicitHeight: Shared.DesktopStyle.px(230)
             clip: true
             property bool dragging: false
             property real frozenK: 1
@@ -141,7 +141,7 @@ ColumnLayout {
                 const x = Math.min(...xs), y = Math.min(...ys)
                 return { x: x, y: y, w: Math.max(...x2) - x, h: Math.max(...y2) - y }
             }
-            readonly property real fitK: Math.min((width - 40) / bounds.w, (height - 40) / bounds.h)
+            readonly property real fitK: Math.min((width - Shared.DesktopStyle.px(40)) / bounds.w, (height - Shared.DesktopStyle.px(40)) / bounds.h)
             readonly property real k: dragging ? frozenK : fitK
             readonly property real ox: (width - bounds.w * k) / 2 - bounds.x * k
             readonly property real oy: (height - bounds.h * k) / 2 - bounds.y * k
@@ -155,17 +155,17 @@ ColumnLayout {
                     readonly property bool current: modelData.key === page.selectedKey
                     x: canvas.ox + modelData.x * canvas.k
                     y: canvas.oy + modelData.y * canvas.k
-                    width: Math.max(8, size[0] * canvas.k)
-                    height: Math.max(8, size[1] * canvas.k)
-                    radius: 4
+                    width: Math.max(Shared.DesktopStyle.px(8), size[0] * canvas.k)
+                    height: Math.max(Shared.DesktopStyle.px(8), size[1] * canvas.k)
+                    radius: Shared.DesktopStyle.px(4)
                     color: current ? Colors.selection : Colors.background
-                    border.width: current ? 2 : 1
+                    border.width: current ? Shared.DesktopStyle.px(2) : 1
                     border.color: current ? Colors.accent : Colors.dim
                     Accessible.role: Accessible.Button
                     Accessible.name: page.title(modelData)
                     ColumnLayout {
                         anchors.centerIn: parent
-                        width: parent.width - 8
+                        width: parent.width - Shared.DesktopStyle.px(8)
                         spacing: 0
                         Text {
                             Layout.fillWidth: true
@@ -178,7 +178,7 @@ ColumnLayout {
                         }
                         Text {
                             Layout.fillWidth: true
-                            visible: box.height > 44
+                            visible: box.height > Shared.DesktopStyle.px(44)
                             horizontalAlignment: Text.AlignHCenter
                             elide: Text.ElideRight
                             text: box.modelData.name + " · " + box.size[0] + "×" + box.size[1]
@@ -191,7 +191,7 @@ ColumnLayout {
                         anchors.fill: parent
                         cursorShape: drag.active ? Qt.ClosedHandCursor : Qt.OpenHandCursor
                         drag.target: page.placed.length > 1 ? box : null
-                        drag.threshold: 4
+                        drag.threshold: Shared.DesktopStyle.px(4)
                         onPressed: { page.selectedKey = box.modelData.key; canvas.frozenK = canvas.k }
                         drag.onActiveChanged: {
                             if (drag.active) { canvas.dragging = true; return }

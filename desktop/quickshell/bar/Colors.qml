@@ -23,6 +23,7 @@ Singleton {
     readonly property color blue: Shared.Palette.blue
     readonly property color magenta: Shared.Palette.magenta
     readonly property color cyan: Shared.Palette.cyan
+    readonly property color shadow: Shared.Palette.shadow
     readonly property string textFont: Shared.Palette.textFont
     readonly property string iconFont: Shared.Palette.iconFont
     readonly property int fontSize: Shared.Palette.fontSize

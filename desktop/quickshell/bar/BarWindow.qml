@@ -14,7 +14,7 @@ RowLayout {
     property var cal: null
     property var barWindow: null
     signal openCalendar()
-        spacing: 6
+        spacing: Shared.DesktopStyle.px(6)
 
         ShelfChip { visible: bar.barWindow !== null && items.length > 0; barWindow: bar.barWindow }
         Seg {
@@ -32,7 +32,7 @@ RowLayout {
 
         Seg {
             visible: !bar.compact && parent.any && label !== ""
-            maximumLabelWidth: Math.min(180, bar.availableWidth)
+            maximumLabelWidth: Math.min(Shared.DesktopStyle.px(180), bar.availableWidth)
             label: parent.any ? (parent.w.title || parent.w.class || "") : ""
             toolTip: parent.any ? parent.w.class + " · " + parent.w.title : ""
             tint: Colors.dim

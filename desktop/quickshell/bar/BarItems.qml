@@ -13,7 +13,7 @@ Item {
     Component.onCompleted: tokens = placed
     readonly property var extras: group === "launchers" ? Minimized.extraIds : []
     readonly property bool dragging: bar.dragToken !== ""
-    readonly property int gap: 6
+    readonly property int gap: Shared.DesktopStyle.px(6)
     readonly property var drop: insertion(bar.dragPoint)
     implicitWidth: row.width
     implicitHeight: PanelStyle.barHeight
@@ -22,7 +22,7 @@ Item {
     function insertion(scene) {
         if (!dragging) return null
         const p = row.mapFromItem(null, scene.x, scene.y)
-        if (p.y < 0 || p.y > root.height || p.x < -14 || p.x > tokensEnd() + 14) return null
+        if (p.y < 0 || p.y > root.height || p.x < -Shared.DesktopStyle.px(14) || p.x > tokensEnd() + Shared.DesktopStyle.px(14)) return null
         for (let i = 0; i < cells.count; i++) {
             const c = cells.itemAt(i)
             if (c && c.visible && p.x < c.x + c.contentWidth / 2) return { before: c.modelData, x: c.x }
@@ -78,7 +78,7 @@ Item {
                 }
                 DragHandler {
                     target: null
-                    dragThreshold: 6
+                    dragThreshold: Shared.DesktopStyle.px(6)
                     acceptedButtons: Qt.LeftButton
                     cursorShape: Qt.ClosedHandCursor
                     onActiveChanged: active ? root.bar.beginIconDrag(cell.modelData) : root.bar.endIconDrag()
@@ -88,10 +88,11 @@ Item {
         }
         Item {
             visible: root.extras.length > 0
-            width: root.gap * 2 + 1; height: row.height
+            width: root.gap * 2 + separator.width; height: row.height
             Rectangle {
+                id: separator
                 anchors.centerIn: parent
-                width: 1; height: parent.height - 14
+                width: 1; height: parent.height - Shared.DesktopStyle.px(14)
                 color: ShellLayout.buttonColor(root.group); opacity: 0.35
             }
         }
@@ -105,8 +106,8 @@ Item {
     }
     Rectangle {
         visible: root.drop !== null
-        x: root.drop ? Math.max(0, root.drop.x - 2) : 0
-        y: 4; z: 2; width: 2; height: root.height - 8; radius: 1
+        x: root.drop ? Math.max(0, root.drop.x - Shared.DesktopStyle.px(2)) : 0
+        y: Shared.DesktopStyle.px(4); z: 2; width: Shared.DesktopStyle.px(2); height: root.height - Shared.DesktopStyle.px(8); radius: Shared.DesktopStyle.px(1)
         color: Colors.accent
     }
 
@@ -151,7 +152,7 @@ Item {
                 id: windowRow
                 required property var modelData
                 Layout.fillWidth: true
-                spacing: 6
+                spacing: Shared.DesktopStyle.px(6)
                 UiButton {
                     Layout.fillWidth: true
                     text: Minimized.title(windowRow.modelData) + (Minimized.isMinimized(windowRow.modelData) ? "  · minimized" : "")
@@ -167,7 +168,7 @@ Item {
         GridLayout {
             visible: windowsPopup.pinned
             Layout.fillWidth: true
-            columns: 2; columnSpacing: 6; rowSpacing: 6
+            columns: 2; columnSpacing: Shared.DesktopStyle.px(6); rowSpacing: Shared.DesktopStyle.px(6)
             UiButton {
                 visible: root.popupEntry; Layout.fillWidth: true; text: "New window"
                 onClicked: windowsPopup.run(() => PinnedApps.start(root.popupApp))

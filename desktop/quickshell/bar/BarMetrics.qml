@@ -13,7 +13,7 @@ RowLayout {
     property real availableWidth: 1920
     property var cal: null
     signal openCalendar()
-        spacing: 8
+        spacing: Shared.DesktopStyle.spaceUnit * 2
 
         Seg { id: tempSeg; onClicked: resourcePopup.togglePinned(); glyph: "\u{F050F}"; label: Sys.temp < 0 ? "--" : Sys.temp + "°C"; tint: Sys.temp >= 85 ? Colors.red : Colors.foreground }
         Seg { id: cpuSeg; onClicked: resourcePopup.togglePinned(); glyph: "\u{F0EE0}"; label: Sys.cpu < 0 ? "--" : Sys.cpu + "%" }
@@ -28,7 +28,7 @@ RowLayout {
             toolTip: "Battery draw"
             sep: true
         }
-        Rectangle { width: 1; height: 12; color: Colors.dim; Layout.leftMargin: 4; Layout.rightMargin: 4 }
+        Rectangle { width: 1; height: Shared.DesktopStyle.px(12); color: Colors.dim; Layout.leftMargin: Shared.DesktopStyle.spaceUnit; Layout.rightMargin: Shared.DesktopStyle.spaceUnit }
         Seg {
             id: weatherSeg
             visible: true

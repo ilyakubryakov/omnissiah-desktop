@@ -22,18 +22,18 @@ ColumnLayout {
     readonly property var events: cal && cal.ready && cal.configured ? cal.events : []
     readonly property var selectedEvents: Calendar.onDay(events, selectedDate)
     onSelectedDateChanged: if (eventScroll) eventScroll.ScrollBar.vertical.position = 0
-    spacing: 12
+    spacing: Shared.DesktopStyle.cardSpacing
     SystemClock { id: clock; precision: SystemClock.Minutes }
     function reset() { offset = 0; selectedDate = today }
-    onOffsetChanged: { flip.from = offset < previousOffset ? -10 : 10; previousOffset = offset; flip.restart(); fade.restart() }
+    onOffsetChanged: { flip.from = (offset < previousOffset ? -1 : 1) * Shared.DesktopStyle.px(10); previousOffset = offset; flip.restart(); fade.restart() }
     property int previousOffset: 0
     Keys.onLeftPressed: offset--
     Keys.onRightPressed: offset++
     RowLayout {
         Layout.fillWidth: true
         ColumnLayout {
-            Layout.fillWidth: true; spacing: 4
-            UiLabel { text: "CALENDAR"; font.pixelSize: Shared.DesktopStyle.px(10); font.letterSpacing: 2; color: Colors.accent }
+            Layout.fillWidth: true; spacing: Shared.DesktopStyle.spaceUnit
+            UiLabel { text: "CALENDAR"; font.pixelSize: Shared.DesktopStyle.px(10); font.letterSpacing: Shared.DesktopStyle.px(2); color: Colors.accent }
             UiLabel { text: Qt.formatDateTime(root.month, "MMMM yyyy"); font.pixelSize: Shared.DesktopStyle.px(20); font.weight: Font.DemiBold }
         }
         UiButton { text: "‹"; Accessible.name: "Previous month"; onClicked: root.offset-- }
@@ -42,8 +42,8 @@ ColumnLayout {
     GridLayout {
         id: grid
         Layout.fillWidth: true
-        Layout.preferredHeight: 276
-        columns: 7; rowSpacing: 4; columnSpacing: 4
+        Layout.preferredHeight: Shared.DesktopStyle.px(276)
+        columns: 7; rowSpacing: Shared.DesktopStyle.spaceUnit; columnSpacing: Shared.DesktopStyle.spaceUnit
         transform: Translate { id: slide }
         NumberAnimation { id: flip; target: slide; property: "x"; to: 0; duration: Shared.DesktopStyle.normal; easing.type: Easing.OutCubic }
         NumberAnimation { id: fade; target: grid; property: "opacity"; from: 0.4; to: 1; duration: Shared.DesktopStyle.normal }
@@ -63,7 +63,7 @@ ColumnLayout {
                 readonly property var holidays: root.holidays[Holidays.key(date)] || []
                 readonly property int eventCount: Calendar.onDay(root.events, date).length
                 Layout.fillWidth: true; Layout.fillHeight: true
-                radius: 10
+                radius: Shared.DesktopStyle.radiusSmall
                 color: selected ? Colors.accent : hover.hovered ? Colors.selection : "transparent"
                 border.width: today && !selected ? 1 : 0
                 border.color: Colors.accent
@@ -83,8 +83,8 @@ ColumnLayout {
                     font.pixelSize: Shared.DesktopStyle.px(13)
                 }
                 Rectangle {
-                    anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; anchors.bottomMargin: 4
-                    width: 3; height: 3; radius: 1.5
+                    anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; anchors.bottomMargin: Shared.DesktopStyle.spaceUnit
+                    width: Shared.DesktopStyle.px(3); height: Shared.DesktopStyle.px(3); radius: Shared.DesktopStyle.px(3) / 2
                     visible: day.holidays.length > 0 || day.eventCount > 0
                     color: day.selected ? Colors.background : day.eventCount > 0 ? Colors.cyan : Colors.yellow
                 }
@@ -109,15 +109,15 @@ ColumnLayout {
         id: eventScroll
         visible: root.selectedEvents.length > 0
         Layout.fillWidth: true
-        Layout.preferredHeight: Math.min(eventList.implicitHeight, 240)
+        Layout.preferredHeight: Math.min(eventList.implicitHeight, Shared.DesktopStyle.px(240))
         contentWidth: availableWidth
         contentHeight: eventList.implicitHeight
         clip: true
         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
         ColumnLayout {
             id: eventList
-            width: eventScroll.availableWidth - 10
-            spacing: 8
+            width: eventScroll.availableWidth - Shared.DesktopStyle.px(10)
+            spacing: Shared.DesktopStyle.spaceUnit * 2
             Repeater {
                 model: root.selectedEvents
                 EventCard { required property var modelData; Layout.fillWidth: true; event: modelData; now: root.today.getTime() }

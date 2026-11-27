@@ -44,47 +44,47 @@ SettingsCard {
             required property string modelData
             property alias dropBox: laneBox
             property alias entries: entries
-            Layout.fillWidth: true; spacing: 6
+            Layout.fillWidth: true; spacing: Shared.DesktopStyle.px(6)
             UiLabel { text: ({top: "Top panel", bottom: "Bottom panel", hidden: "Hidden"})[lane.modelData]; color: Colors.muted }
             Rectangle {
                 id: laneBox
-                Layout.fillWidth: true; implicitHeight: tiles.implicitHeight + 16
-                radius: 10; color: Colors.background; border.color: root.dragging ? Colors.accent : Colors.selection
+                Layout.fillWidth: true; implicitHeight: tiles.implicitHeight + Shared.DesktopStyle.px(16)
+                radius: Shared.DesktopStyle.radiusSmall; color: Colors.background; border.color: root.dragging ? Colors.accent : Colors.selection
                 ColumnLayout {
-                    id: tiles; anchors { left: parent.left; right: parent.right; top: parent.top; margins: 8 } spacing: 5
-                    UiLabel { visible: root.layout[lane.modelData].length === 0; text: "Drop a group here"; color: Colors.muted; Layout.fillWidth: true; Layout.preferredHeight: 32 }
+                    id: tiles; anchors { left: parent.left; right: parent.right; top: parent.top; margins: Shared.DesktopStyle.spaceUnit * 2 } spacing: Shared.DesktopStyle.px(5)
+                    UiLabel { visible: root.layout[lane.modelData].length === 0; text: "Drop a group here"; color: Colors.muted; Layout.fillWidth: true; Layout.preferredHeight: Shared.DesktopStyle.px(32) }
                     Repeater {
                         id: entries
                         model: root.layout[lane.modelData]
                         Item {
                             id: slot; required property string modelData; required property int index
-                            Layout.fillWidth: true; implicitHeight: 42; z: root.dragging === modelData ? 20 : 1
+                            Layout.fillWidth: true; implicitHeight: Shared.DesktopStyle.px(42); z: root.dragging === modelData ? 20 : 1
                             Rectangle {
                                 id: tile; property string groupId: slot.modelData
-                                width: slot.width; height: slot.height; radius: 8
+                                width: slot.width; height: slot.height; radius: Shared.DesktopStyle.px(8)
                                 color: root.dragging === slot.modelData ? Colors.selection : Colors.lightBackground
                                 border.color: root.dragging === slot.modelData ? Colors.accent : Colors.selection; border.width: 1
                                 MouseArea {
-                                    id: dragger; width: parent.width - actions.width - 12; height: parent.height
+                                    id: dragger; width: parent.width - actions.width - Shared.DesktopStyle.px(12); height: parent.height
                                     preventStealing: true; cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
                                     property point start
                                     onPressed: m => { start = mapToItem(root, m.x, m.y) }
                                     onPositionChanged: m => {
                                         if (!pressed) return
                                         const point = mapToItem(root, m.x, m.y)
-                                        if (Math.hypot(point.x - start.x, point.y - start.y) > 6) root.dragging = slot.modelData
+                                        if (Math.hypot(point.x - start.x, point.y - start.y) > Shared.DesktopStyle.px(6)) root.dragging = slot.modelData
                                         root.dragPoint = point
                                     }
                                     onReleased: m => { if (root.dragging) root.finish(slot.modelData, mapToItem(root, m.x, m.y)) }
                                     onCanceled: root.dragging = ""
-                                    UiLabel { anchors { left: parent.left; leftMargin: 12; verticalCenter: parent.verticalCenter } text: "⠿   " + root.titles[slot.modelData] }
+                                    UiLabel { anchors { left: parent.left; leftMargin: Shared.DesktopStyle.px(12); verticalCenter: parent.verticalCenter } text: "⠿   " + root.titles[slot.modelData] }
                                 }
                                 RowLayout {
-                                    id: actions; anchors { right: parent.right; rightMargin: 4; verticalCenter: parent.verticalCenter } spacing: 2
+                                    id: actions; anchors { right: parent.right; rightMargin: Shared.DesktopStyle.spaceUnit; verticalCenter: parent.verticalCenter } spacing: Shared.DesktopStyle.px(2)
                                     UiButton { glyph: "\uf062"; Accessible.name: "Move up"; enabled: slot.index > 0; onClicked: ShellPrefs.moveGroup(ShellPrefs.editRole, slot.modelData, lane.modelData, root.layout[lane.modelData][slot.index - 1]) }
                                     UiButton { glyph: "\uf063"; Accessible.name: "Move down"; enabled: slot.index < root.layout[lane.modelData].length - 1; onClicked: ShellPrefs.moveGroup(ShellPrefs.editRole, slot.modelData, lane.modelData, root.layout[lane.modelData][slot.index + 2] || "") }
                                     UiComboBox {
-                                        implicitWidth: 110; implicitHeight: 32
+                                        implicitWidth: Shared.DesktopStyle.px(110); implicitHeight: Shared.DesktopStyle.px(32)
                                         model: slot.modelData === "status" ? ["top", "bottom"] : ["top", "bottom", "hidden"]
                                         currentIndex: model.indexOf(lane.modelData)
                                         palette.button: Colors.selection; palette.buttonText: Colors.foreground
@@ -103,8 +103,8 @@ SettingsCard {
     UiButton { text: "Restore default arrangement"; onClicked: ShellPrefs.send("layout", {role: ShellPrefs.editRole, layout: {top: ["launchers", "workspaces", "status"], bottom: ["media", "window", "metrics"], hidden: []}}) }
     Rectangle {
         parent: root; z: 99; visible: root.dragging !== ""
-        x: root.dragPoint.x + 14; y: root.dragPoint.y - 16
-        width: dragLabel.implicitWidth + 24; height: 34; radius: 8
+        x: root.dragPoint.x + Shared.DesktopStyle.px(14); y: root.dragPoint.y - Shared.DesktopStyle.px(16)
+        width: dragLabel.implicitWidth + Shared.DesktopStyle.px(24); height: Shared.DesktopStyle.px(34); radius: Shared.DesktopStyle.px(8)
         color: Colors.selection; border.color: Colors.accent
         UiLabel { id: dragLabel; anchors.centerIn: parent; text: root.titles[root.dragging] || ""; color: Colors.accent }
     }

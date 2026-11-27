@@ -11,7 +11,7 @@ ColumnLayout {
     property bool active: false
     readonly property bool playing: player && player.playbackState === MprisPlaybackState.Playing
     readonly property real duration: player && player.lengthSupported ? player.length : 0
-    spacing: 14
+    spacing: Shared.DesktopStyle.px(14)
     function time(seconds) {
         const s = Math.max(0, Math.floor(seconds || 0))
         return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0")
@@ -22,16 +22,16 @@ ColumnLayout {
     }
     RowLayout {
         Layout.fillWidth: true
-        spacing: 16
+        spacing: Shared.DesktopStyle.px(16)
         ClippingRectangle {
-            Layout.preferredWidth: 116; Layout.preferredHeight: 116
-            radius: 16
+            Layout.preferredWidth: Shared.DesktopStyle.px(116); Layout.preferredHeight: Shared.DesktopStyle.px(116)
+            radius: Shared.DesktopStyle.radiusCard
             color: Colors.lightBackground
             Image {
                 id: art
                 anchors.fill: parent
                 source: root.player ? root.player.trackArtUrl : ""
-                sourceSize: Qt.size(256, 256)
+                sourceSize: Qt.size(Shared.DesktopStyle.px(256), Shared.DesktopStyle.px(256))
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true
                 opacity: status === Image.Ready ? 1 : 0
@@ -45,8 +45,8 @@ ColumnLayout {
         }
         ColumnLayout {
             Layout.fillWidth: true
-            spacing: 8
-            UiLabel { text: root.playing ? "NOW PLAYING" : "PAUSED"; color: Colors.accent; font.pixelSize: Shared.DesktopStyle.px(10); font.letterSpacing: 2 }
+            spacing: Shared.DesktopStyle.spaceUnit * 2
+            UiLabel { text: root.playing ? "NOW PLAYING" : "PAUSED"; color: Colors.accent; font.pixelSize: Shared.DesktopStyle.px(10); font.letterSpacing: Shared.DesktopStyle.px(2) }
             UiLabel {
                 Layout.fillWidth: true
                 text: root.player ? root.player.trackTitle || "Unknown track" : "No player"
@@ -79,7 +79,7 @@ ColumnLayout {
     }
     RowLayout {
         Layout.alignment: Qt.AlignHCenter
-        spacing: 12
+        spacing: Shared.DesktopStyle.cardSpacing
         UiButton { glyph: "\u{F04AE}"; Accessible.name: "Previous track"; enabled: root.player && root.player.canGoPrevious; onClicked: root.player.previous() }
         UiButton { glyph: root.playing ? "\u{F03E4}" : "\u{F040A}"; text: root.playing ? "Pause" : "Play"; selected: true; enabled: root.player && root.player.canTogglePlaying; onClicked: root.player.togglePlaying() }
         UiButton { glyph: "\u{F04AD}"; Accessible.name: "Next track"; enabled: root.player && root.player.canGoNext; onClicked: root.player.next() }
