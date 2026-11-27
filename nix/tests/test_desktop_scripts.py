@@ -95,29 +95,28 @@ class GameModeTests(unittest.TestCase):
 
 
 class DoctorTests(unittest.TestCase):
-    def test_each_crash_uses_its_own_cmdline_and_signal(self):
-        def crash(exe, signal=11, **fields):
-            return {'COREDUMP_EXE': exe, 'COREDUMP_SIGNAL': str(signal),
-                    '__REALTIME_TIMESTAMP': '1795000000000000', **fields}
+    def test_only_generic_tooling_crashes_are_filtered(self):
+        def crash(exe, **fields):
+            return {'COREDUMP_EXE': exe, '__REALTIME_TIMESTAMP': '1795000000000000', **fields}
 
         browser = crash('/nix/store/chromium/bin/.chromium-wrapped', COREDUMP_PID='7')
         headless = {**browser, 'COREDUMP_CMDLINE': '/chromium --headless=new'}
         interactive = {**browser, 'COREDUMP_CMDLINE': '/chromium "--profile-directory=work --headless"'}
-        orca = crash('/app/bin/orca-slicer')
-        abort = crash('/app/bin/orca-slicer', 6)
-        bambu = crash('/nix/store/bambu/bin/.bambu-studio-wrapped')
-        dev = crash(str(Path.home() / 'Projects/build/test'))
+        project = crash(str(Path.home() / 'Projects/build/test'))
+        temporary = crash('/tmp/build/test')
+        rows = [headless, interactive, project, temporary]
         self.assertEqual(health.tooling_crash(headless), 'headless browser')
         self.assertIsNone(health.tooling_crash(interactive))
-        self.assertIsNone(health.known_crash(abort))
+        self.assertIsNone(health.tooling_crash(project))
+        self.assertEqual(health.tooling_crash(temporary), 'in dev builds')
         with patch.object(doctor, 'crash_ack', return_value=0):
-            level, summary = doctor.crash_summary(True, [headless, interactive, orca, abort, bambu, dev])
+            level, summary = doctor.crash_summary(True, rows)
         self.assertEqual(level, 'warn')
         self.assertTrue(summary.startswith('2 recorded crashes'))
         with patch.object(health, 'journal', return_value=(True, [])):
-            events = health.timeline([headless, interactive, orca, abort, bambu, dev])
+            events = health.timeline(rows)
         self.assertEqual([event['level'] for event in events if 'crashed' in event['text']],
-                         ['warn', 'info', 'warn', 'info'])
+                         ['warn', 'warn'])
 
     def test_acknowledgement_has_microsecond_boundary(self):
         temp = self.enterContext(tempfile.TemporaryDirectory())

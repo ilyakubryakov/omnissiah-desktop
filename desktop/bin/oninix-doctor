@@ -9,7 +9,7 @@ import sys
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
-from oninix_health import CACHE, command, coredumps, crash_name, event_time_us, failed_units, known_crash, report, tooling_crash
+from oninix_health import CACHE, command, coredumps, crash_name, event_time_us, failed_units, report, tooling_crash
 from oninix_shell import atomic, state
 
 REBUILD = Path('/var/lib/oninix-maintenance/last-rebuild.txt')
@@ -146,9 +146,8 @@ def crash_summary(available, crashes):
     cutoff = crash_ack()
     counts, ignored = Counter(), Counter()
     for entry in crashes:
-        known = known_crash(entry)
         reason = ('acknowledged' if event_time_us(entry) <= cutoff
-                  else tooling_crash(entry) or (f'known {known}' if known else None))
+                  else tooling_crash(entry))
         if reason:
             ignored[reason] += 1
         else:

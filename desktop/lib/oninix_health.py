@@ -9,7 +9,6 @@ from time import time
 CACHE = Path(os.environ.get('XDG_CACHE_HOME', Path.home() / '.cache')) / 'oninix'
 COREDUMP = 'fc2e22bc6ee647b6b90729ab34a250b1'
 BROWSERS = {'chrome', 'chromium', '.chromium-wrapped', 'google-chrome', 'msedge'}
-KNOWN_CRASHERS = {'.bambu-studio-wrapped': 'Bambu Studio', 'orca-slicer': 'OrcaSlicer'}
 JOB_FINISHED = '39f53479d3a045ac8e11786248231fbf'
 MAINTENANCE = {
     'oninix-backup.service': 'Backup',
@@ -47,8 +46,7 @@ def journal(*matches, fields, since='24 hours ago', limit=100):
 
 def coredumps(since='24 hours ago'):
     available, entries = journal('MESSAGE_ID=' + COREDUMP,
-                                 fields=['COREDUMP_COMM', 'COREDUMP_UID', 'COREDUMP_EXE',
-                                         'COREDUMP_SIGNAL', 'COREDUMP_CMDLINE'],
+                                 fields=['COREDUMP_COMM', 'COREDUMP_UID', 'COREDUMP_EXE', 'COREDUMP_CMDLINE'],
                                  since=since, limit=None)
     return available, [entry for entry in entries if event_time_us(entry) > 0]
 
@@ -59,7 +57,7 @@ def crash_name(entry):
 
 def tooling_crash(entry):
     exe = str(entry.get('COREDUMP_EXE') or '')
-    if exe.startswith((str(Path.home() / 'Projects') + '/', '/tmp/')):
+    if exe.startswith('/tmp/'):
         return 'in dev builds'
     line = entry.get('COREDUMP_CMDLINE')
     if crash_name(entry) in BROWSERS and isinstance(line, str):
@@ -69,12 +67,6 @@ def tooling_crash(entry):
             return None
         if any(arg == '--headless' or arg.startswith('--headless=') for arg in args):
             return 'headless browser'
-    return None
-
-
-def known_crash(entry):
-    if str(entry.get('COREDUMP_SIGNAL')) == '11':
-        return KNOWN_CRASHERS.get(Path(str(entry.get('COREDUMP_EXE') or '')).name)
     return None
 
 
@@ -111,9 +103,7 @@ def timeline(crashes):
     for entry in crashes:
         if tooling_crash(entry):
             continue
-        known = known_crash(entry)
-        events.append({'at': event_time(entry), 'level': 'info' if known else 'warn',
-                       'text': f'{known} crashed (known, ignored)' if known else crash_name(entry) + ' crashed'})
+        events.append({'at': event_time(entry), 'level': 'warn', 'text': crash_name(entry) + ' crashed'})
     _, modes = journal('SYSLOG_IDENTIFIER=oninix-mode', fields=['MESSAGE'])
     events.extend({'at': event_time(entry), 'level': 'info', 'text': entry['MESSAGE']}
                   for entry in modes if isinstance(entry.get('MESSAGE'), str))
