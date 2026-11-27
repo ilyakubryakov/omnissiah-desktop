@@ -216,7 +216,7 @@ local function set_up_floating()
         local colors = ONINIX_TITLEBAR or {}
         hl.config({ decoration = { shadow = { enabled = true, range = 16, render_power = 3, color = colors.shadow or "rgba(00000059)" } } })
         hl.window_rule({ name = "oninix-no-shadow", match = { class = ".*" }, no_shadow = true })
-        hl.window_rule({ name = "oninix-floating-shadow", match = { tag = ws_tag }, no_shadow = false })
+        hl.window_rule({ name = "oninix-floating-shadow", match = { float = true }, no_shadow = false })
     end
     return titlebars.setup()
 end
@@ -248,7 +248,7 @@ end
 local function apply_all()
     hl.config({ group = { auto_group = not M.enabled } })
     sync_rules()
-    if M.anything_floats() or titlebars.loaded() then set_up_floating() end
+    set_up_floating()
     arrange(hl.get_windows())
 end
 

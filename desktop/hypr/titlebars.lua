@@ -6,9 +6,10 @@ local QUARANTINE = STATE .. "titlebars-quarantine"
 local ENABLED = "/etc/oninix/titlebars-enabled"
 local LOADED = STATE .. "titlebars-loaded"
 M.WORKSPACE_TAG = "oninix-floating-workspace"
+M.BAR_TAG = "oninix-titlebar"
 
 M.self_framed = table.concat({
-    "org\\.gnome\\..*",
+    "org\\.gnome\\..*", "org\\.quickshell",
 }, "|")
 
 local function exists(path)
@@ -110,7 +111,7 @@ local pending = check_last_session()
 if pending then
     hl.timer(function()
         pending = check_last_session()
-        if not pending and require("windowmode").anything_floats() then M.setup() end
+        if not pending then M.setup() end
     end, { type = "oneshot", timeout = GRACE * 1000 })
 end
 
@@ -143,7 +144,7 @@ function M.setup()
         plugin = {
             hyprbars = {
                 enabled = true,
-                workspace_tag = M.WORKSPACE_TAG,
+                workspace_tag = M.BAR_TAG,
                 bar_height = 30,
                 bar_color = colors.bar or "rgb(303030)",
                 bar_color_inactive = colors.bar_inactive or colors.bar or "rgb(303030)",
@@ -163,6 +164,10 @@ function M.setup()
         },
     })
 
+    hl.window_rule({ name = "oninix-titlebar-floating", match = { float = true }, tag = "+" .. M.BAR_TAG })
+    hl.window_rule({ name = "oninix-titlebar-pinned", match = { pin = true }, ["hyprbars:no_bar"] = true })
+    hl.window_rule({ name = "oninix-titlebar-fullscreen", match = { fullscreen = true }, ["hyprbars:no_bar"] = true })
+    hl.window_rule({ name = "oninix-titlebar-modal", match = { modal = true }, ["hyprbars:no_bar"] = true })
     hl.window_rule({ name = "oninix-titlebar-self-framed", match = { class = "^(" .. M.self_framed .. ")$" }, ["hyprbars:no_bar"] = true })
 
     for _, button in ipairs({

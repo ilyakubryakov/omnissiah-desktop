@@ -43,7 +43,7 @@ local function release_focus()
 end
 
 local function park(window)
-    if not window or not window.mapped or window.pinned or is_minimized(window) then return false end
+    if not window or not window.mapped or window.pinned or window.modal or is_minimized(window) then return false end
     if window.workspace and window.workspace.special then return false end
     if (window.fullscreen or 0) >= 2 then
         hl.dispatch(hl.dsp.window.fullscreen({ window = window, mode = "fullscreen", action = "unset" }))
