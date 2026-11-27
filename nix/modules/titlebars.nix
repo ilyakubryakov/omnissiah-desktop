@@ -4,7 +4,8 @@ let
   hyprland = config.programs.hyprland.package;
   plugin = pkgs.callPackage ../pkgs/hyprland-titlebars.nix { inherit hyprland; };
   key = builtins.unsafeDiscardStringContext (builtins.baseNameOf "${hyprland}");
-  drv = builtins.unsafeDiscardOutputDependency plugin.drvPath;
+  drv = builtins.unsafeDiscardStringContext plugin.drvPath;
+  recipe = (pkgs.callPackage ../pkgs/deferred-derivation.nix { nix = config.nix.package; }) plugin;
   out = builtins.unsafeDiscardStringContext plugin.outPath;
 in
 {
@@ -26,8 +27,8 @@ in
       wantedBy = [ "multi-user.target" ];
       after = [ "nix-daemon.socket" "network-online.target" ];
       wants = [ "network-online.target" ];
-      restartTriggers = [ drv ];
-      path = [ config.nix.package pkgs.coreutils ];
+      restartTriggers = [ recipe ];
+      path = [ config.nix.package pkgs.coreutils pkgs.gzip ];
       serviceConfig = {
         Type = "exec";
         RemainAfterExit = true;
@@ -37,6 +38,9 @@ in
       script = ''
         roots=/nix/var/nix/gcroots/oninix-titlebars
         mkdir -p "$roots"
+        if ! nix-store --check-validity ${drv} 2>/dev/null; then
+          gzip -dc ${recipe} | nix-store --import >/dev/null
+        fi
         timeout 1h nix-store --realise ${drv} --add-root "$roots/${key}" >/dev/null
         test -f "$roots/${key}/lib/omarchy-hyprland-titlebars/titlebars.so"
         touch -h "$roots/${key}"
