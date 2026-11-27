@@ -14,9 +14,9 @@ const plain = value => JSON.parse(JSON.stringify(value));
 
 const localScene = {
     id: "3400123", title: "Rainy street", type: "scene",
-    preview: "/games/Steam Library/3400123/夜 #1%.gif",
+    preview: "/test/Workshop Library/3400123/夜 #1%.gif",
     supported: true, reason: "", tags: ["Cyberpunk"], rating: "Everyone",
-    path: "/games/Steam Library/3400123", updated: 1795680000
+    path: "/test/Workshop Library/3400123", updated: 1795680000
 };
 const workshopScene = {
     id: localScene.id, title: localScene.title, type: localScene.type,
@@ -26,7 +26,7 @@ const workshopScene = {
 };
 const status = {
     mode: "live", item: localScene, state: "playing", reason: "", error: "",
-    output: "DP-3", assets: true, key: true, workshop_dir: "/games/Steam Library"
+    output: "test-output", assets: true, key: true, workshop_dir: "/test/Workshop Library"
 };
 const defaults = {
     sort: "trend", days: 7, types: [], ratings: ["everyone"], tags: [], resolution: "", search: ""
@@ -85,7 +85,7 @@ test("maps Workshop sorts, periods and multi-select filters to argv", () => {
 
 test("maps library and Workshop cards to distinct preview sources", () => {
     const localCard = live.gridItem(localScene, false);
-    assert.equal(localCard.previewUrl, "file:///games/Steam%20Library/3400123/%E5%A4%9C%20%231%25.gif");
+    assert.equal(localCard.previewUrl, "file:///test/Workshop%20Library/3400123/%E5%A4%9C%20%231%25.gif");
     assert.equal(localCard.wallpaperTitle, localScene.title);
     assert.equal(live.typeLabel(localCard.wallpaperType), "Scene");
     assert.equal(live.typeLabel("video"), "Video");
