@@ -307,14 +307,15 @@ class Recorder:
 
     def snapshot(self, reason, minutes=10):
         self.refresh_lock(force=True)
+        if self.locked:
+            return None
         horizon = time.monotonic() - minutes * 60
         held = {}
-        if not self.locked:
-            for dev in self.devices.values():
-                try:
-                    held[dev.name] = [held_name(c) for c in held_keys(dev.node)]
-                except OSError as error:
-                    held[dev.name] = f'unreadable ({error.errno})'
+        for dev in self.devices.values():
+            try:
+                held[dev.name] = [held_name(c) for c in held_keys(dev.node)]
+            except OSError as error:
+                held[dev.name] = f'unreadable ({error.errno})'
         now = time.monotonic()
         report = {
             'reason': reason,
@@ -328,7 +329,10 @@ class Recorder:
             'activity_per_10_seconds': [{'device': name, **counts}
                                         for (sec, name), counts in self.buckets.items() if sec >= horizon],
         }
-        return write_snapshot(report)
+        self.refresh_lock(force=True)
+        if not self.locked:
+            return write_snapshot(report)
+        return None
 
 def private_dir(path):
     path.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -369,7 +373,8 @@ def serve(control, recorder):
         except (ValueError, OSError):
             minutes = 10
         try:
-            reply = str(recorder.snapshot('requested', minutes))
+            snapshot = recorder.snapshot('requested', minutes)
+            reply = str(snapshot) if snapshot else 'error: screen is locked'
         except OSError as error:
             reply = f'error: snapshot not written ({error.errno})'
         with contextlib.suppress(OSError):
@@ -412,10 +417,10 @@ def daemon():
         if holds and time.monotonic() - last_try > STUCK_RETRY:
             last_try = time.monotonic()
             try:
-                recorder.snapshot('stuck key')
-                recorder.mark_reported(holds)
-                last_try = 0.0
-                print('snapshot written: stuck key', flush=True)
+                if recorder.snapshot('stuck key'):
+                    recorder.mark_reported(holds)
+                    last_try = 0.0
+                    print('snapshot written: stuck key', flush=True)
             except OSError:
                 print('snapshot failed: stuck key', flush=True)
 
@@ -430,7 +435,11 @@ def main():
                 conn.settimeout(15)
                 conn.connect(str(SOCKET))
                 conn.sendall(minutes.encode())
-                print(conn.recv(4096).decode())
+                reply = conn.recv(4096).decode()
+                if reply.startswith('error:'):
+                    print(reply, file=sys.stderr)
+                    return 1
+                print(reply)
         except OSError as error:
             print(f'oninix-keywatch is not running ({error})', file=sys.stderr)
             return 1

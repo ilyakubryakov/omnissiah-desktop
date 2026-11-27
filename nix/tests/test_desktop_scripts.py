@@ -325,6 +325,19 @@ class KeywatchTests(unittest.TestCase):
             self.assertEqual(keywatch.daemon(), 1)
         keyboards.assert_not_called()
 
+    def test_snapshot_refuses_to_write_if_locked_before_or_during_collection(self):
+        recorder = keywatch.Recorder()
+        locked = '{"locked": true}'
+        unlocked = '{"locked": false}'
+        with patch.object(keywatch, 'run', side_effect=[locked, unlocked, locked]), \
+                patch.object(recorder, 'context', return_value={}) as context, \
+                patch.object(keywatch, 'write_snapshot') as write:
+            self.assertIsNone(recorder.snapshot('requested'))
+            context.assert_not_called()
+            self.assertIsNone(recorder.snapshot('requested'))
+            context.assert_called_once()
+        write.assert_not_called()
+
 
 if __name__ == '__main__':
     unittest.main()
