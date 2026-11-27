@@ -83,19 +83,43 @@ def paste_shortcut(target):
         return 'SHIFT', 'code:118'
     return 'CTRL', 'code:55'
 
+def clipboard_content(paste, mime_type):
+    return subprocess.run([paste, '--no-newline', '--type', mime_type],
+                          capture_output=True, timeout=3, check=True).stdout
+
+def restore_clipboard(command, saved, plain):
+    options = dict(input=saved, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3, check=True)
+    if plain is None:
+        subprocess.run(command, **options)
+        return
+    with os.fdopen(os.memfd_create('oninix-clipboard'), 'w+b') as data:
+        data.write(plain)
+        data.seek(0)
+        fd = data.fileno()
+        subprocess.run([*command, '--plain-text-fd', str(fd)], pass_fds=(fd,), **options)
+
 def insert_text(text, target, cancelled):
     paste = executable('wl-paste')
     copy = executable('wl-copy')
     types = subprocess.run([paste,'--list-types'],capture_output=True,timeout=3)
     offered = types.stdout.decode().splitlines()
+    plain_type = next((t for t in ('text/plain', 'text/plain;charset=utf-8', 'UTF8_STRING') if t in offered), None)
     saved_type = next((t for t in offered if t.startswith('image/')), None)
-    saved_type = saved_type or next((t for t in ('text/uri-list', 'text/html', 'text/plain;charset=utf-8', 'text/plain')
-                                    if t in offered), None)
+    saved_type = saved_type or next((t for t in ('text/uri-list', 'text/html') if t in offered), plain_type)
     if offered and not saved_type:
         raise ValueError('Clipboard format cannot be preserved. Copy the dictation manually.')
-    saved = None
+    saved, plain = None, None
+    command = [copy, '--clear']
     if saved_type:
-        saved = subprocess.run([paste,'--no-newline','--type',saved_type],capture_output=True,timeout=3,check=True).stdout
+        sensitive = ['--sensitive'] if 'x-kde-passwordManagerHint' in offered else []
+        restore = copy
+        if plain_type and plain_type != saved_type:
+            restore = os.environ.get('ONINIX_CLIPBOARD_RESTORE')
+            if not restore:
+                raise ValueError('Clipboard formats cannot be preserved. Copy the dictation manually.')
+            plain = clipboard_content(paste, plain_type)
+        saved = clipboard_content(paste, saved_type)
+        command = [restore, *sensitive, '--type', saved_type]
     elif types.returncode == 0:
         raise ValueError('Clipboard could not be read. Copy the dictation manually.')
 
@@ -116,10 +140,7 @@ def insert_text(text, target, cancelled):
     finally:
         try:
             if owner.poll() is None:
-                sensitive = ['--sensitive'] if 'x-kde-passwordManagerHint' in offered else []
-                command = [copy, *sensitive, '--type', saved_type] if saved_type else [copy, '--clear']
-                subprocess.run(command, input=saved, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                               timeout=3, check=True)
+                restore_clipboard(command, saved, plain)
         finally:
             if owner.poll() is None:
                 owner.terminate()

@@ -1,0 +1,90 @@
+--- a/src/types/copy-action.h
++++ b/src/types/copy-action.h
+@@ -35,4 +35,5 @@
+     int primary;
+     int sensitive;
++    int plain_text_fd;
+
+     void (*did_set_selection_callback)(struct copy_action *self);
+--- a/src/types/copy-action.c
++++ b/src/types/copy-action.c
+@@ -87,5 +87,13 @@
+     }
+
+-    if (self->fd_to_copy_from != -1) {
++    int input_fd = self->fd_to_copy_from;
++    if (self->plain_text_fd > STDERR_FILENO &&
++        (!strcmp(mime_type, text_plain) || !strcmp(mime_type, text_plain_utf8) ||
++         !strcmp(mime_type, "TEXT") || !strcmp(mime_type, "STRING") ||
++         !strcmp(mime_type, "UTF8_STRING"))) {
++        input_fd = self->plain_text_fd;
++    }
++
++    if (input_fd != -1) {
+         /* Copy the file to the given file descriptor
+          * by spawning an appropriate cat process.
+@@ -98,6 +106,6 @@
+         }
+         if (pid == 0) {
+-            dup2(self->fd_to_copy_from, STDIN_FILENO);
+-            close(self->fd_to_copy_from);
++            dup2(input_fd, STDIN_FILENO);
++            close(input_fd);
+             dup2(fd, STDOUT_FILENO);
+             close(fd);
+@@ -118,5 +126,5 @@
+         waitpid(pid, NULL, 0);
+         /* Seek back to the beginning of the file */
+-        off_t rc = lseek(self->fd_to_copy_from, 0, SEEK_SET);
++        off_t rc = lseek(input_fd, 0, SEEK_SET);
+         if (rc < 0) {
+             perror("lseek");
+--- a/src/wl-copy.c
++++ b/src/wl-copy.c
+@@ -35,4 +35,5 @@
+ #include <libgen.h>
+ #include <getopt.h>
++#include <limits.h>
+ #include <signal.h>
+
+@@ -45,4 +46,5 @@
+     int primary;
+     int sensitive;
++    int plain_text_fd;
+     const char *seat_name;
+ } options;
+@@ -151,4 +153,5 @@
+         {"type", required_argument, 0, 't'},
+         {"sensitive", no_argument, 0, 'S'},
++        {"plain-text-fd", required_argument, 0, 'T'},
+         {"seat", required_argument, 0, 's'},
+         {0, 0, 0, 0}
+@@ -189,4 +192,15 @@
+             options.mime_type = strdup(optarg);
+             break;
++        case 'T': {
++            char *end;
++            long fd = strtol(optarg, &end, 10);
++            if (*end || fd <= STDERR_FILENO || fd > INT_MAX ||
++                lseek((int)fd, 0, SEEK_SET) < 0 ||
++                fcntl((int)fd, F_SETFD, FD_CLOEXEC) < 0) {
++                bail("Invalid plain-text file descriptor");
++            }
++            options.plain_text_fd = (int)fd;
++            break;
++        }
+         case 'S':
+             options.sensitive = 1;
+@@ -254,4 +268,5 @@
+     copy_action->primary = options.primary;
+     copy_action->sensitive = options.sensitive;
++    copy_action->plain_text_fd = options.plain_text_fd;
+
+     if (!options.clear) {
+@@ -303,5 +318,5 @@
+             source_offer(copy_action->source, options.mime_type);
+         }
+-        if (options.mime_type == NULL || mime_type_is_text(options.mime_type)) {
++        if (options.plain_text_fd || options.mime_type == NULL || mime_type_is_text(options.mime_type)) {
+             /* Offer a few generic plain text formats */
+             source_offer(copy_action->source, text_plain);

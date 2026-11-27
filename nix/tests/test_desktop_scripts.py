@@ -194,6 +194,32 @@ GENERAL.STATE:100 (connected)
                                 ('Emacs', 'SHIFT', 'code:118')]:
             self.assertEqual(dictation.paste_shortcut({'class': name}), (mods, key))
 
+    def test_dictation_restores_plain_text_with_file_uris(self):
+        payloads = {'text/plain': b'Report.txt', 'text/uri-list': b'file:///tmp/Report.txt\r\n'}
+        saved = []
+
+        def clipboard(command, **kwargs):
+            if command == ['wl-paste', '--list-types']:
+                return subprocess.CompletedProcess(command, 0, b'text/uri-list\ntext/plain\nx-kde-passwordManagerHint\n')
+            if command[0] == 'wl-paste':
+                return subprocess.CompletedProcess(command, 0, payloads[command[-1]])
+            fd, = kwargs['pass_fds']
+            self.assertEqual(command, ['restore', '--sensitive', '--type', 'text/uri-list', '--plain-text-fd', str(fd)])
+            saved.append((kwargs['input'], os.read(fd, 1024)))
+            return subprocess.CompletedProcess(command, 0)
+
+        target = {'address': '0x123', 'pid': 11, 'class': 'kitty'}
+        owner = Mock()
+        owner.poll.return_value = None
+        with patch.dict(os.environ, ONINIX_CLIPBOARD_RESTORE='restore'), \
+                patch.object(dictation, 'executable', side_effect=lambda name: name), \
+                patch.object(dictation.subprocess, 'run', side_effect=clipboard), \
+                patch.object(dictation.subprocess, 'Popen', return_value=owner), \
+                patch.object(dictation, 'focus', return_value=target), \
+                patch.object(dictation.speech, 'run'), patch.object(dictation.time, 'sleep'):
+            dictation.insert_text('New text', target, Mock(wait=Mock(return_value=False)))
+        self.assertEqual(saved, [(payloads['text/uri-list'], payloads['text/plain'])])
+
     def test_transcript_drops_loops_and_respects_interjections(self):
         def segment(start, end, source, text):
             return dict(start=start, end=end, source=source, text=text)
