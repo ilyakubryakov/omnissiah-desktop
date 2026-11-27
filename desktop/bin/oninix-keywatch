@@ -1,0 +1,449 @@
+#!/usr/bin/env python3
+import array
+import collections
+import contextlib
+import ctypes
+import fcntl
+import glob
+import json
+import os
+from pathlib import Path
+import re
+import select
+import signal
+import socket
+import struct
+import subprocess
+import sys
+import tempfile
+import time
+
+STATE = Path.home() / '.local/state/oninix/keywatch'
+SESSION_RUNTIME = Path(os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}')
+RUNTIME = SESSION_RUNTIME / 'oninix-keywatch'
+SOCKET = RUNTIME / 'control.sock'
+LOCK = RUNTIME / 'daemon.lock'
+KEEP_SECONDS = 600
+KEEP_BUCKETS = 4000
+KEEP_FILES = 30
+BUCKET_SECONDS = 10
+LOCK_CHECK_SECONDS = 1
+STUCK_SECONDS = 20
+RESCAN_SECONDS = 1
+STUCK_RETRY = 60
+EVENT = struct.Struct('llHHi')
+EV_SYN, EV_KEY, SYN_REPORT, SYN_DROPPED = 0, 1, 0, 3
+EVIOCGKEY = (2 << 30) | (96 << 16) | (ord('E') << 8) | 0x18
+EVIOCGNAME = (2 << 30) | (128 << 16) | (ord('E') << 8) | 0x06
+EVIOCSCLOCKID = (1 << 30) | (4 << 16) | (ord('E') << 8) | 0xa0
+PR_SET_DUMPABLE = 4
+
+MODIFIERS = {29: 'LCtrl', 42: 'LShift', 54: 'RShift', 56: 'LAlt', 97: 'RCtrl', 100: 'RAlt',
+             125: 'LMeta', 126: 'RMeta', 58: 'CapsLock'}
+NAVIGATION = {1: 'Esc', 15: 'Tab', 102: 'Home', 103: 'Up', 104: 'PageUp', 105: 'Left',
+              106: 'Right', 107: 'End', 108: 'Down', 109: 'PageDown', 110: 'Insert',
+              111: 'Delete', 99: 'PrintScreen', 119: 'Pause', 127: 'Compose',
+              113: 'Mute', 114: 'VolumeDown', 115: 'VolumeUp',
+              **{59 + i: f'F{i + 1}' for i in range(10)}, 87: 'F11', 88: 'F12'}
+TEXT = set(range(2, 14)) | set(range(16, 28)) | set(range(30, 42)) | {43} | set(range(44, 54)) | {86} \
+    | set(range(71, 84)) | {55, 74, 78, 98, 117, 121}
+TYPING = TEXT | {14, 28, 57, 96}
+HELD_NAMES = {**MODIFIERS, **NAVIGATION, 57: 'Space', 14: 'Backspace', 28: 'Enter', 96: 'KPEnter'}
+USB_EVENTS = (('disconnect', re.compile(r'USB disconnect')), ('connect', re.compile(r'new .*USB device')),
+              ('reset', re.compile(r'reset .*USB device')), ('error', re.compile(r'(?i)error|fail|timeout')))
+
+FOCUS_CATEGORIES = (('game', re.compile(r'(?i)^steam_app_|\.exe$|gamescope')),
+                    ('terminal', re.compile(r'(?i)kitty|terminal|foot|alacritty')),
+                    ('browser', re.compile(r'(?i)chrome|chromium|firefox')),
+                    ('editor', re.compile(r'(?i)^code$|emacs|kate|nvim|obsidian')))
+
+def focus_category(window_class):
+    for name, pattern in FOCUS_CATEGORIES:
+        if pattern.search(window_class or ''):
+            return name
+    return 'other' if window_class else 'none'
+
+def held_name(code):
+    return HELD_NAMES.get(code, 'char' if code in TEXT else 'other')
+
+def classify(code):
+    if code in MODIFIERS or code in NAVIGATION:
+        return 'named', MODIFIERS.get(code) or NAVIGATION[code]
+    return ('typing' if code in TYPING else 'other'), None
+
+def held_keys(node):
+    fd = os.open(node, os.O_RDONLY | os.O_NONBLOCK)
+    try:
+        buf = array.array('B', [0] * 96)
+        fcntl.ioctl(fd, EVIOCGKEY, buf)
+        return [i * 8 + b for i, v in enumerate(buf) for b in range(8) if v >> b & 1]
+    finally:
+        os.close(fd)
+
+def keyboards():
+    found = {}
+    for node in glob.glob('/dev/input/event*'):
+        try:
+            rdev = os.stat(node).st_rdev
+            data = Path(f'/run/udev/data/c{os.major(rdev)}:{os.minor(rdev)}').read_text()
+        except OSError:
+            continue
+        if 'E:ID_INPUT_KEYBOARD=1' in data.splitlines():
+            found[node] = rdev
+    return found
+
+def device_name(fd, node):
+    buf = array.array('B', [0] * 128)
+    try:
+        fcntl.ioctl(fd, EVIOCGNAME, buf)
+        name = buf.tobytes().split(b'\0', 1)[0].decode(errors='replace')
+    except OSError:
+        name = ''
+    return f'{name or "keyboard"} ({os.path.basename(node)})'
+
+def run(argv, timeout=5):
+    try:
+        return subprocess.run(argv, capture_output=True, text=True, timeout=timeout).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ''
+
+class Device:
+    def __init__(self, fd, node, rdev, name):
+        self.fd, self.node, self.rdev, self.name = fd, node, rdev, name
+        self.down = {}
+        self.dropping = False
+        self.reported = set()
+
+class Recorder:
+    def __init__(self):
+        self.devices = {}
+        self.buckets = collections.OrderedDict()
+        self.notes = collections.deque(maxlen=200)
+        self.last_scan = 0.0
+        self.locked = True
+        self.lock_checked = float('-inf')
+        self.unlocked_since = float('inf')
+
+    def refresh_lock(self, *, force=False):
+        now = time.monotonic()
+        if not force and now - self.lock_checked < LOCK_CHECK_SECONDS:
+            return
+        try:
+            locked = json.loads(run(['hyprctl', '-j', 'locked'], timeout=.3)).get('locked') is not False
+        except (ValueError, AttributeError):
+            locked = True
+        if locked and not self.locked:
+            for key in reversed(list(self.buckets)):
+                if key[0] + BUCKET_SECONDS <= self.lock_checked:
+                    break
+                del self.buckets[key]
+            for dev in self.devices.values():
+                dev.down.clear()
+                dev.reported.clear()
+        elif not locked and self.locked:
+            self.unlocked_since = time.monotonic()
+        self.locked = locked
+        self.lock_checked = now
+
+    def scan(self):
+        wanted = keyboards()
+        for fd, dev in list(self.devices.items()):
+            if wanted.get(dev.node) != dev.rdev:
+                self.close(fd)
+        known = {dev.node for dev in self.devices.values()}
+        for node, rdev in wanted.items():
+            if node in known:
+                continue
+            try:
+                fd = os.open(node, os.O_RDONLY | os.O_NONBLOCK)
+            except OSError:
+                continue
+            try:
+                fcntl.ioctl(fd, EVIOCSCLOCKID, struct.pack('i', time.CLOCK_MONOTONIC))
+            except OSError:
+                os.close(fd)
+                continue
+            dev = Device(fd, node, rdev, device_name(fd, node))
+            self.devices[fd] = dev
+            if not self.locked:
+                self.sync(dev)
+            self.note('attached', dev)
+        self.last_scan = time.monotonic()
+
+    def close(self, fd):
+        dev = self.devices.pop(fd, None)
+        with contextlib.suppress(OSError):
+            os.close(fd)
+        if dev:
+            self.note('detached', dev)
+
+    def sync(self, dev):
+        try:
+            held = set(held_keys(dev.node))
+        except OSError:
+            return
+        now = time.monotonic()
+        dev.down = {code: dev.down.get(code, now) for code in held}
+        dev.reported &= held
+
+    def note(self, what, dev):
+        self.notes.append({'m': time.monotonic(), 'time': time.strftime('%H:%M:%S'), 'device': dev.name, 'event': what})
+
+    def bucket(self, dev):
+        now = time.monotonic()
+        start = int(now) // BUCKET_SECONDS * BUCKET_SECONDS
+        key = (start, dev.name)
+        if key not in self.buckets:
+            stamp = time.localtime(time.time() - (now - start))
+            self.buckets[key] = {'time': time.strftime('%H:%M:%S', stamp), 'typing': 0, 'other': 0, 'named': []}
+            horizon = now - KEEP_SECONDS
+            while self.buckets and (next(iter(self.buckets))[0] < horizon or len(self.buckets) > KEEP_BUCKETS):
+                self.buckets.popitem(last=False)
+        return self.buckets[key]
+
+    def read(self, fd):
+        dev = self.devices[fd]
+        try:
+            data = os.read(fd, EVENT.size * 64)
+        except BlockingIOError:
+            return
+        except OSError:
+            self.close(fd)
+            return
+        if self.locked:
+            return
+        for i in range(0, len(data) - EVENT.size + 1, EVENT.size):
+            sec, usec, kind, code, value = EVENT.unpack_from(data, i)
+            if sec + usec / 1000000 < self.unlocked_since:
+                continue
+            if kind == EV_SYN and code == SYN_DROPPED:
+
+                self.note('events dropped by the kernel', dev)
+                dev.dropping = True
+                continue
+            if dev.dropping:
+                if kind == EV_SYN and code == SYN_REPORT:
+                    dev.dropping = False
+                    self.sync(dev)
+                continue
+            if kind != EV_KEY:
+                continue
+            if value == 1:
+                field, name = classify(code)
+                b = self.bucket(dev)
+                if name:
+                    if name not in b['named']:
+                        b['named'].append(name)
+                else:
+                    b[field] += 1
+                dev.down.setdefault(code, time.monotonic())
+            elif value == 0:
+                dev.down.pop(code, None)
+                dev.reported.discard(code)
+
+    def stuck(self):
+        now = time.monotonic()
+        return [(dev, code, now - since) for dev in self.devices.values()
+                for code, since in dev.down.items() if now - since >= STUCK_SECONDS]
+
+    def new_stuck(self):
+        fresh = []
+        for dev, code, _ in self.stuck():
+            if code in dev.reported:
+                continue
+            try:
+                confirmed = code in held_keys(dev.node)
+            except OSError:
+                confirmed = False
+            if confirmed:
+                fresh.append((dev, code))
+            else:
+                dev.down.pop(code, None)
+        return fresh
+
+    def mark_reported(self, holds):
+        for dev, code in holds:
+            dev.reported.add(code)
+
+    def context(self, minutes):
+        nodes = {dev.node: dev.name for dev in self.devices.values()}
+        holders = {}
+        for link in glob.glob('/proc/[0-9]*/fd/*'):
+            try:
+                target = os.readlink(link)
+                if target in nodes:
+                    comm = Path(link.split('/fd/')[0], 'comm').read_text().strip()
+                    holders.setdefault(nodes[target], set()).add(comm)
+            except OSError:
+                continue
+        try:
+            window = json.loads(run(['hyprctl', '-j', 'activewindow']) or '{}')
+            focus = focus_category(str(window.get('class') or '')) if isinstance(window, dict) else 'none'
+        except ValueError:
+            focus = 'none'
+        try:
+            mode = json.loads((SESSION_RUNTIME / 'oninix-desktop/mode.json')
+                              .read_text()).get('name', 'normal')
+        except (OSError, ValueError, AttributeError):
+            mode = 'normal'
+        usb = collections.Counter()
+        times = collections.defaultdict(list)
+        for line in run(['journalctl', '-k', '--since', f'-{minutes}min', '--no-pager', '-o', 'short-unix',
+                         '--grep', 'usb|hid'], timeout=10).splitlines():
+            stamp = line.split(' ', 1)[0]
+            for kind, pattern in USB_EVENTS:
+                if pattern.search(line):
+                    usb[kind] += 1
+                    with contextlib.suppress(ValueError):
+                        times[kind].append(time.strftime('%H:%M:%S', time.localtime(float(stamp))))
+                    break
+        return {
+            'holders': {k: sorted(v) for k, v in holders.items()},
+            'focus': focus,
+            'desktop_mode': mode,
+            'load': os.getloadavg(),
+            'usb_kernel_events': {k: {'count': n, 'at': times[k][-10:]} for k, n in usb.items()},
+        }
+
+    def snapshot(self, reason, minutes=10):
+        self.refresh_lock(force=True)
+        horizon = time.monotonic() - minutes * 60
+        held = {}
+        if not self.locked:
+            for dev in self.devices.values():
+                try:
+                    held[dev.name] = [held_name(c) for c in held_keys(dev.node)]
+                except OSError as error:
+                    held[dev.name] = f'unreadable ({error.errno})'
+        now = time.monotonic()
+        report = {
+            'reason': reason,
+            'taken': time.strftime('%Y-%m-%d %H:%M:%S'),
+            'kernel_held_now': held,
+            'held_by_recorder': [{'device': dev.name, 'key': held_name(code), 'seconds': int(now - since)}
+                                 for dev in self.devices.values() for code, since in dev.down.items()],
+            **self.context(minutes),
+            'devices': [{'time': n['time'], 'device': n['device'], 'event': n['event']}
+                        for n in self.notes if n['m'] >= horizon],
+            'activity_per_10_seconds': [{'device': name, **counts}
+                                        for (sec, name), counts in self.buckets.items() if sec >= horizon],
+        }
+        return write_snapshot(report)
+
+def private_dir(path):
+    path.mkdir(parents=True, exist_ok=True, mode=0o700)
+    info = os.lstat(path)
+    if info.st_uid != os.getuid() or os.path.islink(path) or not os.path.isdir(path):
+        raise PermissionError(f'{path} is not a private directory of this user')
+    if info.st_mode & 0o777 != 0o700:
+        os.chmod(path, 0o700)
+
+def write_snapshot(report):
+    private_dir(STATE)
+    fd, tmp = tempfile.mkstemp(prefix='.snapshot-', dir=STATE)
+    path = STATE / (time.strftime('%Y%m%d-%H%M%S-') + Path(tmp).name.split('-', 1)[1] + '.json')
+    try:
+        with os.fdopen(fd, 'w') as stream:
+            json.dump(report, stream, indent=1)
+        os.replace(tmp, path)
+    finally:
+        Path(tmp).unlink(missing_ok=True)
+
+    others = sorted((p for p in STATE.glob('*.json') if p != path), key=lambda p: p.stat().st_mtime_ns)
+    for old in others[:max(0, len(others) - (KEEP_FILES - 1))]:
+        old.unlink(missing_ok=True)
+    return path
+
+def not_dumpable():
+    try:
+        return ctypes.CDLL(None, use_errno=True).prctl(PR_SET_DUMPABLE, 0, 0, 0, 0) == 0
+    except (OSError, AttributeError):
+        return False
+
+def serve(control, recorder):
+    conn, _ = control.accept()
+    with conn:
+        conn.settimeout(2)
+        try:
+            minutes = max(1, min(10, int(conn.recv(16).decode().strip() or 10)))
+        except (ValueError, OSError):
+            minutes = 10
+        try:
+            reply = str(recorder.snapshot('requested', minutes))
+        except OSError as error:
+            reply = f'error: snapshot not written ({error.errno})'
+        with contextlib.suppress(OSError):
+            conn.sendall(reply.encode())
+
+def daemon():
+    if not not_dumpable():
+        print('cannot make the process non-dumpable; not reading keyboards', file=sys.stderr)
+        return 1
+    private_dir(RUNTIME)
+    lock = open(LOCK, 'w')
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        print('another oninix-keywatch is running', file=sys.stderr)
+        return 1
+    SOCKET.unlink(missing_ok=True)
+    control = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    control.bind(str(SOCKET))
+    os.chmod(SOCKET, 0o600)
+    control.listen(2)
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+    recorder = Recorder()
+    recorder.refresh_lock()
+    recorder.scan()
+    if not recorder.devices:
+        print('No readable keyboard event devices; waiting for a device with existing access.', file=sys.stderr)
+    last_try = 0.0
+    while True:
+        ready = select.select([control, *recorder.devices], [], [], LOCK_CHECK_SECONDS)[0]
+        recorder.refresh_lock()
+        for fd in ready:
+            if fd is control:
+                serve(control, recorder)
+            elif fd in recorder.devices:
+                recorder.read(fd)
+        if time.monotonic() - recorder.last_scan > RESCAN_SECONDS:
+            recorder.scan()
+        holds = recorder.new_stuck()
+        if holds and time.monotonic() - last_try > STUCK_RETRY:
+            last_try = time.monotonic()
+            try:
+                recorder.snapshot('stuck key')
+                recorder.mark_reported(holds)
+                last_try = 0.0
+                print('snapshot written: stuck key', flush=True)
+            except OSError:
+                print('snapshot failed: stuck key', flush=True)
+
+def main():
+    command = sys.argv[1] if len(sys.argv) > 1 else ''
+    if command == 'daemon':
+        return daemon()
+    if command == 'dump':
+        minutes = sys.argv[2] if len(sys.argv) > 2 else '10'
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
+                conn.settimeout(15)
+                conn.connect(str(SOCKET))
+                conn.sendall(minutes.encode())
+                print(conn.recv(4096).decode())
+        except OSError as error:
+            print(f'oninix-keywatch is not running ({error})', file=sys.stderr)
+            return 1
+        return 0
+    if command == 'list':
+        for path in sorted(STATE.glob('*.json'), reverse=True):
+            try:
+                print(path.name, json.loads(path.read_text()).get('reason', ''))
+            except (OSError, ValueError):
+                print(path.name, '(unreadable)')
+        return 0
+    print('Usage: oninix-keywatch daemon | dump [minutes] | list', file=sys.stderr)
+    return 2
+
+if __name__ == '__main__':
+    sys.exit(main())

@@ -37,7 +37,7 @@ let
       [Unit]
       Description=OniNix desktop layer
       PartOf=graphical-session.target
-      Wants=oninix-theme.service oninix-panel.service oninix-wallpaper.service oninix-notifications.service
+      Wants=oninix-theme.service oninix-panel.service oninix-wallpaper.service oninix-notifications.service oninix-notify-log.service
       Wants=oninix-idle.service oninix-dictation.service oninix-voice-profile.service oninix-notebook-reminders.service
       Wants=oninix-update-check.timer oninix-theme-schedule.timer caldash.timer
     '';
@@ -67,7 +67,16 @@ let
       [Service]
       ExecStart=${launch} mako --config=%S/theme/mako.conf
     '';
-    "oninix-idle.service" = service "OniNix idle and lock actions" "sh -c 'exec \"$$ONINIX_SHARE/hypr/scripts/idle.sh\"'" "";
+    "oninix-idle.service" = service "OniNix idle and lock actions" "sh -c 'exec \"$$ONINIX_SHARE/hypr/scripts/idle.sh\"'" ''
+      Restart=always
+      RestartSec=3s
+    '';
+    "oninix-notify-log.service" = service "Log notification arrivals and actions" "oninix-notify-log --watch" ''
+      UMask=0077
+      NoNewPrivileges=true
+      Restart=on-failure
+      RestartSec=5s
+    '';
     "oninix-keep-awake.service" = service "Suspend automatic idle actions while the desktop is in use"
       "systemd-inhibit --what=idle --who=OniNix --why=Keep-awake sleep infinity" "";
     "oninix-dictation.service" = service "Hold-to-talk OniNix dictation" "oninix-dictation --serve" ''
@@ -154,7 +163,7 @@ buildEnv {
     quickshell fuzzel rofi mako swaybg wl-clipboard cliphist grim slurp swappy wf-recorder
     hyprpicker (tesseract.override { enableLanguages = [ "eng" "rus" ]; }) zbar
     brightnessctl playerctl pavucontrol kdePackages.dolphin papirus-icon-theme
-    libnotify glib jq bubblewrap gum nvd wtype pciutils whisper-cpp ffmpeg-headless btop
+    libnotify glib jq bubblewrap gum nvd pciutils whisper-cpp ffmpeg-headless btop
   ]) ++ extraPackages;
   pathsToLink = [ "/bin" "/share" ];
 }

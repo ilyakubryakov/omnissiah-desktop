@@ -1,4 +1,4 @@
-{ lib, stdenvNoCC, python3, bash, makeWrapper, quickshell, softwareRendering ? false }:
+{ lib, stdenvNoCC, python3, bash, makeWrapper, quickshell, wl-clipboard, softwareRendering ? false }:
 let
   python = python3.withPackages (ps: with ps; [
     babel
@@ -9,6 +9,9 @@ let
     recurring-ical-events
     requests
   ]);
+  clipboardRestore = wl-clipboard.overrideAttrs (old: {
+    patches = (old.patches or [ ]) ++ [ ./wl-copy-plain-text-fd.patch ];
+  });
 in
 stdenvNoCC.mkDerivation {
   pname = "oninix-share";
@@ -32,6 +35,11 @@ stdenvNoCC.mkDerivation {
       if [ "$(basename "$tool")" = oninix-theme ]; then
         makeWrapper "$tool" "$out/bin/oninix-theme" \
           --prefix PATH : "${lib.makeBinPath [ python bash ]}"
+        continue
+      fi
+      if [ "$(basename "$tool")" = oninix-dictation ]; then
+        makeWrapper "$tool" "$out/bin/oninix-dictation" \
+          --set ONINIX_CLIPBOARD_RESTORE "${clipboardRestore}/bin/wl-copy"
         continue
       fi
       ln -s $tool $out/bin/$(basename $tool)

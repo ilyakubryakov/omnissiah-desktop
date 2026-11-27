@@ -83,20 +83,19 @@ def set_audio_default(kind, name):
     else:
         run(command + ['0', key, json.dumps({'name': name}), 'Spa:String:JSON'])
 
-def profile(name, *, game_prompt=False):
+def profile(name, expect=None, auto=None, *, game_prompt=False):
     if name not in {'normal', 'work', 'call', 'game', 'music'}:
         raise ValueError('Unknown desktop mode')
     path = runtime() / 'mode.json'
     with (runtime() / 'mode.lock').open('w') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         old = read_json(path, {})
+        if expect is not None and not expect(old):
+            return False
         if game_prompt:
             entering = name == 'game'
-            if (old.get('name') == 'game') == entering:
-                return
-            guard = 'assert(require("gaming").has_games() == ' + str(entering).lower() + ')'
-            if run(['hyprctl', 'eval', guard]).strip() != b'ok':
-                return
+            if (old.get('name') == 'game') == entering or games_running() is not entering:
+                return False
         audio, available = audio_defaults()
         current = {'dnd': 'do-not-disturb' in modes(), 'nightlight': nightlight(),
                    **{'audio_' + k: v for k, v in audio.items()}}
@@ -156,17 +155,120 @@ def profile(name, *, game_prompt=False):
         if name == 'normal':
             path.unlink(missing_ok=True)
         else:
-            save(path, {'name': name, 'base': base, 'applied': target, 'gaming': game_state if name == 'game' else {}})
+            state = {'name': name, 'base': base, 'applied': target, 'gaming': game_state if name == 'game' else {},
+                     'since': (old.get('since') if old.get('name') == name else None) or time.time()}
+            if name == 'game' and auto:
+                state['auto'] = auto
+            save(path, state)
         if old.get('name', 'normal') != name:
             previous = old.get('name', 'normal').capitalize()
             try:
                 run(['logger', '-t', 'oninix-mode', f'{name.capitalize()} mode on (was {previous})'])
             except (OSError, subprocess.SubprocessError):
                 pass
+    return True
 
-def game_offer(target):
+GAME_QUIET_SECONDS = 5
+GAME_OFFER_SECONDS = 60
+
+def games_running():
+    for running in (True, False):
+        guard = 'assert(require("gaming").has_games() == ' + str(running).lower() + ')'
+        try:
+            if run(['hyprctl', 'eval', guard], timeout=2).strip() == b'ok':
+                return running
+        except (OSError, subprocess.SubprocessError):
+            pass
+    return None
+
+def mode_session(state):
+    return state.get('name', 'normal'), state.get('since')
+
+def game_started():
+    root = runtime()
+    with (root / 'mode.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_SH)
+        current = mode_session(read_json(root / 'mode.json', {}))
+    name = current[0]
+    if name == 'game':
+        return
+    if name == 'call':
+        with (root / 'game-offer.lock').open('a') as lock:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return
+            game_offer('game', session=current)
+        return
+    auto = {'from': name, 'at': time.time()}
+    if not profile('game', expect=lambda old: mode_session(old) == current
+                   and games_running() is True, auto=auto):
+        return
+    try:
+        run(['notify-send', '--app-name=Game mode', '--icon=input-gaming', 'Game mode on',
+             f'Turned on for the game. {name.capitalize()} mode comes back when it closes.'])
+    except (OSError, subprocess.SubprocessError):
+        pass
+    game_closed()
+
+def auto_of(state):
+    if state.get('name') != 'game':
+        return None
+    auto = state.get('auto')
+    if not isinstance(auto, dict):
+        auto = {'from': state.get('auto_from')}
+    return auto if auto.get('from') in ('normal', 'work', 'call', 'music') else None
+
+def game_closed():
+    path = runtime() / 'mode.json'
+    if read_json(path, {}).get('name') != 'game':
+        return
+    with (path.parent / 'game-closed.lock').open('a') as lock:
+        while True:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return
+            active = wait_for_game_quiet(path)
+            fcntl.flock(lock, fcntl.LOCK_UN)
+            if not active or games_running() is True:
+                return
+
+def wait_for_game_quiet(path):
+    quiet_since, previous = None, None
+    while True:
+        state = read_json(path, {})
+        if state.get('name') != 'game':
+            return False
+        session, auto = mode_session(state), auto_of(state)
+        current = (session, auto)
+        running = games_running()
+        if running is True:
+            return True
+        if running is None or current != previous:
+            quiet_since = None
+        previous = current
+        if running is False:
+            now = time.monotonic()
+            if quiet_since is None:
+                quiet_since = now
+            if now - quiet_since >= GAME_QUIET_SECONDS:
+                if auto is None:
+                    game_offer('normal', session=session)
+                    return False
+                if profile(auto['from'], expect=lambda old: (mode_session(old), auto_of(old)) == current
+                           and games_running() is False):
+                    return False
+                quiet_since = None
+        time.sleep(1)
+
+def game_offer(target, *, session=None):
     entering = target == 'game'
-    if (read_json(runtime() / 'mode.json', {}).get('name') == 'game') == entering:
+    state = read_json(runtime() / 'mode.json', {})
+    if (state.get('name') == 'game') == entering or auto_of(state):
+        return
+    expected = mode_session(state)
+    if session is not None and expected != session:
         return
     if entering:
         action, title = 'Enable Game mode', 'Game started'
@@ -174,11 +276,23 @@ def game_offer(target):
     else:
         action, title = 'Return to Normal', 'Game closed'
         body = 'Click to return to Normal and restore paused apps and services.'
-    chosen = subprocess.run(['notify-send', '--app-name=Game mode', '--icon=input-gaming', '--wait',
-                             '--expire-time=15000', '--action=default=' + action, title, body],
-                            capture_output=True, text=True, env=ENV).stdout.strip()
-    if chosen == 'default':
-        profile(target, game_prompt=True)
+    options = ['--urgency=critical'] if entering and session is not None else ['--expire-time=15000']
+    try:
+        result = subprocess.run(['notify-send', '--app-name=Game mode', '--icon=input-gaming', '--wait',
+                                 '--print-id', *options, '--action=default=' + action, title, body],
+                                capture_output=True, text=True, env=ENV, timeout=GAME_OFFER_SECONDS)
+        lines = result.stdout.split()
+    except subprocess.TimeoutExpired as error:
+        lines = (error.stdout or b'').decode(errors='replace').split()
+    if lines[-1:] == ['default']:
+        if profile(target, expect=lambda old: mode_session(old) == expected and auto_of(old) is None,
+                   game_prompt=True) and entering and session is not None:
+            game_closed()
+    elif lines and lines[0].isdigit():
+        try:
+            run(['makoctl', 'dismiss', '-n', lines[0]])
+        except (OSError, subprocess.SubprocessError):
+            pass
 
 def split_nm(line):
     fields, field, escaped = [], '', False
@@ -242,23 +356,52 @@ def network_counters(device):
     return {'received': counter('rx_bytes'), 'sent': counter('tx_bytes')}
 
 def networkmanager_state():
-    links = []
-    lines = run(['nmcli', '-t', '-f', 'DEVICE,TYPE,STATE,CONNECTION', 'device']).decode().splitlines()
-    for fields in map(split_nm, lines):
-        if len(fields) < 4 or fields[1] not in {'ethernet', 'wifi'} or fields[2] != 'connected':
+    fields = ['GENERAL.DEVICE', 'GENERAL.TYPE', 'GENERAL.STATE', 'GENERAL.CONNECTION', 'GENERAL.CON-UUID',
+              'IP4.ADDRESS', 'IP4.GATEWAY', 'IP4.DNS', 'IP6.ADDRESS', 'IP6.GATEWAY', 'IP6.DNS']
+    details = run(['nmcli', '-t', '-f', ','.join(fields), 'device', 'show']).decode().splitlines()
+    devices, values = {}, None
+    for line in details:
+        key, _, raw = line.partition(':')
+        if not raw:
             continue
-        device = fields[0]
-        details = run(['nmcli', '-t', '-f', 'GENERAL.CON-UUID,IP4.ADDRESS,IP4.GATEWAY,IP4.DNS,IP6.DNS', 'device', 'show', device]).decode().splitlines()
-        values = {}
-        for line in details:
-            key, _, value = line.partition(':')
-            values.setdefault(key.split('[')[0], []).append(value.replace('\\:', ':'))
-        def first(key):
-            return next(iter(values.get(key, [])), '')
-        links.append({'device': device, 'name': fields[3], 'type': fields[1],
-                      'uuid': first('GENERAL.CON-UUID'), 'address': first('IP4.ADDRESS'),
-                      'gateway': first('IP4.GATEWAY'), 'dns': values.get('IP4.DNS', []) + values.get('IP6.DNS', []),
+        value = split_nm(raw)[0]
+        if key == 'GENERAL.DEVICE':
+            values = devices.setdefault(value, {})
+        elif values is not None:
+            values.setdefault(key.split('[')[0], []).append(value)
+
+    def first(values, key):
+        return next(iter(values.get(key, [])), '')
+
+    active = {device: values for device, values in devices.items()
+              if first(values, 'GENERAL.TYPE') in {'ethernet', 'wifi'}
+              and first(values, 'GENERAL.STATE').split(' ', 1)[0] == '100'}
+    primary, gateway, family = None, None, 4
+    ip = shutil.which('ip') or '/usr/sbin/ip'
+    for version in (4, 6) if active else ():
+        try:
+            routes = json.loads(run([ip, '-j', f'-{version}', 'route', 'show', 'default'], timeout=2))
+        except (OSError, ValueError, subprocess.SubprocessError):
+            continue
+        candidates = [route for route in routes
+                      if route.get('dev') in active and 'linkdown' not in route.get('flags', [])]
+        if candidates:
+            route = min(candidates, key=lambda row: row.get('metric', 0))
+            primary, gateway, family = route['dev'], route.get('gateway'), version
+            break
+    if primary is None and active:
+        primary = min(active, key=lambda device: first(active[device], 'GENERAL.TYPE') != 'ethernet')
+
+    links = []
+    for device, values in active.items():
+        prefix = f'IP{family if device == primary else 4}'
+        links.append({'device': device, 'name': first(values, 'GENERAL.CONNECTION'),
+                      'type': first(values, 'GENERAL.TYPE'), 'uuid': first(values, 'GENERAL.CON-UUID'),
+                      'address': first(values, prefix + '.ADDRESS'),
+                      'gateway': (gateway if device == primary else None) or first(values, prefix + '.GATEWAY'),
+                      'dns': values.get('IP4.DNS', []) + values.get('IP6.DNS', []),
                       **network_counters(device)})
+    links.sort(key=lambda link: link['device'] != primary)
     connectivity = run(['nmcli', '-t', '-f', 'CONNECTIVITY', 'general']).decode().strip()
     return {'manager': 'NetworkManager', 'editor': bool(shutil.which('nm-connection-editor')),
             'connectivity': connectivity, 'links': links}
@@ -314,7 +457,8 @@ def network_state():
                 state = fallback
         except (OSError, ValueError, KeyError, subprocess.SubprocessError):
             pass
-    return {**state, 'timestamp': time.time()}
+    primary = next((link['device'] for link in state['links']), None)
+    return {**state, 'primary': primary, 'timestamp': time.monotonic()}
 
 def network_dns(provider, uuid):
     state = network_state()
@@ -904,8 +1048,11 @@ def notification_update(owner, **changes):
         save(runtime() / 'notifications-state.json', state)
 
 def notifications(popup_only=False):
-    owner = notification_owner()
-    result = {'owner': owner}
+    result = {}
+    if popup_only:
+        notes.update_marker()
+    else:
+        result['owner'] = notification_owner()
     for kind, command in ([('current', 'list')] if popup_only else [('current', 'list'), ('history', 'history')]):
         raw = json.loads(run(['makoctl', command, '-j']))
         rows = raw.get('data', []) if isinstance(raw, dict) else raw
@@ -923,7 +1070,7 @@ def notifications(popup_only=False):
             rows.append(n)
         return {'current': rows}
     ids = {n['id'] for n in result['current'] + result['history'] if isinstance(n.get('id'), int)}
-    state = notification_state(owner)
+    state = notification_state(result['owner'])
     cleared, hidden = state.get('cleared', 0), set(state.get('hidden', []))
     rules = notes.load_rules()
     quiet = set()
@@ -1056,7 +1203,8 @@ def clip_transform(identifier, kind):
             raise ValueError('Not base64-encoded text')
     else:
         raise ValueError('Unknown transform')
-    subprocess.run(['wl-copy'], input=result.encode(), stdout=subprocess.DEVNULL,
+    command = ['wl-copy', '--sensitive'] if kind == 'base64' else ['wl-copy']
+    subprocess.run(command, input=result.encode(), stdout=subprocess.DEVNULL,
                    stderr=subprocess.DEVNULL, timeout=6, check=True, env=ENV)
 
 def clipboard():
@@ -1425,8 +1573,16 @@ def action(command, args):
         run(['brightnessctl', '-c', 'backlight', 'set', args[0] + '%'])
     elif command == 'mode' and len(args) == 1:
         profile(args[0])
-    elif command == 'game-offer' and args in ([], ['normal']):
-        game_offer(args[0] if args else 'game')
+    elif command == 'game-offer' and not args:
+        game_offer('game')
+    elif command == 'game-offer' and args == ['normal']:
+        game_closed()
+    elif command == 'game-started' and not args:
+        game_started()
+    elif command == 'game-closed' and not args:
+        game_closed()
+    elif command == 'keep-awake' and not args:
+        run([SHARE / 'hypr/scripts/keep-awake.sh'], timeout=15)
     elif command == 'dnd' and not args:
         set_dnd('do-not-disturb' not in modes())
     elif command == 'nightlight' and not args:
@@ -1526,7 +1682,7 @@ def action(command, args):
         code = re.search(r'\b\d{4,8}\b', text)
         if not code:
             raise ValueError('No verification code found')
-        subprocess.run(['wl-copy'], input=code[0].encode(), check=True, timeout=6,
+        subprocess.run(['wl-copy', '--sensitive'], input=code[0].encode(), check=True, timeout=6,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=ENV)
     elif command == 'notification-open' and len(args) == 1 and args[0].isdigit():
         notification_open(int(args[0]))

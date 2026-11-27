@@ -23,6 +23,7 @@ SYSTEM_PROFILE = Path('/nix/var/nix/profiles/system')
 DAY = 24 * 60 * 60
 DUE_AGE_DAYS = 14
 RENOTIFY = 3 * DAY
+REMINDER_LIFETIME_MS = 6 * 3600 * 1000
 
 def resolve_online(args, report=False):
     result = subprocess.run(args, capture_output=True, text=True, timeout=120)
@@ -217,11 +218,22 @@ def daily():
     if cached.get('assessment', {}).get('level') != 'due':
         return
     reminder = STATE / 'update-reminder.json'
-    if time.time() - read_json(reminder, {}).get('notifiedAt', 0) < RENOTIFY:
+    notify = shutil.which('notify-send')
+    if not notify:
         return
-    if shutil.which('notify-send'):
-        subprocess.run(['notify-send', '-a', 'OniNix', 'Time to update OniNix', cached['assessment']['summary']])
-    write_json(reminder, {'notifiedAt': time.time()})
+    STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with reminder.with_suffix('.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if time.time() - read_json(reminder, {}).get('notifiedAt', 0) < RENOTIFY:
+            return
+        try:
+            result = subprocess.run([notify, '-a', 'OniNix', '--icon=system-software-update',
+                                     '--expire-time=' + str(REMINDER_LIFETIME_MS),
+                                     'Time to update OniNix', cached['assessment']['summary']], timeout=10)
+        except (OSError, subprocess.TimeoutExpired):
+            return
+        if result.returncode == 0:
+            write_json(reminder, {'notifiedAt': time.time()})
 
 def main(args):
     if args == ['status']:

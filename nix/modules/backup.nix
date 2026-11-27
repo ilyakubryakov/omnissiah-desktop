@@ -73,6 +73,7 @@ let
           restic backup --tag oninix --one-file-system \
             --exclude "$RESTIC_PASSWORD_FILE" \
             --exclude ${lib.escapeShellArg "${home}/.cache"} \
+            --exclude ${lib.escapeShellArg "${home}/.local/state/oninix/keywatch"} \
             --exclude ${lib.escapeShellArg "${home}/.local/share/Trash"} \
             -- "''${sources[@]}" "$local_state/probe"
           record snapshot

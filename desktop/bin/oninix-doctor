@@ -9,12 +9,16 @@ import sys
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
-from oninix_health import CACHE, command, coredumps, failed_units, report
-from oninix_shell import atomic
+from oninix_health import CACHE, command, coredumps, crash_name, event_time_us, failed_units, report, tooling_crash
+from oninix_shell import atomic, state
 
 REBUILD = Path('/var/lib/oninix-maintenance/last-rebuild.txt')
 BACKUP = Path('/var/lib/oninix-backup/status')
-DISK_ERROR = re.compile(r'I/O error|critical medium|AER:.*(?:error|fatal)|BTRFS (?:error|critical)', re.I)
+CRASH_ACK = state() / 'oninix/doctor-crash-ack'
+DISK_ERROR = re.compile(r'I/O error|critical medium|AER:.*(?:error|fatal)|BTRFS (?:error|critical)|ata\d+(?:\.\d+)?: failed to IDENTIFY', re.I)
+RESUME = re.compile(r'PM: (?:suspend|hibernation) exit|Waking up from system sleep')
+ATA_IDENTIFY = re.compile(r'(ata\d+)(?:\.\d+)?: failed to IDENTIFY\b')
+ATA_RECOVERED = re.compile(r'(ata\d+)(?:\.\d+)?: configured for ')
 SMART_FAIL = re.compile(r'FAILED SMART|Critical Warning|is failing', re.I)
 SMART_WARN = re.compile(r'Currently unreadable|Offline uncorrectable|error count increased|Self-Test Log error', re.I)
 
@@ -48,11 +52,38 @@ def storage():
 
 
 def kernel():
-    result = command('journalctl', '-k', '-p', 'warning', '--since', '24 hours ago', '--no-pager', '-o', 'cat')
+    result = command('journalctl', '-k', '--since', '24 hours ago', '--no-pager',
+                     '-o', 'json', '--output-fields=MESSAGE,PRIORITY,_BOOT_ID')
     if result.returncode or 'not seeing messages' in result.stderr:
         return 'warn', 'Kernel journal is unavailable to this user'
-    hits = [line for line in result.stdout.splitlines() if DISK_ERROR.search(line)]
-    return ('fail', hits[-1][:160]) if hits else ('ok', 'No storage errors in the available kernel journal')
+    entries = []
+    for line in result.stdout.splitlines():
+        try:
+            entry = json.loads(line)
+            stamp = event_time_us(entry) / 1_000_000
+            message = entry.get('MESSAGE')
+            if stamp and isinstance(message, str):
+                entries.append((entry.get('_BOOT_ID'), stamp, int(entry.get('PRIORITY', 6)), message))
+        except (ValueError, TypeError, AttributeError):
+            continue
+    wakes = [(boot, stamp) for boot, stamp, _, message in entries if RESUME.search(message)]
+    recovered = [(boot, match[1], stamp) for boot, stamp, _, message in entries
+                 if (match := ATA_RECOVERED.match(message))]
+    hits, retries = [], 0
+    for boot, stamp, priority, message in entries:
+        if priority > 4 or not DISK_ERROR.search(message):
+            continue
+        identify = ATA_IDENTIFY.match(message)
+        if (identify and any(seen_boot == boot and 0 <= stamp - wake <= 120 for seen_boot, wake in wakes)
+                and any(seen_boot == boot and port == identify[1] and 0 <= at - stamp <= 60
+                        for seen_boot, port, at in recovered)):
+            retries += 1
+        else:
+            hits.append(message)
+    if hits:
+        return 'fail', hits[-1][:160]
+    detail = f' ({retries} disk spin-up retries after sleep ignored)' if retries else ''
+    return 'ok', 'No storage errors in the available kernel journal' + detail
 
 
 def disks():
@@ -95,14 +126,37 @@ def system_state():
     return 'ok', 'The booted kernel matches the active generation'
 
 
+def crash_ack():
+    try:
+        stamp = int(CRASH_ACK.read_text())
+    except (OSError, ValueError):
+        return 0
+    if 0 < stamp < 10**11:
+        stamp *= 1_000_000
+    return stamp if 0 < stamp <= time.time_ns() // 1000 else 0
+
+
+def ack_crashes():
+    atomic(CRASH_ACK, f'{time.time_ns() // 1000}\n')
+
+
 def crash_summary(available, crashes):
     if not available:
         return 'warn', 'Crash journal is unavailable'
-    counts = Counter(entry.get('COREDUMP_COMM', 'unknown') for entry in crashes)
+    cutoff = crash_ack()
+    counts, ignored = Counter(), Counter()
+    for entry in crashes:
+        reason = ('acknowledged' if event_time_us(entry) <= cutoff
+                  else tooling_crash(entry))
+        if reason:
+            ignored[reason] += 1
+        else:
+            counts[crash_name(entry)] += 1
+    detail = ' (' + ', '.join(f'{n} {reason}' for reason, n in sorted(ignored.items())) + ' ignored)' if ignored else ''
     if not counts:
-        return 'ok', 'No crashes in the available journal for 24 hours'
-    detail = ', '.join(f'{name} x{count}' for name, count in counts.most_common(6))
-    return 'warn', f'{len(crashes)} recorded crashes: {detail}'
+        return 'ok', 'No crashes in the available journal for 24 hours' + detail
+    names = ', '.join(f'{name} x{count}' for name, count in counts.most_common(6))
+    return 'warn', f'{sum(counts.values())} recorded crashes: {names}' + detail
 
 
 def rebuild():
@@ -127,7 +181,12 @@ def main():
     parser.add_argument('--json', action='store_true')
     parser.add_argument('--cache', action='store_true')
     parser.add_argument('--events', action='store_true')
+    parser.add_argument('--ack-crashes', action='store_true', help='acknowledge crashes recorded so far')
     args = parser.parse_args()
+    if args.ack_crashes:
+        ack_crashes()
+        print('Crashes up to now are acknowledged.')
+        return 0
     available, crashes = coredumps()
     checks = [('Units', units), ('Storage', storage), ('Disks', disks), ('Kernel', kernel),
               ('Crashes', lambda: crash_summary(available, crashes)), ('Backups', backups),

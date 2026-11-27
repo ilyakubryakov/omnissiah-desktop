@@ -78,12 +78,39 @@ lib.mkIf cfg.enable {
     ONINIX_XKB_LAYOUT = keyboardLayout;
     ONINIX_LAPTOP = if cfg.hardware.laptop then "1" else "0";
   };
+  environment.extraInit = lib.mkAfter ''
+    case ":$PATH:" in
+      *":$HOME/.local/bin:"*) ;;
+      *) export PATH="$PATH:$HOME/.local/bin" ;;
+    esac
+  '';
+  environment.etc."environment.d/95-oninix-path.conf".text = ''
+    PATH=$PATH:$HOME/.local/bin
+  '';
   programs.hyprlock.enable = true;
   programs.dconf.enable = lib.mkDefault true;
   systemd.user.services.hypridle = {
     environment.ONINIX_LAPTOP = if cfg.hardware.laptop then "1" else "0";
     path = [ config.services.hypridle.package pkgs.python3 pkgs.util-linux "/run/current-system/sw" ];
-    serviceConfig.ExecStart = [ "" "${share}/share/oninix/hypr/scripts/idle.sh" ];
+    serviceConfig = {
+      ExecStart = [ "" "${share}/share/oninix/hypr/scripts/idle.sh" ];
+      Restart = "always";
+      RestartSec = "3s";
+    };
+  };
+  systemd.user.services.oninix-notify-log = {
+    description = "Log notification arrivals and actions";
+    wantedBy = [ "graphical-session.target" ];
+    partOf = [ "graphical-session.target" ];
+    after = [ "graphical-session.target" ];
+    path = [ config.systemd.package ];
+    serviceConfig = {
+      ExecStart = "${share}/bin/oninix-notify-log --watch";
+      UMask = "0077";
+      NoNewPrivileges = true;
+      Restart = "on-failure";
+      RestartSec = "5s";
+    };
   };
   qt = {
     enable = lib.mkDefault true;

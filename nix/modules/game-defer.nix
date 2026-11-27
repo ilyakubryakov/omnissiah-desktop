@@ -45,7 +45,8 @@ let
         for unit in ${lib.escapeShellArgs units}; do
           [[ -f "$1/$unit" ]] || continue
           if ${check}; then exit 0; fi
-          ${systemctl} ${lib.optionalString (scope == "user") "--user"} start --wait -- "$unit.service" || true
+          ${systemctl} ${lib.optionalString (scope == "user") "--user"} start --wait -- "$unit.service" ||
+            printf '<4>%s failed after Game mode\n' "$unit"
         done
       '';
       privileged = lib.optionalString (scope == "system") "+";
@@ -60,6 +61,7 @@ let
           Type = "oneshot";
           ExecStart = "${catchUp} \"${state}\"";
           TimeoutStartSec = "infinity";
+          LogLevelMax = "notice";
         };
       };
       timer = {

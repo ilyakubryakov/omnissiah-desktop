@@ -6,7 +6,7 @@ import sys
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
-from oninix_health import command, coredumps, event_time
+from oninix_health import command, coredumps, crash_name, event_time, tooling_crash
 from oninix_shell import atomic, state
 
 cursor = state() / 'oninix/crash-watch'
@@ -19,9 +19,9 @@ except (OSError, ValueError):
 ok, entries = coredumps(f'@{last}')
 if not ok:
     sys.exit(0)
-names = Counter(entry.get('COREDUMP_COMM', 'Process') for entry in entries
+names = Counter(crash_name(entry) for entry in entries
                 if str(entry.get('COREDUMP_UID')) == str(os.getuid())
-                and last <= event_time(entry) < now)
+                and last <= event_time(entry) < now and not tooling_crash(entry))
 if names:
     summary = ', '.join(f'{name} x{count}' for name, count in names.most_common(6))
     result = command('notify-send', '--app-name=OniNix Doctor', 'Application crash', summary, timeout=5)

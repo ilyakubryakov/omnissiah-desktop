@@ -1,0 +1,68 @@
+#!/usr/bin/env python3
+import argparse
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import time
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
+import oninix_notifications as notes
+
+
+def record(event):
+    notes.update_marker(changed=True)
+    notes.append(event)
+
+
+def watch():
+    notes.prune()
+    monitor = notes.Monitor(record)
+    pruned = time.monotonic()
+    with subprocess.Popen(['busctl', '--user', 'monitor', '--json=short', 'org.freedesktop.Notifications'],
+                          stdout=subprocess.PIPE, text=True) as bus:
+        for line in bus.stdout:
+            try:
+                value = json.loads(line)
+                if isinstance(value, dict):
+                    monitor.feed(value)
+            except (ValueError, TypeError, KeyError, IndexError, AttributeError):
+                continue
+            now = time.monotonic()
+            if now - pruned >= 6 * 3600:
+                notes.prune()
+                pruned = now
+    raise SystemExit('Notification bus monitor stopped')
+
+
+def report(days):
+    rows = notes.stats(days)
+    if not rows:
+        print(f'No notifications logged in the last {days} days.')
+        return
+    print(f'{"count":>5} {"open":>5} {"dism":>5}  {"tier":<9} application · title')
+    for row in rows:
+        print(f'{row["count"]:>5} {row["opened"]:>5} {row["dismissed"]:>5}  {row["tier"]:<9} {row["app"]} · {row["summary"]}')
+    for row in notes.suggestions(days):
+        title = f' · {row["summary"]}' if row['summary'] else ' (all)'
+        print(f'suggest quiet: {row["app"]}{title} ({row["count"]}, never opened)')
+
+
+def main():
+    os.umask(0o077)
+    parser = argparse.ArgumentParser(description='Track notification arrivals and actions')
+    options = parser.add_mutually_exclusive_group(required=True)
+    options.add_argument('--watch', action='store_true')
+    options.add_argument('--report', nargs='?', type=int, const=7, metavar='DAYS')
+    args = parser.parse_args()
+    if args.watch:
+        watch()
+    else:
+        if args.report < 1:
+            parser.error('DAYS must be positive')
+        report(args.report)
+
+
+if __name__ == '__main__':
+    main()

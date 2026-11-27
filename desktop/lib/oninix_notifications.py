@@ -54,6 +54,20 @@ def log_dir():
 def feed_dir():
     return state() / 'notification-feed'
 
+def update_marker(*, changed=False):
+    directory = os.environ.get('XDG_RUNTIME_DIR')
+    if not directory:
+        return
+    marker = Path(directory) / 'oninix-mako-notify'
+    try:
+        if changed:
+            marker.touch(mode=0o600)
+        else:
+            fd = os.open(marker, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+            os.close(fd)
+    except OSError:
+        pass
+
 def clean(text):
     if not isinstance(text, str) or len(text) > 200 or re.search(r'[\x00-\x1f\x7f]', text):
         raise ValueError('Notification rules take a single line of up to 200 characters')

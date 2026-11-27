@@ -3,6 +3,10 @@ export ONINIX_LAYER_PROFILE="${XDG_STATE_HOME:-$HOME/.local/state}/oninix/layer/
 export ONINIX_FLAKE="${XDG_CONFIG_HOME:-$HOME/.config}/oninix/layer"
 export ONINIX_SHARE="$ONINIX_LAYER_PROFILE/share/oninix"
 export PATH="$ONINIX_LAYER_PROFILE/bin:${PATH:-/usr/local/bin:/usr/bin}"
+case ":$PATH:" in
+    *":$HOME/.local/bin:"*) ;;
+    *) export PATH="$PATH:$HOME/.local/bin" ;;
+esac
 if ! command -v nix >/dev/null 2>&1; then
     export PATH="$PATH:/nix/var/nix/profiles/default/bin"
 fi

@@ -13,6 +13,7 @@ let
       ExecStart = command;
       Nice = 15;
       IOSchedulingClass = "idle";
+      LogLevelMax = "notice";
     };
   };
 in
