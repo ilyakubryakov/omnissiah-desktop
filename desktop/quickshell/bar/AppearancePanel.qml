@@ -12,6 +12,11 @@ ColumnLayout {
     property string themeTab: "palette"
     property string panelTab: "layout"
     property string wallpaperVariant: ""
+    readonly property bool liveWallpaperView: LiveWallpaperData.open || LiveWallpaperData.status.mode === "live"
+    readonly property string liveWallpaperId: LiveWallpaperData.status.mode === "live"
+        ? LiveWallpaperData.status.item?.id || "" : ""
+    readonly property var livePlacement: LiveWallpaperData.status.item?.placement
+    readonly property bool showLivePlacement: !!liveWallpaperId && !!livePlacement
     readonly property var wallpaper: appearance.wallpaper || ({})
     readonly property var desktop: appearance.desktop || ({})
     readonly property string activeVariant: (appearance.palettes.find(p => p.id === appearance.schedule.palette) || {}).mode || "dark"
@@ -147,10 +152,109 @@ ColumnLayout {
     }
 
     SettingsGroup {
+        id: wallpaperGroup
         visible: root.section === "themes" && root.themeTab === "wallpaper"
         title: "Wallpaper"
-        footer: "Lock screen follows the current wallpaper with blur. The login screen has its own page; boot keeps the dark Mechanicus artwork."
+        footer: root.liveWallpaperView ? "" : "Lock screen follows the current wallpaper with blur. The boot screen keeps the dark Mechanicus artwork."
+        Timer {
+            interval: 15000
+            repeat: true
+            triggeredOnStart: true
+            running: wallpaperGroup.visible && !LiveWallpaperData.open
+            onTriggered: LiveWallpaperData.refresh()
+        }
         SettingsRow {
+            title: "Wallpaper type"
+            Segmented {
+                model: [{id: "static", title: "Static"}, {id: "live", title: "Live"}]
+                current: root.liveWallpaperView ? "live" : "static"
+                enabled: !LiveWallpaperData.busy
+                onChosen: id => {
+                    LiveWallpaperData.open = id === "live"
+                    if (id === "static" && LiveWallpaperData.status.mode === "live")
+                        LiveWallpaperData.run(["set", "static"])
+                }
+            }
+        }
+        SettingsRow {
+            visible: root.liveWallpaperView
+            title: LiveWallpaperData.status.item?.title || "No live wallpaper selected"
+            subtitle: LiveWallpaperData.statusText
+            UiButton {
+                visible: LiveWallpaperData.properties.length > 0
+                text: "Customize"
+                enabled: !LiveWallpaperData.busy
+                onClicked: LiveWallpaperData.openCustomize()
+            }
+            UiButton { text: "Live wallpapers"; onClicked: LiveWallpaperData.open = true }
+        }
+        SettingsRow {
+            visible: root.showLivePlacement
+            title: "Placement"
+            Segmented {
+                model: [{id: "fill", title: "Fill"}, {id: "fit", title: "Fit"}]
+                current: root.livePlacement?.fit || "fill"
+                enabled: !LiveWallpaperData.busy
+                onChosen: id => {
+                    if (id !== current) LiveWallpaperData.place(root.liveWallpaperId, ["--fit", id])
+                }
+            }
+            UiButton {
+                text: "Center"
+                enabled: !LiveWallpaperData.busy
+                    && (root.livePlacement?.x !== 0.5 || root.livePlacement?.y !== 0.5)
+                onClicked: LiveWallpaperData.place(root.liveWallpaperId, ["--x", "0.5", "--y", "0.5"])
+            }
+        }
+        Repeater {
+            model: [
+                {axis: "y", title: "Vertical position", start: "Top", end: "Bottom"},
+                {axis: "x", title: "Horizontal position", start: "Left", end: "Right"}
+            ]
+            SettingsRow {
+                id: positionRow
+                required property var modelData
+                readonly property real savedValue: root.livePlacement?.[modelData.axis] ?? 0.5
+                visible: root.showLivePlacement
+                title: modelData.title
+                RowLayout {
+                    Layout.preferredWidth: root.sliderWidth
+                    spacing: Shared.DesktopStyle.cardSpacing
+                    UiLabel { text: positionRow.modelData.start; color: Colors.muted }
+                    UiSlider {
+                        Layout.fillWidth: true
+                        from: 0
+                        to: 1
+                        stepSize: 0.01
+                        value: positionRow.savedValue
+                        enabled: root.livePlacement?.fit === "fill" && !LiveWallpaperData.busy
+                        Accessible.name: positionRow.title
+                        property string itemOnPress: ""
+
+                        function commit(itemId) {
+                            const next = value.toFixed(2)
+                            const changed = value !== positionRow.savedValue && Number(next) !== positionRow.savedValue
+                            value = Qt.binding(() => positionRow.savedValue)
+                            if (enabled && changed)
+                                LiveWallpaperData.place(itemId, ["--" + positionRow.modelData.axis, next])
+                        }
+
+                        onPressedChanged: {
+                            if (pressed) itemOnPress = root.liveWallpaperId
+                            else commit(itemOnPress)
+                        }
+                        onMoved: if (!pressed) commit(root.liveWallpaperId)
+                    }
+                    UiLabel { text: positionRow.modelData.end; color: Colors.muted }
+                }
+            }
+        }
+        SettingsRow {
+            visible: !!LiveWallpaperData.actionError
+            subtitle: LiveWallpaperData.actionError
+        }
+        SettingsRow {
+            visible: !root.liveWallpaperView
             title: "Use wallpaper"
             Segmented {
                 model: [{id: "shared", title: "Same for all themes"}, {id: "variant", title: "Light / dark"}]
@@ -160,7 +264,7 @@ ColumnLayout {
             }
         }
         SettingsRow {
-            visible: root.wallpaper.mode === "variant"
+            visible: !root.liveWallpaperView && root.wallpaper.mode === "variant"
             title: "Choose for"
             Segmented {
                 model: [{id: "light", title: "Light themes"}, {id: "dark", title: "Dark themes"}]
@@ -169,6 +273,7 @@ ColumnLayout {
             }
         }
         SettingsRow {
+            visible: !root.liveWallpaperView
             title: "Image"
             subtitle: root.selectedWallpaper ? root.selectedWallpaper.split("/").pop() : "No image selected"
             UiButton { text: "Open wallpaper gallery"; glyph: "\u{F03E}"; onClicked: DesktopData.showWallpapers(root.targetSlot) }

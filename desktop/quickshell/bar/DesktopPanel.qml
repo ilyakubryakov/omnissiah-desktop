@@ -23,7 +23,8 @@ FloatingWindow {
     property var scrollPositions: ({})
     property string focusText: ""
     property real highlightY: -1
-    visible: presented
+    screen: Shared.Screens.main
+    visible: presented && screen !== null
     implicitWidth: Math.min(Shared.DesktopStyle.px(1080), screen ? screen.width - Shared.DesktopStyle.px(40) : Shared.DesktopStyle.px(1080))
     implicitHeight: Math.min(Shared.DesktopStyle.px(900), screen ? screen.height - Shared.DesktopStyle.px(80) : Shared.DesktopStyle.px(900))
     minimumSize: Qt.size(Math.min(Shared.DesktopStyle.px(760), implicitWidth), Math.min(Shared.DesktopStyle.px(560), implicitHeight))
@@ -53,7 +54,9 @@ FloatingWindow {
         if (which === "notifications") { DesktopData.notificationsRequested(); return }
         PopupState.close(); hideDelay.stop(); presented = true
         let key = which === "controls" ? (DesktopData.controlTab || ShellPrefs.ui.last || "network") : which === "appearance" ? "themes" : which
-        choose(key); opened = true; DesktopData.open = true; DesktopData.refresh(); DesktopData.error = ""
+        const target = which === "wallpaper" ? "Wallpaper" : ""
+        if (which === "wallpaper") key = "themes"
+        choose(key, target); opened = true; DesktopData.open = true; DesktopData.refresh(); DesktopData.error = ""
         Hypr.refresh(); body.forceActiveFocus()
         const client = Hypr.clients.find(c => c.class === "org.quickshell" && Hypr.title(c) === root.title)
         if (client) Minimized.show(client)

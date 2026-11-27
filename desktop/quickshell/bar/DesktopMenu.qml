@@ -104,7 +104,7 @@ Scope {
                     spacing: Shared.DesktopStyle.px(2)
 
                     DropdownRow { header: true; label: "Desktop" }
-                    DropdownRow { glyph: "\u{F02E9}"; label: "Change wallpaper…"; onClicked: root.run(() => DesktopData.showWallpapers("shared")) }
+                    DropdownRow { glyph: "\u{F02E9}"; label: "Change wallpaper…"; onClicked: root.run(() => root.openPanel("wallpaper")) }
                     DropdownRow { glyph: "\u{F03D8}"; label: "Themes & appearance"; onClicked: root.run(() => root.openPanel("appearance")) }
                     DropdownRow {
                         glyph: "\u{F056E}"; label: "Edit panels"

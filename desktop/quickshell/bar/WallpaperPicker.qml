@@ -10,6 +10,7 @@ import "../shared" as Shared
 FloatingWindow {
     id: root
     title: "Wallpaper gallery"
+    property LiveWallpaperWindow liveWindow: LiveWallpaperWindow {}
     visible: DesktopData.wallpapersOpen
     implicitWidth: Shared.DesktopStyle.px(1040)
     implicitHeight: Shared.DesktopStyle.px(780)
