@@ -18,6 +18,8 @@ Omarchy is great. It inspired a lot of this and I'm not ashamed. It even has Btr
 | Changing the system | Menus, scripts, the package manager | Ask the machine spirit, read the diff, apply or don't |
 | Settings | Omarchy menu and dotfiles | Control Station, with search |
 | Dictation | Superwhisper, local model optional | Local Whisper, sized to your hardware by a benchmark |
+| Windows | Tiling, scrolling, and floating workspaces with titlebars in 4.6 | The same, per workspace, and the titlebars plugin is built against your Hyprland so an update can't break the session |
+| Wallpapers | Static images | Static, or live from Wallpaper Engine's Workshop, paused under your windows |
 | Look | Lots of themes | Live palettes and Mechanicus from GRUB to the lock screen |
 
 [Omarchy snapshots](https://omarchy.org/manual/system-snapshots/) · [Omarchy dictation](https://omarchy.org/news/2026/11/omarchy-4-5/)
@@ -60,6 +62,7 @@ On first login `oninix-voice-profile` looks at what you have (NVIDIA, AMD or Int
 |---|---|
 | ![Panels](docs/screenshots/panels.png) | ![Notebook](docs/screenshots/notebook.png) |
 | ![Light palette](docs/screenshots/palette-light.png) | ![Launchpad](docs/screenshots/launchpad.png) |
+| ![Floating workspace with titlebars](docs/screenshots/floating.png) | ![Today card](docs/screenshots/today-card.png) |
 
 | Boot | Login |
 |---|---|
@@ -184,7 +187,7 @@ To remove the layer, sign out and run `./oninix-install uninstall` from the clon
 
 The panel checks the OniNix input about once a day. **Update** opens a terminal to update that input and rebuild. While the upstream is private, Nix needs authenticated access to it, including for the sudo update command. If a rebuild changes the system, the previous generation remains in GRUB until you remove it.
 
-I use `oninix-doctor` to check failed services, disk health, crashes and backups. `oninix-doctor --events` shows the last day of activity, and `/var/lib/oninix-maintenance/last-rebuild.txt` shows the package changes from my last switch.
+I use `oninix-doctor` to check failed services, disk health, crashes and backups. It leaves out crashes of headless browsers that agents use for screenshots and of programs built in `/tmp`, and `oninix-doctor --ack-crashes` marks what I've already looked at. `oninix-doctor --events` shows the last day of activity, and `/var/lib/oninix-maintenance/last-rebuild.txt` shows the package changes from my last switch.
 
 I can enable local backups with `oninix.backup.enable = true;` in `settings.nix`. I mount a root-owned backup disk at `/mnt/oninix-backup` (or set `oninix.backup.mountPoint`), create a root-owned password file at `/etc/oninix/backup-password` with mode 0600, and keep a separate copy of the password. After a rebuild, `sudo oninix-backup init` creates the encrypted restic repository. OniNix backs up my home and `/etc/nixos` daily and tests a restore weekly. I can run `sudo oninix-backup snapshots` or `sudo oninix-backup restore latest /path/to/empty-directory` whenever I need it.
 
@@ -211,6 +214,18 @@ I can also set `oninix.hardware.autoMount = true;` to mount removable media auto
 | Super + L | Lock |
 
 ![Shortcuts](docs/screenshots/cheatsheet.png)
+
+## Floating workspaces and titlebars
+
+Press **Super+Shift+Space** and the workspace floats: windows open at a comfortable size in the middle, step off each other, get shadows and titlebars with close, maximize and minimize. Minimized windows wait on the panel. Press it again and they tile. OniNix remembers the choice per workspace, and the window mode button on the panel floats every workspace at once.
+
+The titlebars come from Omarchy's titlebars plugin, and a Hyprland plugin runs inside the compositor. So OniNix keeps it on a short leash. The system only carries the recipe; after an update a background service builds the plugin against the Hyprland you have, and the session loads it only when it was built for exactly that Hyprland. If it doesn't build, you get floating windows without titlebars, never a broken login. If Hyprland ever crashes while the plugin is loaded, the next session leaves it off and tells you how to turn it back on. `oninix.titlebars.enable = false;` in `settings.nix` drops it.
+
+## Live wallpapers
+
+With the gaming set, **Control Station → Themes & wallpapers → Wallpaper → Live** browses Wallpaper Engine's Steam Workshop (you need Wallpaper Engine in your Steam library and your own [Steam Web API key](https://steamcommunity.com/dev/apikey), stored with `oninix-livewall key set`). Videos, scenes and web wallpapers play on the main display, with their own settings and placement. They pause when windows cover the desktop, unload in Game mode, and when a game or another app needs the video memory they step aside and leave a still of themselves. `oninix.liveWallpapers.enable` turns them on or off independently of the gaming set.
+
+![Wallpaper settings](docs/screenshots/wallpaper-live.png)
 
 ## Make it yours
 
