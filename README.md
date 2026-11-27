@@ -44,13 +44,16 @@ On first login `oninix-voice-profile` looks at what you have (NVIDIA, AMD or Int
 ## What is inside
 
 - Two panels, islands that join when windows fill the screen, drag icons between groups.
+- Tiling or floating per workspace: a floating workspace works like a classic desktop, with windows at a comfortable size, shadows and titlebars (close, maximize, minimize to the panel).
+- Live wallpapers from Wallpaper Engine's Steam Workshop with the Gaming set: browse, customize and place them; they pause under your windows, step aside in Game mode and when another app needs the video memory.
+- Desktop cards: today's agenda on the wallpaper, movable and resizable.
 - Control Station: connections, sound, displays, devices, power, themes, panels, apps, work modes, calendars, session.
 - Launcher, launchpad, clipboard history with previews, Alt+Tab across workspaces.
 - Notebook: Markdown notes (point it at an Obsidian vault), calculator, timers, dictation and meeting transcripts.
 - Notifications with history, do not disturb and rules for noisy apps.
 - Calendars: Google, Microsoft 365, iCalendar feeds.
 - Palettes with day and night switching, wallpapers, lock screen, all in the same colors.
-- Game mode with the Gaming set: pause selected apps and services and restore them when you leave Game mode.
+- Game mode with the Gaming set: switches on by itself when a game starts, pauses selected apps and services and restores them when the game closes.
 - GRUB, boot splash, login screen and fastfetch in Mechanicus style. Of course.
 
 | Panels | Notebook |
@@ -204,6 +207,7 @@ I can also set `oninix.hardware.autoMount = true;` to mount removable media auto
 | Super + Shift + H | Every shortcut |
 | Alt + Tab | Switch windows |
 | Super + Return | Terminal |
+| Super + Shift + Space | Float or tile the current workspace |
 | Super + L | Lock |
 
 ![Shortcuts](docs/screenshots/cheatsheet.png)
