@@ -8,6 +8,7 @@ Singleton {
     id: root
     property bool open: false
     property bool serviceChecked: false
+    property bool servicePresent: false
     property bool serviceRunning: false
     property string customizeId: ""
     property var status: ({})
@@ -65,10 +66,14 @@ Singleton {
 
     Process {
         id: service
-        command: ["systemctl", "--user", "is-active", "--quiet", "oninix-livewall.service"]
-        onExited: code => {
-            root.serviceRunning = code === 0
-            root.serviceChecked = true
+        command: ["systemctl", "--user", "show", "--property=LoadState,ActiveState", "oninix-livewall.service"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const states = text.trim().split("\n")
+                root.serviceRunning = states.includes("ActiveState=active")
+                root.servicePresent = !states.includes("LoadState=not-found")
+                root.serviceChecked = states.some(state => state.startsWith("LoadState="))
+            }
         }
     }
 
