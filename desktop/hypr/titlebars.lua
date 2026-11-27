@@ -109,28 +109,33 @@ end
 local pending = check_last_session()
 if pending then
     hl.timer(function()
-        if not check_last_session() and require("windowmode").anything_floats() then
-            os.execute("hyprctl reload >/dev/null 2>&1 &")
-        end
+        pending = check_last_session()
+        if not pending and require("windowmode").anything_floats() then M.setup() end
     end, { type = "oneshot", timeout = GRACE * 1000 })
 end
+
+hl.on("hyprland.shutdown", function()
+    local text = slurp(LOADED)
+    if text and text:match("^%S+\n(%d+)\n") == compositor() then os.remove(LOADED) end
+end)
 
 local ready = false
 
 function M.setup()
-    if ready then return false end
-    if not exists(ENABLED) then
-        local text = slurp(LOADED)
-        if text and text:match("^%S+\n(%d+)\n") == compositor() then os.remove(LOADED) end
-        return false
+    if ready then return end
+    if not exists(ENABLED) or exists(QUARANTINE) then
+        if hl.plugin.hyprbars then hl.config({ plugin = { hyprbars = { enabled = false } } }) end
+        return
     end
-    if exists(QUARANTINE) or pending or check_last_session() then return false end
+    if pending or check_last_session() then return end
     local plugin = plugin_path()
-    if not plugin then return false end
-    if not write_record(plugin, hl.plugin.hyprbars and "loaded" or "attempt") then return false end
+    if not plugin then return end
+    if not write_record(plugin, hl.plugin.hyprbars and "loaded" or "attempt") then return end
     ready = true
-    hl.plugin.load(plugin)
-    if not hl.plugin.hyprbars then return true end
+    if not hl.plugin.hyprbars then
+        hl.exec_cmd("hyprctl plugin load '" .. plugin .. "'")
+        return
+    end
 
     local colors = ONINIX_TITLEBAR or {}
     local window = 'window = "address:%WINDOW%"'

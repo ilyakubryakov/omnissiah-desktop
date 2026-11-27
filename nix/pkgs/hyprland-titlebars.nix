@@ -10,6 +10,9 @@ hyprlandPlugins.mkHyprlandPlugin {
   };
   inherit hyprland;
   nativeBuildInputs = [ cmake ];
+  postPatch = ''
+    substituteInPlace main.cpp --replace-fail '  HyprlandAPI::reloadConfig();' ""
+  '';
   meta = {
     description = "Titlebars for floating workspaces (Omarchy fork of hyprbars)";
     homepage = "https://github.com/omacom/omarchy-hyprland-titlebars";

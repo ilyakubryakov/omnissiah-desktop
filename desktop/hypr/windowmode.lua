@@ -248,10 +248,8 @@ end
 local function apply_all()
     hl.config({ group = { auto_group = not M.enabled } })
     sync_rules()
-    local reload = false
-    if M.anything_floats() or titlebars.loaded() then reload = set_up_floating() end
+    if M.anything_floats() or titlebars.loaded() then set_up_floating() end
     arrange(hl.get_windows())
-    return reload
 end
 
 local function save(enabled, modes)
@@ -269,15 +267,13 @@ local function change(enabled, modes)
     if busy then return end
     busy = true
     local before_enabled, before_modes = M.enabled, M.modes
-    local reload = false
     local ok, err = pcall(function()
         save(enabled, modes)
         M.enabled, M.modes = enabled, modes
-        reload = apply_all()
+        apply_all()
         local saved, why = os.rename(path .. ".tmp", path)
         if not saved then error(why) end
     end)
-    if ok and reload then os.execute("hyprctl reload >/dev/null 2>&1 &") end
     if not ok then
         os.remove(path .. ".tmp")
         M.enabled, M.modes = before_enabled, before_modes
