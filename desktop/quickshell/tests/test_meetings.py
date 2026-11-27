@@ -52,17 +52,14 @@ class MeetingTests(unittest.TestCase):
         result = m.clean_segments(loop + speech)
         self.assertEqual([r['text'] for r in result], ['Because the business expects a seamless transition.', 'Yes.', 'Next topic.', 'How do you say that?'])
 
-    @unittest.skipUnless(hasattr(m, "clean_segments"), "requires the updated meeting backend")
-    def test_delete_removes_recording_but_not_exported_note(self):
+    def test_delete_is_rejected_and_preserves_meeting_files(self):
         job = self.job()
         self.manager.publish(job['id'])
         note = Path(self.manager.get(job['id'])['note'])
-        busy = dict(job)
-        self.manager.handle({'op':'delete', 'id':job['id']})
-        self.assertFalse(self.manager.folder(job).exists())
-        self.assertTrue(note.exists())
-        busy['id'] = 'b' * 32; busy['state'] = 'transcribing'; self.manager.save(busy)
-        with self.assertRaises(ValueError): self.manager.handle({'op':'delete', 'id':busy['id']})
+        with self.assertRaisesRegex(ValueError, r'^Unknown meeting action\.$'):
+            self.manager.handle({'op': 'delete', 'id': job['id']})
+        self.assertTrue((self.manager.folder(job) / 'transcript.txt').is_file())
+        self.assertTrue(note.is_file())
 
     def test_status_does_not_send_transcript_or_summary_every_second(self):
         job = self.job(); job.update(summary={'private':'text'}, transcript='private')

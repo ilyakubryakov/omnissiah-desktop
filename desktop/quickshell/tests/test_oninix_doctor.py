@@ -44,6 +44,8 @@ class KernelTests(unittest.TestCase):
 
 @unittest.skipUnless(hasattr(doctor, 'crash_ack'), 'requires the updated Doctor')
 class CrashTests(unittest.TestCase):
+    SLICER_EXECUTABLES = ('/app/bin/orca-slicer', '/usr/bin/.bambu-studio-wrapped')
+
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
@@ -80,13 +82,18 @@ class CrashTests(unittest.TestCase):
         self.assertEqual(level, 'warn')
         self.assertIn('chrome x1', message)
 
-    def test_orca_exit_crash_is_ignored_but_not_an_abort(self):
-        orca = '/app/bin/orca-slicer'
-        self.assertEqual(doctor.crash_summary(True, [self.dump(orca)])[0], 'ok')
-        self.assertEqual(doctor.crash_summary(True, [self.dump(orca, sig=6)])[0], 'warn')
+    def test_slicer_crashes_are_reported_in_the_summary(self):
+        for exe in self.SLICER_EXECUTABLES:
+            for sig in (6, 11):
+                with self.subTest(exe=exe, sig=sig):
+                    level, message = doctor.crash_summary(True, [self.dump(exe, sig=sig)])
+                    self.assertEqual(level, 'warn')
+                    self.assertIn(f'{Path(exe).name} x1', message)
 
-    def test_known_crash_is_info_in_the_timeline(self):
+    def test_slicer_crashes_are_warnings_in_the_timeline(self):
         from oninix_health import timeline
         with patch('oninix_health.journal', return_value=(True, [])):
-            events = timeline([self.dump('/app/bin/orca-slicer')])
-        self.assertIn(('info', 'OrcaSlicer crashed (known, ignored)'), [(e['level'], e['text']) for e in events])
+            events = timeline([self.dump(exe) for exe in self.SLICER_EXECUTABLES])
+        for exe in self.SLICER_EXECUTABLES:
+            with self.subTest(exe=exe):
+                self.assertIn(('warn', f'{Path(exe).name} crashed'), [(e['level'], e['text']) for e in events])

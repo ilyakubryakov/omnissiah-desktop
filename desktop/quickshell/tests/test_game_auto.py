@@ -25,11 +25,11 @@ class GameModeTests(unittest.TestCase):
         (Path(self.tmp.name) / 'mode.json').write_text(json.dumps(value))
 
     def test_call_mode_only_offers(self):
-        self.mode({'name': 'call'})
+        self.mode({'name': 'call', 'since': 10})
         with patch.object(desktop, 'profile') as profile, patch.object(desktop, 'game_offer') as offer:
             desktop.game_started()
         profile.assert_not_called()
-        offer.assert_called_once()
+        offer.assert_called_once_with('game', session=('call', 10))
 
     def test_switches_and_remembers_previous_mode(self):
         self.mode({'name': 'work'})
@@ -60,17 +60,17 @@ class GameModeTests(unittest.TestCase):
             desktop.game_closed()
         self.assertEqual(tries, ['work', 'work'])
 
-    def test_game_gone_at_once_returns(self):
-        self.mode({'name': 'work'})
-
-        def enter(name, expect=None, auto=None):
-            if name == 'game':
-                self.mode({'name': 'game', 'auto': auto})
-            return True
-        with patch.object(desktop, 'profile', side_effect=enter) as profile, patch.object(desktop, 'run'), \
-                patch.object(desktop, 'GAME_QUIET_SECONDS', 0), patch.object(desktop, 'games_running', return_value=False):
-            desktop.game_started()
-        self.assertEqual([c.args[0] for c in profile.call_args_list], ['game', 'work'])
+    def test_automatic_entry_requires_a_confirmed_running_game(self):
+        state = {'name': 'work', 'since': 10}
+        self.mode(state)
+        for running in (False, None):
+            with self.subTest(running=running), \
+                    patch.object(desktop, 'games_running', return_value=running), \
+                    patch.object(desktop, 'run') as run, patch.object(desktop, 'game_closed') as closed:
+                desktop.game_started()
+                run.assert_not_called()
+                closed.assert_not_called()
+                self.assertEqual(desktop.read_json(Path(self.tmp.name) / 'mode.json', {}), state)
 
     def test_unknown_window_list_is_not_quiet(self):
 
@@ -110,11 +110,18 @@ class GameModeTests(unittest.TestCase):
         with patch.object(desktop.subprocess, 'run', return_value=failed):
             self.assertIsNone(desktop.games_running())
 
-    def test_manual_game_mode_stays_on(self):
-        self.mode({'name': 'game'})
-        with patch.object(desktop, 'profile') as profile, patch.object(desktop, 'games_running', return_value=False):
+    def test_manual_game_mode_offers_return_to_normal(self):
+        self.mode({'name': 'game', 'since': 10})
+        result = desktop.subprocess.CompletedProcess([], 0, '', '')
+        with patch.object(desktop, 'GAME_QUIET_SECONDS', 0), patch.object(desktop, 'profile') as profile, \
+                patch.object(desktop, 'games_running', return_value=False), \
+                patch.object(desktop.subprocess, 'run', return_value=result) as notify:
             desktop.game_closed()
         profile.assert_not_called()
+        notify.assert_called_once()
+        command = notify.call_args.args[0]
+        self.assertEqual(command[0], 'notify-send')
+        self.assertIn('--action=default=Return to Normal', command)
 
     def test_returns_after_quiet_period(self):
         self.mode({'name': 'game', 'auto': {'from': 'music', 'at': 1}})
@@ -139,6 +146,6 @@ class GameModeTests(unittest.TestCase):
         timeout = desktop.subprocess.TimeoutExpired('notify-send', 1, output=b'42\n')
         with patch.object(desktop.subprocess, 'run', side_effect=timeout), \
                 patch.object(desktop, 'run') as run, patch.object(desktop, 'profile') as profile:
-            desktop.game_offer('game', call_session=('call', 10))
+            desktop.game_offer('game', session=('call', 10))
         profile.assert_not_called()
         run.assert_called_once_with(['makoctl', 'dismiss', '-n', '42'])
