@@ -49,21 +49,38 @@ class GameModeTests(unittest.TestCase):
             self.assertEqual(state['auto']['from'], 'work')
             desktop.action('mode', ['game'])
             self.assertIsNone(desktop.auto_of(desktop.read_json(self.path, {})))
-        with patch.object(desktop, 'games_running') as running:
-            desktop.action('game-closed', [])
-        running.assert_not_called()
 
     def test_call_offer_rechecks_session_and_game(self):
         self.path.write_text('{"name":"call","since":10}')
         result = subprocess.CompletedProcess([], 0, '123\ndefault\n', '')
         with patch.object(desktop.subprocess, 'run', return_value=result) as notify, \
-                patch.object(desktop, 'profile') as profile:
+                patch.object(desktop, 'profile') as profile, patch.object(desktop, 'game_closed') as closed:
             desktop.action('game-started', [])
         self.assertIn('--urgency=critical', notify.call_args.args[0])
         self.assertEqual(profile.call_args.args, ('game',))
         self.assertTrue(profile.call_args.kwargs['game_prompt'])
         self.assertTrue(profile.call_args.kwargs['expect']({'name': 'call', 'since': 10}))
         self.assertFalse(profile.call_args.kwargs['expect']({'name': 'call', 'since': 11}))
+        closed.assert_called_once_with()
+
+    def test_manual_game_exit_prompts_once_after_the_last_game(self):
+        self.path.write_text('{"name":"game","since":10}')
+        result = subprocess.CompletedProcess([], 0, '123\n', '')
+
+        def notify_and_repeat_close(*args, **kwargs):
+            desktop.game_closed()
+            return result
+
+        with patch.object(desktop, 'games_running', side_effect=[False] * 6), \
+                patch.object(desktop.time, 'monotonic', side_effect=range(6)), \
+                patch.object(desktop.time, 'sleep') as sleep, \
+                patch.object(desktop.subprocess, 'run', side_effect=notify_and_repeat_close) as notify, \
+                patch.object(desktop, 'profile') as profile, patch.object(desktop, 'run'):
+            desktop.action('game-closed', [])
+        self.assertEqual(sleep.call_count, 5)
+        notify.assert_called_once()
+        self.assertIn('--action=default=Return to Normal', notify.call_args.args[0])
+        profile.assert_not_called()
 
     def test_unreadable_window_list_restarts_quiet_window(self):
         state = {'name': 'game', 'auto': {'from': 'music', 'at': 1}}
