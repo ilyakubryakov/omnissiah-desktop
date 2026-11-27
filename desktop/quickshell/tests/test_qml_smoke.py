@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -10,13 +11,19 @@ ROOT = Path(__file__).resolve().parents[1]
 SINGLETON = re.compile(r"^\s*pragma Singleton\s*$", re.MULTILINE)
 
 class QmlSmokeTest(unittest.TestCase):
+    def missing_metadata(self):
+        message = "Qt and Quickshell type metadata required"
+        if os.environ.get("ONINIX_REQUIRE_QML_SMOKE") == "1":
+            self.fail(message)
+        self.skipTest(message)
+
     def test_qml_parses_and_resolves_imports(self):
         lint, shell = shutil.which("qmllint"), shutil.which("quickshell")
         if not (lint and shell):
-            self.skipTest("Qt and Quickshell type metadata required")
+            self.missing_metadata()
         imports = [Path(command).resolve().parents[1] / "lib/qt-6/qml" for command in (lint, shell)]
         if not (imports[0] / "QtQuick/qmldir").is_file() or not (imports[1] / "Quickshell/qmldir").is_file():
-            self.skipTest("Qt and Quickshell type metadata required")
+            self.missing_metadata()
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "quickshell"
             shutil.copytree(ROOT, source, ignore=shutil.ignore_patterns("assets", "tests"))
