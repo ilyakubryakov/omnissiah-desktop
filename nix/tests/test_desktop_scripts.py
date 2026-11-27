@@ -228,12 +228,53 @@ class KeywatchTests(unittest.TestCase):
         temp = self.enterContext(tempfile.TemporaryDirectory())
         private = Path(temp) / 'keywatch'
         for code in (2, 16, 30, 44, 71):
-            self.assertEqual(keywatch.classify(code), ('text', None))
             self.assertEqual(keywatch.held_name(code), 'char')
+        for code in (2, 14, 28, 57, 96):
+            self.assertEqual(keywatch.classify(code), ('typing', None))
         with patch.object(keywatch, 'STATE', private):
             snapshot = keywatch.write_snapshot({'reason': 'test'})
         self.assertEqual(private.stat().st_mode & 0o777, 0o700)
         self.assertEqual(snapshot.stat().st_mode & 0o777, 0o600)
+
+    def test_lock_discards_recent_input_and_ignores_queued_unlock_keys(self):
+        recorder = keywatch.Recorder()
+        dev = keywatch.Device(7, '/dev/input/event7', 7, 'keyboard')
+        recorder.devices[dev.fd] = dev
+
+        def press(stamp, code):
+            return keywatch.EVENT.pack(stamp, 0, keywatch.EV_KEY, code, 1)
+
+        with patch.object(keywatch, 'run', return_value='{"locked": false}') as status, \
+                patch.object(keywatch.time, 'monotonic', return_value=100) as clock, \
+                patch.object(keywatch.os, 'read', return_value=press(100, 2)) as events:
+            recorder.refresh_lock()
+            recorder.read(dev.fd)
+            clock.return_value = 100.5
+            recorder.refresh_lock()
+            status.assert_called_once()
+            clock.return_value = 109.5
+            recorder.refresh_lock()
+            clock.return_value = 110
+            recorder.read(dev.fd)
+            self.assertEqual(len(recorder.buckets), 2)
+            clock.return_value = 111
+            status.return_value = '{"locked": true}'
+            recorder.refresh_lock()
+            recorder.read(dev.fd)
+            self.assertFalse(recorder.buckets)
+            self.assertFalse(dev.down)
+            clock.return_value = 112
+            status.return_value = ''
+            recorder.refresh_lock()
+            self.assertTrue(recorder.locked)
+            clock.return_value = 113
+            status.return_value = '{"locked": false}'
+            recorder.refresh_lock()
+            events.return_value = press(112, 28) + press(113, 57) + press(113, 14)
+            recorder.read(dev.fd)
+        self.assertEqual(list(recorder.buckets), [(110, 'keyboard')])
+        self.assertEqual(recorder.buckets[110, 'keyboard']['typing'], 2)
+        self.assertNotIn(28, dev.down)
 
     def test_dumpable_process_refuses_to_open_devices(self):
         with patch.object(keywatch, 'not_dumpable', return_value=False), \

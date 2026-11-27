@@ -26,6 +26,8 @@ LOCK = RUNTIME / 'daemon.lock'
 KEEP_SECONDS = 600
 KEEP_BUCKETS = 4000
 KEEP_FILES = 30
+BUCKET_SECONDS = 10
+LOCK_CHECK_SECONDS = 1
 STUCK_SECONDS = 20
 RESCAN_SECONDS = 1
 STUCK_RETRY = 60
@@ -33,6 +35,7 @@ EVENT = struct.Struct('llHHi')
 EV_SYN, EV_KEY, SYN_REPORT, SYN_DROPPED = 0, 1, 0, 3
 EVIOCGKEY = (2 << 30) | (96 << 16) | (ord('E') << 8) | 0x18
 EVIOCGNAME = (2 << 30) | (128 << 16) | (ord('E') << 8) | 0x06
+EVIOCSCLOCKID = (1 << 30) | (4 << 16) | (ord('E') << 8) | 0xa0
 PR_SET_DUMPABLE = 4
 
 MODIFIERS = {29: 'LCtrl', 42: 'LShift', 54: 'RShift', 56: 'LAlt', 97: 'RCtrl', 100: 'RAlt',
@@ -42,10 +45,9 @@ NAVIGATION = {1: 'Esc', 15: 'Tab', 102: 'Home', 103: 'Up', 104: 'PageUp', 105: '
               111: 'Delete', 99: 'PrintScreen', 119: 'Pause', 127: 'Compose',
               113: 'Mute', 114: 'VolumeDown', 115: 'VolumeUp',
               **{59 + i: f'F{i + 1}' for i in range(10)}, 87: 'F11', 88: 'F12'}
-COUNTED = {57: 'space', 14: 'backspace', 28: 'enter', 96: 'enter'}
-
 TEXT = set(range(2, 14)) | set(range(16, 28)) | set(range(30, 42)) | {43} | set(range(44, 54)) | {86} \
     | set(range(71, 84)) | {55, 74, 78, 98, 117, 121}
+TYPING = TEXT | {14, 28, 57, 96}
 HELD_NAMES = {**MODIFIERS, **NAVIGATION, 57: 'Space', 14: 'Backspace', 28: 'Enter', 96: 'KPEnter'}
 USB_EVENTS = (('disconnect', re.compile(r'USB disconnect')), ('connect', re.compile(r'new .*USB device')),
               ('reset', re.compile(r'reset .*USB device')), ('error', re.compile(r'(?i)error|fail|timeout')))
@@ -65,11 +67,9 @@ def held_name(code):
     return HELD_NAMES.get(code, 'char' if code in TEXT else 'other')
 
 def classify(code):
-    if code in COUNTED:
-        return COUNTED[code], None
     if code in MODIFIERS or code in NAVIGATION:
         return 'named', MODIFIERS.get(code) or NAVIGATION[code]
-    return ('text' if code in TEXT else 'other'), None
+    return ('typing' if code in TYPING else 'other'), None
 
 def held_keys(node):
     fd = os.open(node, os.O_RDONLY | os.O_NONBLOCK)
@@ -120,6 +120,30 @@ class Recorder:
         self.buckets = collections.OrderedDict()
         self.notes = collections.deque(maxlen=200)
         self.last_scan = 0.0
+        self.locked = True
+        self.lock_checked = float('-inf')
+        self.unlocked_since = float('inf')
+
+    def refresh_lock(self, *, force=False):
+        now = time.monotonic()
+        if not force and now - self.lock_checked < LOCK_CHECK_SECONDS:
+            return
+        try:
+            locked = json.loads(run(['hyprctl', '-j', 'locked'], timeout=.3)).get('locked') is not False
+        except (ValueError, AttributeError):
+            locked = True
+        if locked and not self.locked:
+            for key in reversed(list(self.buckets)):
+                if key[0] + BUCKET_SECONDS <= self.lock_checked:
+                    break
+                del self.buckets[key]
+            for dev in self.devices.values():
+                dev.down.clear()
+                dev.reported.clear()
+        elif not locked and self.locked:
+            self.unlocked_since = time.monotonic()
+        self.locked = locked
+        self.lock_checked = now
 
     def scan(self):
         wanted = keyboards()
@@ -134,9 +158,15 @@ class Recorder:
                 fd = os.open(node, os.O_RDONLY | os.O_NONBLOCK)
             except OSError:
                 continue
+            try:
+                fcntl.ioctl(fd, EVIOCSCLOCKID, struct.pack('i', time.CLOCK_MONOTONIC))
+            except OSError:
+                os.close(fd)
+                continue
             dev = Device(fd, node, rdev, device_name(fd, node))
             self.devices[fd] = dev
-            self.sync(dev)
+            if not self.locked:
+                self.sync(dev)
             self.note('attached', dev)
         self.last_scan = time.monotonic()
 
@@ -160,11 +190,13 @@ class Recorder:
         self.notes.append({'m': time.monotonic(), 'time': time.strftime('%H:%M:%S'), 'device': dev.name, 'event': what})
 
     def bucket(self, dev):
-        key = (int(time.monotonic()), dev.name)
+        now = time.monotonic()
+        start = int(now) // BUCKET_SECONDS * BUCKET_SECONDS
+        key = (start, dev.name)
         if key not in self.buckets:
-            self.buckets[key] = {'time': time.strftime('%H:%M:%S'), 'text': 0, 'space': 0, 'backspace': 0,
-                                 'enter': 0, 'other': 0, 'named': []}
-            horizon = time.monotonic() - KEEP_SECONDS
+            stamp = time.localtime(time.time() - (now - start))
+            self.buckets[key] = {'time': time.strftime('%H:%M:%S', stamp), 'typing': 0, 'other': 0, 'named': []}
+            horizon = now - KEEP_SECONDS
             while self.buckets and (next(iter(self.buckets))[0] < horizon or len(self.buckets) > KEEP_BUCKETS):
                 self.buckets.popitem(last=False)
         return self.buckets[key]
@@ -178,8 +210,12 @@ class Recorder:
         except OSError:
             self.close(fd)
             return
+        if self.locked:
+            return
         for i in range(0, len(data) - EVENT.size + 1, EVENT.size):
-            _, _, kind, code, value = EVENT.unpack_from(data, i)
+            sec, usec, kind, code, value = EVENT.unpack_from(data, i)
+            if sec + usec / 1000000 < self.unlocked_since:
+                continue
             if kind == EV_SYN and code == SYN_DROPPED:
 
                 self.note('events dropped by the kernel', dev)
@@ -270,13 +306,15 @@ class Recorder:
         }
 
     def snapshot(self, reason, minutes=10):
+        self.refresh_lock(force=True)
         horizon = time.monotonic() - minutes * 60
         held = {}
-        for dev in self.devices.values():
-            try:
-                held[dev.name] = [held_name(c) for c in held_keys(dev.node)]
-            except OSError as error:
-                held[dev.name] = f'unreadable ({error.errno})'
+        if not self.locked:
+            for dev in self.devices.values():
+                try:
+                    held[dev.name] = [held_name(c) for c in held_keys(dev.node)]
+                except OSError as error:
+                    held[dev.name] = f'unreadable ({error.errno})'
         now = time.monotonic()
         report = {
             'reason': reason,
@@ -287,8 +325,8 @@ class Recorder:
             **self.context(minutes),
             'devices': [{'time': n['time'], 'device': n['device'], 'event': n['event']}
                         for n in self.notes if n['m'] >= horizon],
-            'activity_per_second': [{'device': name, **counts}
-                                    for (sec, name), counts in self.buckets.items() if sec >= horizon],
+            'activity_per_10_seconds': [{'device': name, **counts}
+                                        for (sec, name), counts in self.buckets.items() if sec >= horizon],
         }
         return write_snapshot(report)
 
@@ -355,12 +393,15 @@ def daemon():
     control.listen(2)
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     recorder = Recorder()
+    recorder.refresh_lock()
     recorder.scan()
     if not recorder.devices:
         print('No readable keyboard event devices; waiting for a device with existing access.', file=sys.stderr)
     last_try = 0.0
     while True:
-        for fd in select.select([control, *recorder.devices], [], [], 1.0)[0]:
+        ready = select.select([control, *recorder.devices], [], [], LOCK_CHECK_SECONDS)[0]
+        recorder.refresh_lock()
+        for fd in ready:
             if fd is control:
                 serve(control, recorder)
             elif fd in recorder.devices:
