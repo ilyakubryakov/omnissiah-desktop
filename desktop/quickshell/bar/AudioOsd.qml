@@ -25,6 +25,7 @@ PanelWindow {
     property real quietUntil: 0
     property real quietVolume: -1
     FileView {
+        id: quiet
         path: Quickshell.env("XDG_RUNTIME_DIR") ? Quickshell.env("XDG_RUNTIME_DIR") + "/oninix-duck-quiet" : ""
         watchChanges: true
         printErrors: false
@@ -40,6 +41,7 @@ PanelWindow {
         target: Shared.AudioState
         function onChanged(kind, device, volume, muted) {
             root.kind = kind; root.device = device; root.volume = volume; root.muted = muted
+            if (kind === "Output" && !quiet.loaded && quiet.path) quiet.reload()
             show.restart()
         }
     }
