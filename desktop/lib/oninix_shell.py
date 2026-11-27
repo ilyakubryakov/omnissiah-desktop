@@ -2,6 +2,7 @@ from contextlib import contextmanager
 from copy import deepcopy
 import fcntl
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -189,10 +190,15 @@ def dispatch(args):
             if not isinstance(value, dict) or value.get('last') not in PAGES:
                 raise ValueError('Invalid settings page')
             prefs['ui']['last'] = value['last']
-            for key, pos in value.get('scroll', {}).items():
-                if key not in PAGES or type(pos) not in (float, int) or not 0 <= pos <= 1:
+            scroll = value.get('scroll', {})
+            if not isinstance(scroll, dict):
+                raise ValueError('Invalid scroll positions')
+            for key, pos in scroll.items():
+                if key not in PAGES:
+                    continue
+                if type(pos) not in (float, int) or (type(pos) is float and not math.isfinite(pos)):
                     raise ValueError('Invalid scroll position')
-                prefs['ui']['scroll'][key] = pos
+                prefs['ui']['scroll'][key] = min(1, max(0, pos))
             save_preferences(prefs)
         elif command == 'layout':
             if not isinstance(value, dict) or value.get('role') not in ('primary', 'secondary'):

@@ -3,6 +3,7 @@ import contextlib
 import fcntl
 import hashlib
 import hmac
+import html
 import json
 import os
 import re
@@ -433,10 +434,22 @@ def authorize(request, emit):
         raise
     return ident
 
-CALL_LINK = re.compile(r"https://\S*(teams\.microsoft\.com|teams\.live\.com|meet\.google\.com|zoom\.us|webex\.com)", re.I)
+JOIN_HOSTS = ("teams.microsoft.com", "teams.live.com", "meet.google.com", "zoom.us", "webex.com")
+JOIN_URL = re.compile(r"""https://[^\s<>"'\\]+""", re.I)
 
-def is_call(link, attendees, location):
-    return bool(link or attendees or CALL_LINK.search(location or ""))
+def with_join(event, *texts):
+    for text in texts:
+        for candidate in JOIN_URL.findall(html.unescape(str(text or ""))):
+            url = candidate.rstrip(".,;)")
+            address = feed_address(url)
+            if address is None or len(url) > 1000:
+                continue
+            host = address.hostname
+            if re.fullmatch(r"[a-z0-9.-]+", host) and any(host == suffix or host.endswith("." + suffix)
+                                                        for suffix in JOIN_HOSTS):
+                event.update(j=url, m=True)
+                return event
+    return event
 
 def normalized_google(events, key, tz):
     result = []
@@ -449,8 +462,13 @@ def normalized_google(events, key, tz):
             dt = datetime.fromisoformat(value["date"] if allday else value["dateTime"])
             return (dt.replace(tzinfo=tz) if dt.tzinfo is None else dt.astimezone(tz)).isoformat()
         others = [a for a in ev.get("attendees", []) if not a.get("self") and not a.get("resource")]
-        call = is_call(ev.get("hangoutLink") or ev.get("conferenceData"), others, ev.get("location"))
-        result.append(with_place(dict(s=parse(start), e=parse(end or start), t=str(ev.get("summary") or "(no title)")[:160], c=key, a=allday, m=call), ev.get("location")))
+        conference = ev.get("conferenceData") or {}
+        video = [point.get("uri") for point in conference.get("entryPoints", []) if point.get("entryPointType") == "video"]
+        call = bool(ev.get("hangoutLink") or conference or others)
+        place = ev.get("location")
+        event = with_place(dict(s=parse(start), e=parse(end or start), t=str(ev.get("summary") or "(no title)")[:160],
+                                c=key, a=allday, m=call), place)
+        result.append(with_join(event, ev.get("hangoutLink"), *video, place, ev.get("description")))
     return result
 
 def normalized_microsoft(events, key, tz):
@@ -472,8 +490,11 @@ def normalized_microsoft(events, key, tz):
                 day = dt.astimezone(ZoneInfo(zone)).date()
                 return datetime.combine(day, datetime.min.time(), tz).isoformat()
             return dt.astimezone(tz).isoformat()
-        call = is_call(ev.get("isOnlineMeeting"), ev.get("attendees"), (ev.get("location") or {}).get("displayName"))
-        result.append(with_place(dict(s=parse(ev["start"]), e=parse(ev["end"]), t=str(ev.get("subject") or "(no title)")[:160], c=key, a=allday, m=call), (ev.get("location") or {}).get("displayName")))
+        place = (ev.get("location") or {}).get("displayName")
+        call = bool(ev.get("isOnlineMeeting") or ev.get("attendees"))
+        event = with_place(dict(s=parse(ev["start"]), e=parse(ev["end"]), t=str(ev.get("subject") or "(no title)")[:160],
+                                c=key, a=allday, m=call), place)
+        result.append(with_join(event, (ev.get("onlineMeeting") or {}).get("joinUrl"), place))
     return result
 
 def feed_address(url):
@@ -520,11 +541,12 @@ def source_ics(key, url, start, end):
         raw_start = event.decoded("DTSTART")
         raw_end = event.decoded("DTEND", raw_start)
         place = event.get("LOCATION")
-        result.append(with_place(dict(
+        row = with_place(dict(
             s=local(raw_start).isoformat(), e=local(raw_end).isoformat(),
             t=str(event.get("SUMMARY") or "(no title)")[:160], c=key,
-            a=not isinstance(raw_start, datetime), m=is_call(event.get("CONFERENCE"), event.get("ATTENDEE"), place),
-        ), place))
+            a=not isinstance(raw_start, datetime), m=bool(event.get("CONFERENCE") or event.get("ATTENDEE")),
+        ), place)
+        result.append(with_join(row, event.get("CONFERENCE"), event.get("URL"), place, event.get("DESCRIPTION")))
     return result
 
 def sync():
@@ -578,7 +600,7 @@ def collect_sources(start, end, tz, source_ics):
                     else:
                         data = pages(GRAPH + "me/calendars/" + urllib.parse.quote(cid, safe="") + "/calendarView", token,
                             {"startDateTime": start.isoformat(), "endDateTime": end.isoformat(), "$top": 1000,
-                             "$select": "subject,start,end,isAllDay,isCancelled,responseStatus,originalStartTimeZone,isOnlineMeeting,attendees,location"}, True)
+                             "$select": "subject,start,end,isAllDay,isCancelled,responseStatus,originalStartTimeZone,isOnlineMeeting,onlineMeeting,attendees,location"}, True)
                         found = normalized_microsoft(data, key, tz)
                     previous = {"ts": time.time(), "events": found}
                     write_json(cached, previous)
