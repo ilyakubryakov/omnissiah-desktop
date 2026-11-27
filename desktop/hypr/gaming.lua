@@ -20,7 +20,7 @@ local function is_game(w)
     return id ~= nil and tonumber(id) > 0
 end
 
-local games, exit_timer = {}, nil
+local games = {}
 
 function M.has_games()
     for _, w in ipairs(hl.get_windows()) do
@@ -29,13 +29,22 @@ function M.has_games()
     return false
 end
 
-local offered, last_offer = {}, 0
+local offered = {}
+local function process_key(pid)
+    local f = io.open("/proc/" .. tostring(pid) .. "/stat", "r")
+    if not f then return tostring(pid) end
+    local stat = f:read("*l") or ""; f:close()
+    local after = stat:match("^.*%)%s+(.*)$") or ""
+    local fields = {}
+    for field in after:gmatch("%S+") do fields[#fields + 1] = field end
+    return tostring(pid) .. ":" .. (fields[20] or "")
+end
 local function offer(w)
-    if M.enabled or not w or not w.pid or offered[w.pid] then return end
-    offered[w.pid] = true
-    if os.time() - last_offer < 120 then return end
-    last_offer = os.time()
-    hl.exec_cmd("oninix-desktop game-offer")
+    if M.enabled or not w or not w.pid or not is_game(w) then return end
+    local key = process_key(w.pid)
+    if offered[key] then return end
+    offered[key] = true
+    hl.exec_cmd("oninix-desktop game-started")
 end
 
 local function apply(w)
@@ -68,15 +77,8 @@ end
 hl.on("window.open", apply)
 hl.on("window.class", apply)
 hl.on("window.close", function(w)
-    if not w or not games[w.address] then return end
-    games[w.address] = nil
-    if not M.enabled then return end
-    if exit_timer then exit_timer:set_enabled(false) end
-    exit_timer = hl.timer(function()
-        if M.enabled and not M.has_games() then
-            hl.exec_cmd("oninix-desktop game-offer normal")
-        end
-    end, { timeout = 1000, type = "oneshot" })
+    if w and games[w.address] then games[w.address] = nil end
+    if M.enabled then hl.exec_cmd("oninix-desktop game-closed") end
 end)
 local path = (os.getenv("XDG_RUNTIME_DIR") or "/nonexistent") .. "/oninix-desktop/mode.json"
 local f = io.open(path, "r")

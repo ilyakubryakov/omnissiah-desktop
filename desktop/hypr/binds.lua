@@ -23,7 +23,7 @@ local function installed(cmd)
 end
 
 bind("SUPER + Return", app("kitty"), "terminal")
-bind("SUPER + space", hl.dsp.exec_cmd("oninix-launcher"), "launcher: apps, projects, files")
+bind("SUPER + space", hl.dsp.exec_cmd("oninix-launcher"), "launcher: apps, AI agents, projects, documents")
 bind("SUPER + D", hl.dsp.exec_cmd("oninix-shell ipc call launchpad toggle"), "launchpad: apps in folders")
 bind("SUPER + E", app("dolphin"), "files")
 bind("SUPER + N", hl.dsp.exec_cmd("oninix-shell ipc call notebook toggle"), "notebook: notes, calculator and timers")
@@ -41,13 +41,20 @@ bind("SUPER + slash", hl.dsp.exec_cmd("oninix-shell ipc call keys toggle"), "sho
 bind("SUPER + CTRL + A", panel("appearance"), "appearance: palettes and wallpapers")
 bind("SUPER + CTRL + U", panel("notifications"), "notification history")
 bind("SUPER + CTRL + Tab", panel("overview"), "window and workspace overview")
-local switcher_prefix = tostring({}):gsub("%W", "")
+local switcher_prefix = os.time() .. "c" .. math.floor(os.clock() * 1000) .. "x" .. tostring({}):gsub("%W", "")
 local switcher_sequence = 0
+local switcher_pending = false
 local function switcher(action)
     return function()
-        if action ~= "accept" then switcher_sequence = switcher_sequence + 1 end
+        if action == "accept" then
+            if not switcher_pending then return end
+            switcher_pending = false
+        else
+            switcher_sequence = switcher_sequence + 1
+            switcher_pending = true
+        end
         hl.exec_cmd("oninix-shell ipc call switcher "
-            .. action .. " " .. switcher_prefix .. switcher_sequence)
+            .. action .. " " .. switcher_prefix .. "-" .. switcher_sequence)
     end
 end
 bind("ALT + Tab", switcher("next"), "switch between all application windows")
@@ -94,7 +101,7 @@ bind("SUPER + SHIFT + W", function() require("minimize").minimize() end, "minimi
 bind("SUPER + CTRL + W", function() require("minimize").minimize_app() end, "minimize all windows of the app")
 bind("SUPER + CTRL + D", function() require("minimize").toggle_desktop() end, "show desktop / bring windows back")
 bind("SUPER + V", function()
-    if require("windowmode").enabled then return end
+    if require("windowmode").floating_ws(hl.get_active_workspace()) then return end
     hl.dispatch(hl.dsp.window.float({ action = "toggle" }))
 end, "float / tile window")
 bind("SUPER + F", hl.dsp.window.fullscreen({ mode = "maximized", action = "toggle" }), "maximize")
@@ -127,9 +134,8 @@ end
 
 local layouts = { "dwindle", "master", "scrolling", "monocle" }
 bind("SUPER + T", function()
-	if require("windowmode").enabled then return end
 	local ws = active_workspace()
-	if not ws then
+	if not ws or require("windowmode").floating_ws(ws) then
 		return
 	end
 	local next_layout = layouts[1]
@@ -143,37 +149,10 @@ bind("SUPER + T", function()
 	announce("Layout: " .. next_layout)
 end, "next layout: dwindle, master, scrolling, monocle")
 
-local floating_workspaces = {}
-
-local function set_floating(window, on)
-	hl.dispatch(hl.dsp.window.float({ action = on and "enable" or "disable", window = window }))
-end
-
 bind("SUPER + SHIFT + space", function()
-	if require("windowmode").enabled then return end
-	local ws = active_workspace()
-	if not ws then
-		return
-	end
-	local key = workspace_key(ws)
-	local on = not floating_workspaces[key]
-	floating_workspaces[key] = on or nil
-	for _, window in ipairs(hl.get_workspace_windows(key) or {}) do
-		set_floating(window, on)
-	end
-	announce(on and "Floating" or "Tiling: " .. ws.tiled_layout)
+	local mode = require("windowmode").toggle_workspace(active_workspace())
+	if mode then announce(mode == "floating" and "Floating" or "Tiling") end
 end, "float / tile the whole workspace")
-
-hl.on("window.open", function(window)
-	if window and window.workspace and floating_workspaces[workspace_key(window.workspace)] then
-		set_floating(window, true)
-	end
-end)
-hl.on("window.move_to_workspace", function(window, ws)
-	if window and ws and floating_workspaces[workspace_key(ws)] then
-		set_floating(window, true)
-	end
-end)
 
 bind("SUPER + W", hl.dsp.group.toggle(), "group into tabs / ungroup")
 bind("SUPER + Tab", hl.dsp.group.next(), "next tab")

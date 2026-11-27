@@ -37,7 +37,7 @@ hl.window_rule({ match = { title = "^(Picture.in.[Pp]icture)$" }, float = true, 
 
 hl.layer_rule({ match = { namespace = "^(quickshell.*)$" }, no_anim = true })
 
-hl.window_rule({ match = { class = "^(org\\.quickshell)$", title = "^Wallpaper (for .*|gallery|collection)$" }, float = true, center = true })
+hl.window_rule({ match = { class = "^(org\\.quickshell)$", title = "^(Wallpaper (for .*|gallery|collection)|Live wallpapers)$" }, float = true, center = true })
 hl.window_rule({ match = { class = "^(org\\.quickshell)$", title = "^(Control Station)$" }, float = true, center = true, no_anim = true, border_size = 0, no_blur = true, rounding = 20, rounding_power = 2 })
 
 hl.layer_rule({ match = { namespace = "^oninix-panel$" }, blur = true, ignore_alpha = 0.05, no_anim = true })
@@ -47,3 +47,18 @@ hl.layer_rule({ match = { namespace = "^oninix-(card|calendar|notebook|notificat
 hl.layer_rule({ match = { namespace = "^rofi$" }, no_anim = true })
 
 hl.window_rule({ match = { class = "^REAPER$", title = "^(FX: Track [0-9]+.*)$" }, float = true, no_anim = true })
+
+return {
+	own_float = {
+		class = {
+			"(?i)battle\\.net(\\.exe)?", "org\\.pulseaudio\\.pavucontrol|pavucontrol",
+			"alsa-scarlett-gui|com\\.focusrite\\.alsa-scarlett-gui", "org\\.kde\\.polkit-kde-authentication-agent-1",
+			"xdg-desktop-portal.*", "org\\.kde\\.kwalletmanager5?", "nm-connection-editor", "nmtui", "blueman-manager",
+			"1Password|com\\.onepassword\\.OnePassword", "org\\.quickshell",
+		},
+		title = {
+			"Picture.in.[Pp]icture",
+			"REAPER( [^v].*)?|About REAPER.*|Actions|MIDI take.*|Render.*|Tuner|Control Surface Settings|Configure MIDI.*|New electronic session|AI Stems.*|New guitar session|Voice tools|FX:.*|Add FX.*|Customize.*|Toolbar.*|Project (Settings|Bay).*|Select toolbar icon|Set toolbar item.*|Import stems.*",
+		},
+	},
+}

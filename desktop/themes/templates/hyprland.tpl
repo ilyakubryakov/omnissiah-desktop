@@ -29,3 +29,10 @@ hl.config({
 		background_color = "rgb({{background:hex}})",
 	},
 })
+
+ONINIX_TITLEBAR = {
+	bar = "rgb({{light_background:hex}})",
+	bar_inactive = "rgb({{dark_background:hex}})",
+	text = "rgb({{foreground:hex}})",
+	shadow = "rgba({{shadow:hex}}59)",
+}

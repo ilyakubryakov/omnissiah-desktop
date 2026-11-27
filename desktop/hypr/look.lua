@@ -25,6 +25,7 @@ hl.config({
 		kb_options = "grp:caps_toggle",
 		numlock_by_default = true,
 		follow_mouse = 2,
+		float_switch_override_focus = 0,
 	},
 	dwindle = {
 		preserve_split = true,

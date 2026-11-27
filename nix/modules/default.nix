@@ -15,6 +15,7 @@ in
     ./game-defer.nix
     ./voice.nix
     ./spirit.nix
+    ./titlebars.nix
   ];
 
   options.oninix = {
