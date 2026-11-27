@@ -66,12 +66,20 @@ lib.mkIf cfg.enable {
     ONINIX_XKB_LAYOUT = keyboardLayout;
     ONINIX_LAPTOP = if cfg.hardware.laptop then "1" else "0";
   };
+  environment.localBinInPath = lib.mkDefault true;
+  environment.etc."environment.d/95-oninix-path.conf".text = ''
+    PATH=$HOME/.local/bin:$PATH
+  '';
   programs.hyprlock.enable = true;
   programs.dconf.enable = lib.mkDefault true;
   systemd.user.services.hypridle = {
     environment.ONINIX_LAPTOP = if cfg.hardware.laptop then "1" else "0";
     path = [ config.services.hypridle.package pkgs.python3 pkgs.util-linux "/run/current-system/sw" ];
-    serviceConfig.ExecStart = [ "" "${share}/share/oninix/hypr/scripts/idle.sh" ];
+    serviceConfig = {
+      ExecStart = [ "" "${share}/share/oninix/hypr/scripts/idle.sh" ];
+      Restart = "always";
+      RestartSec = "3s";
+    };
   };
   systemd.user.services.oninix-notify-log = {
     description = "Log notification arrivals and actions";

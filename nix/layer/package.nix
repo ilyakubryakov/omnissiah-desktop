@@ -67,7 +67,10 @@ let
       [Service]
       ExecStart=${launch} mako --config=%S/theme/mako.conf
     '';
-    "oninix-idle.service" = service "OniNix idle and lock actions" "sh -c 'exec \"$$ONINIX_SHARE/hypr/scripts/idle.sh\"'" "";
+    "oninix-idle.service" = service "OniNix idle and lock actions" "sh -c 'exec \"$$ONINIX_SHARE/hypr/scripts/idle.sh\"'" ''
+      Restart=always
+      RestartSec=3s
+    '';
     "oninix-notify-log.service" = service "Log notification arrivals and actions" "oninix-notify-log --watch" ''
       UMask=0077
       NoNewPrivileges=true
@@ -97,6 +100,7 @@ let
       Type=oneshot
       Nice=15
       IOSchedulingClass=idle
+      LogLevelMax=notice
     '';
     "oninix-update-check.timer" = ''
       [Unit]
