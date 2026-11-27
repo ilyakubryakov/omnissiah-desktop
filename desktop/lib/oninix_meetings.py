@@ -557,11 +557,6 @@ class Meetings:
                     self.cancel.set()
                 elif job['state'] == 'queued':
                     self.patch(job['id'], state='interrupted', error='Processing cancelled. Audio is kept.')
-            elif op == 'delete':
-                job = self.get(request.get('id'))
-                if job['state'] in ACTIVE | BUSY or job['id'] in (self.processing, self.capture):
-                    raise ValueError('Stop or cancel this recording before deleting it.')
-                shutil.rmtree(self.folder(job))
             elif op in ('publish', 'tasks'):
                 return self.publish(request.get('id'), tasks=op == 'tasks')
             else:
