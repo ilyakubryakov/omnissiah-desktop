@@ -47,7 +47,8 @@ ToolOverlay {
     }
     GridLayout {
         Layout.fillWidth: true
-        columns: width >= Shared.DesktopStyle.px(860) ? 2 : 1
+        readonly property int twoColumnWidth: Shared.DesktopStyle.px(860)
+        columns: width >= twoColumnWidth ? 2 : 1
         columnSpacing: Shared.DesktopStyle.px(16); rowSpacing: Shared.DesktopStyle.px(16)
         Repeater {
             model: root.groups

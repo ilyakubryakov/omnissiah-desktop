@@ -18,6 +18,7 @@ Singleton {
 
     property var lastIdle: 0
     property var lastTotal: 0
+    function rounded(value) { return Number.isFinite(value) ? Math.round(value) : -1 }
 
     Timer {
         interval: 2000
@@ -27,7 +28,7 @@ Singleton {
         onTriggered: {
             stat.reload()
             meminfo.reload()
-            hwmon.running = true
+            if (hwmon.path !== "") hwmon.reload()
         }
     }
 
@@ -70,15 +71,26 @@ Singleton {
         }
     }
 
-    Process {
+    FileView {
         id: hwmon
-        command: ["sh", "-c", "for d in /sys/class/hwmon/hwmon*; do n=$(cat $d/name); case $n in k10temp|coretemp|cpu_thermal) cat $d/temp1_input; exit;; esac; done"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                const t = parseInt(text)
-                root.temp = !isNaN(t) ? Math.round(t / 1000) : -1
-            }
+        printErrors: false
+        onLoaded: root.temp = root.rounded(parseInt(text()) / 1000)
+        onLoadFailed: {
+            root.temp = -1
+            path = ""
         }
+    }
+    Timer {
+        interval: 30000
+        running: hwmon.path === ""
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: if (!findHwmon.running) findHwmon.running = true
+    }
+    Process {
+        id: findHwmon
+        command: ["sh", "-c", "for d in /sys/class/hwmon/hwmon*; do read -r n < \"$d/name\" || continue; case $n in k10temp|coretemp|cpu_thermal) [ -r \"$d/temp1_input\" ] && printf '%s\\n' \"$d/temp1_input\" && exit;; esac; done"]
+        stdout: StdioCollector { onStreamFinished: hwmon.path = text.trim() }
     }
 
     Process {

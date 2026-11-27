@@ -9,7 +9,7 @@ RowLayout {
     required property var barWindow
     property real availableWidth: 1920
     implicitHeight: PanelStyle.barHeight
-    spacing: 2
+    spacing: Shared.DesktopStyle.px(2)
     Layout.fillHeight: true
 
     function rank(level) { return { bad: 3, warn: 2, stale: 1 }[level] || 0 }
@@ -48,13 +48,13 @@ RowLayout {
             CardHeader { glyph: '\u{F0674}'; title: 'AI usage'; note: 'Limits and local usage' }
             Flickable {
                 Layout.fillWidth: true
-                Layout.preferredHeight: Math.min(aiContents.implicitHeight, (root.barWindow.screen ? root.barWindow.screen.height : 1080) * 0.65)
+                Layout.preferredHeight: Math.min(aiContents.implicitHeight, (root.barWindow.screen ? root.barWindow.screen.height : Shared.DesktopStyle.px(1080)) * 0.65)
                 contentHeight: aiContents.implicitHeight; contentWidth: width
                 clip: true; boundsBehavior: Flickable.StopAtBounds
                 ScrollBar.vertical: ScrollBar { }
                 ColumnLayout {
                     id: aiContents
-                    width: parent.width; spacing: 12
+                    width: parent.width; spacing: Shared.DesktopStyle.cardSpacing
             Repeater {
                 model: PanelBriefing.providers
                 ColumnLayout {
@@ -63,10 +63,10 @@ RowLayout {
                     required property int index
                     readonly property var usageData: PanelBriefing.provider(modelData.id)
                     readonly property bool stale: PanelBriefing.usageStale(usageData)
-                    Layout.fillWidth: true; spacing: 8
+                    Layout.fillWidth: true; spacing: Shared.DesktopStyle.spaceUnit * 2
                     Divider { visible: usageBlock.index > 0 }
                     RowLayout {
-                        Layout.fillWidth: true; spacing: 8
+                        Layout.fillWidth: true; spacing: Shared.DesktopStyle.spaceUnit * 2
                         Text { text: usageBlock.modelData.glyph; font.family: Colors.iconFont; font.pixelSize: Shared.DesktopStyle.px(17); color: Colors.foreground }
                         UiLabel { text: usageBlock.modelData.label; font.pixelSize: Shared.DesktopStyle.px(15); font.weight: Font.DemiBold; Layout.fillWidth: true }
                         UiLabel {
@@ -96,7 +96,7 @@ RowLayout {
                         ColumnLayout {
                             id: quotaRow
                             required property var modelData
-                            Layout.fillWidth: true; spacing: 4
+                            Layout.fillWidth: true; spacing: Shared.DesktopStyle.spaceUnit
                             readonly property color meterColor: usageBlock.stale ? Colors.dim : modelData.usedPercent >= 95 ? Colors.red
                                 : modelData.usedPercent >= 80 ? Colors.yellow : Colors.accent
                             RowLayout {
@@ -109,7 +109,7 @@ RowLayout {
                                 UiLabel { text: Math.round(quotaRow.modelData.usedPercent) + '% used'; color: quotaRow.meterColor; font.pixelSize: Shared.DesktopStyle.px(13) }
                             }
                             Rectangle {
-                                Layout.fillWidth: true; implicitHeight: 5; radius: 2.5; color: Colors.selection
+                                Layout.fillWidth: true; implicitHeight: Shared.DesktopStyle.px(5); radius: Shared.DesktopStyle.px(5) / 2; color: Colors.selection
                                 Rectangle {
                                     height: parent.height; radius: parent.radius
                                     width: parent.width * Math.max(0, Math.min(1, quotaRow.modelData.usedPercent / 100))

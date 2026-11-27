@@ -16,9 +16,9 @@ PopupWindow {
     anchor.item: anchorItem
     anchor.edges: barWindow.edge === "bottom" ? Edges.Top : Edges.Bottom
     anchor.gravity: barWindow.edge === "bottom" ? Edges.Top : Edges.Bottom
-    anchor.margins.top: 4
+    anchor.margins.top: Shared.DesktopStyle.px(4)
     implicitWidth: cardWidth
-    implicitHeight: column.implicitHeight + 16
+    implicitHeight: column.implicitHeight + Shared.DesktopStyle.px(16)
     visible: open
     color: "transparent"
 
@@ -36,8 +36,8 @@ PopupWindow {
 
         ColumnLayout {
             id: column
-            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 8 }
-            spacing: 2
+            anchors { left: parent.left; right: parent.right; top: parent.top; margins: Shared.DesktopStyle.spaceUnit * 2 }
+            spacing: Shared.DesktopStyle.px(2)
         }
     }
 }

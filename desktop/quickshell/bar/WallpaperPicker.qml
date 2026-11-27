@@ -10,10 +10,11 @@ import "../shared" as Shared
 FloatingWindow {
     id: root
     title: "Wallpaper gallery"
+    property LiveWallpaperWindow liveWindow: LiveWallpaperWindow {}
     visible: DesktopData.wallpapersOpen
-    implicitWidth: 1040
-    implicitHeight: 780
-    minimumSize: Qt.size(760, 560)
+    implicitWidth: Shared.DesktopStyle.px(1040)
+    implicitHeight: Shared.DesktopStyle.px(780)
+    minimumSize: Qt.size(Shared.DesktopStyle.px(760), Shared.DesktopStyle.px(560))
     color: Colors.background
     onClosed: DesktopData.wallpapersOpen = false
     readonly property var wallpaper: DesktopData.appearance.wallpaper || ({})
@@ -26,7 +27,8 @@ FloatingWindow {
     property var thumbnails: ({})
     property string error: ""
     readonly property var filtered: images.filter(image => image.name.toLocaleLowerCase().includes(search.text.trim().toLocaleLowerCase()))
-    readonly property int columns: Math.max(2, Math.floor(grid.width / 260))
+    readonly property int targetCellWidth: Shared.DesktopStyle.px(260)
+    readonly property int columns: Math.max(1, Math.floor(grid.width / targetCellWidth))
     onDirectoryChanged: if (visible) refresh()
     onVisibleChanged: {
         if (visible) { DesktopData.readAppearance(); refresh(); body.forceActiveFocus() }
@@ -84,11 +86,11 @@ FloatingWindow {
         focus: true
         Keys.onEscapePressed: DesktopData.wallpapersOpen = false
         ColumnLayout {
-            anchors.fill: parent; anchors.margins: 24; spacing: 14
+            anchors.fill: parent; anchors.margins: Shared.DesktopStyle.px(24); spacing: Shared.DesktopStyle.px(14)
             RowLayout {
                 Layout.fillWidth: true
                 UiLabel {
-                    text: "WALLPAPERS"; font.pixelSize: Shared.DesktopStyle.px(13); font.letterSpacing: 3; color: Colors.accent; Layout.fillWidth: true
+                    text: "WALLPAPERS"; font.pixelSize: Shared.DesktopStyle.px(13); font.letterSpacing: Shared.DesktopStyle.px(3); color: Colors.accent; Layout.fillWidth: true
                     MouseArea { anchors.fill: parent; onPressed: root.startSystemMove() }
                 }
                 UiLabel { text: root.filtered.length + " images"; font.pixelSize: Shared.DesktopStyle.px(12); color: Colors.muted }
@@ -102,7 +104,7 @@ FloatingWindow {
                     text: root.directory
                     placeholderText: "Wallpaper folder"
                     color: Colors.foreground; selectionColor: Colors.accent
-                    background: Rectangle { color: Colors.lightBackground; radius: 6; border.width: 1; border.color: directoryField.activeFocus ? Colors.accent : Colors.selection }
+                    background: Rectangle { color: Colors.lightBackground; radius: Shared.DesktopStyle.px(6); border.width: 1; border.color: directoryField.activeFocus ? Colors.accent : Colors.selection }
                     enabled: !DesktopData.busy
                     onAccepted: if (text.trim()) root.act(["wallpaper-directory", text])
                 }
@@ -124,10 +126,10 @@ FloatingWindow {
                 Item { Layout.fillWidth: true }
                 TextField {
                     id: search
-                    Layout.preferredWidth: 240
+                    Layout.preferredWidth: Shared.DesktopStyle.px(240)
                     placeholderText: "Search collection…"
                     color: Colors.foreground; selectionColor: Colors.accent
-                    background: Rectangle { color: Colors.lightBackground; radius: 6; border.width: 1; border.color: search.activeFocus ? Colors.accent : Colors.selection }
+                    background: Rectangle { color: Colors.lightBackground; radius: Shared.DesktopStyle.px(6); border.width: 1; border.color: search.activeFocus ? Colors.accent : Colors.selection }
                     onTextChanged: { grid.contentY = 0; previewDelay.restart() }
                 }
             }
@@ -143,7 +145,7 @@ FloatingWindow {
                 id: grid
                 Layout.fillWidth: true; Layout.fillHeight: true
                 clip: true; reuseItems: true; cacheBuffer: 0
-                cellWidth: width / root.columns; cellHeight: cellWidth * 0.625 + 44
+                cellWidth: width / root.columns; cellHeight: cellWidth * 0.625 + Shared.DesktopStyle.px(44)
                 model: root.visible ? root.filtered : []
                 onContentYChanged: previewDelay.restart()
                 onHeightChanged: previewDelay.restart()
@@ -164,15 +166,15 @@ FloatingWindow {
                     Keys.onReturnPressed: choose()
                     Keys.onSpacePressed: choose()
                     Rectangle {
-                        anchors.fill: parent; anchors.margins: 6; radius: 8
+                        anchors.fill: parent; anchors.margins: Shared.DesktopStyle.px(6); radius: Shared.DesktopStyle.px(8)
                         color: Colors.lightBackground
-                        border.width: root.selected === card.modelData.path || card.activeFocus ? 2 : 1
+                        border.width: root.selected === card.modelData.path || card.activeFocus ? Shared.DesktopStyle.px(2) : 1
                         border.color: root.selected === card.modelData.path || card.activeFocus ? Colors.accent : Colors.selection
                         Image {
-                            anchors { top: parent.top; left: parent.left; right: parent.right; margins: 4 }
-                            height: parent.height - 40
+                            anchors { top: parent.top; left: parent.left; right: parent.right; margins: Shared.DesktopStyle.spaceUnit }
+                            height: parent.height - Shared.DesktopStyle.px(40)
                             source: card.preview; asynchronous: true; cache: false
-                            sourceSize: Qt.size(512, 320)
+                            sourceSize: Qt.size(Shared.DesktopStyle.px(512), Shared.DesktopStyle.px(320))
                             fillMode: Image.PreserveAspectFit
                         }
                         UiLabel {
@@ -181,7 +183,7 @@ FloatingWindow {
                             text: root.thumbnails[card.modelData.path] === "" ? "Preview unavailable" : "Loading preview…"
                         }
                         UiLabel {
-                            anchors { bottom: parent.bottom; left: parent.left; right: parent.right; margins: 12 }
+                            anchors { bottom: parent.bottom; left: parent.left; right: parent.right; margins: Shared.DesktopStyle.px(12) }
                             text: (root.selected === card.modelData.path ? "✓  " : "") + card.modelData.name
                             font.pixelSize: Shared.DesktopStyle.px(12); elide: Text.ElideRight
                         }

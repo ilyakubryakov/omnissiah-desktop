@@ -7,7 +7,7 @@ import "../shared" as Shared
 ColumnLayout {
     id: root
     signal actionInvoked()
-    spacing: 12
+    spacing: Shared.DesktopStyle.cardSpacing
     property bool showRules: false
     readonly property var groups: Logic.groups(DesktopData.notifications.current, DesktopData.notifications.history)
     readonly property var suggestions: DesktopData.notifications.suggestions || []
@@ -22,8 +22,8 @@ ColumnLayout {
     UiLabel { visible: !!DesktopData.notifications.error || !!DesktopData.error; Layout.fillWidth: true; text: DesktopData.notifications.error || DesktopData.error; color: Colors.red }
     ColumnLayout {
         visible: root.suggestions.length > 0
-        Layout.fillWidth: true; spacing: 6
-        UiLabel { text: "Often ignored · last 7 days"; color: Colors.accent; font.pixelSize: Shared.DesktopStyle.px(11); font.letterSpacing: 1 }
+        Layout.fillWidth: true; spacing: Shared.DesktopStyle.px(6)
+        UiLabel { text: "Often ignored · last 7 days"; color: Colors.accent; font.pixelSize: Shared.DesktopStyle.px(11); font.letterSpacing: Shared.DesktopStyle.px(1) }
         Repeater {
             model: root.suggestions
             RowLayout {
@@ -39,7 +39,7 @@ ColumnLayout {
             }
         }
     }
-    UiLabel { visible: root.groups.length === 0; text: "All clear\nYour next notifications will appear here."; color: Colors.muted; Layout.topMargin: 32; Layout.bottomMargin: 32; Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter }
+    UiLabel { visible: root.groups.length === 0; text: "All clear\nYour next notifications will appear here."; color: Colors.muted; Layout.topMargin: Shared.DesktopStyle.px(32); Layout.bottomMargin: Shared.DesktopStyle.px(32); Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter }
     Repeater {
         model: root.groups
         NotificationItem {

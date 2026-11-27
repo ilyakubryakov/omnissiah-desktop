@@ -7,9 +7,9 @@ ColumnLayout {
     id: root
     property bool visibleNow: false
     readonly property var prefs: DictationData.settings
-    spacing: 10
+    spacing: Shared.DesktopStyle.px(10)
     onVisibleNowChanged: if (visibleNow) DictationData.call({op:"devices"})
-    Rectangle { Layout.fillWidth: true; height: 1; color: Colors.selection; Layout.topMargin: 10 }
+    Rectangle { Layout.fillWidth: true; height: 1; color: Colors.selection; Layout.topMargin: Shared.DesktopStyle.px(10) }
     UiLabel { text: "Hold-to-talk dictation"; font.bold: true }
     UiLabel { text: "Hold Right Alt, speak, then release it. Text goes into the focused field. Win+Alt+Esc cancels. Up to 90 seconds per phrase. No Enter is sent and your clipboard stays unchanged."; Layout.fillWidth: true; color: Colors.dim; font.pixelSize: Shared.DesktopStyle.px(12) }
     UiComboBox {

@@ -5,7 +5,7 @@ import "../shared" as Shared
 
 ColumnLayout {
     id: root
-    spacing: 12
+    spacing: Shared.DesktopStyle.cardSpacing
     property bool editing: false
     property string locationError: ""
     function saveLocation() {
@@ -19,8 +19,8 @@ ColumnLayout {
     RowLayout {
         Layout.fillWidth: true
         ColumnLayout {
-            Layout.fillWidth: true; spacing: 4
-            UiLabel { text: "HOURLY WEATHER"; font.pixelSize: Shared.DesktopStyle.px(11); color: Colors.accent; font.letterSpacing: 2 }
+            Layout.fillWidth: true; spacing: Shared.DesktopStyle.spaceUnit
+            UiLabel { text: "HOURLY WEATHER"; font.pixelSize: Shared.DesktopStyle.px(11); color: Colors.accent; font.letterSpacing: Shared.DesktopStyle.px(2) }
             UiLabel { visible: Weather.configured && !root.editing; text: (Weather.now ? Weather.now + "  " : "") + Weather.description(Weather.code); font.pixelSize: Shared.DesktopStyle.px(20) }
         }
         Item { Layout.fillWidth: true }
@@ -65,7 +65,7 @@ ColumnLayout {
     GridLayout {
         visible: Weather.configured && !root.editing
         Layout.fillWidth: true
-        columns: 6; columnSpacing: 5; rowSpacing: 5
+        columns: 6; columnSpacing: Shared.DesktopStyle.px(5); rowSpacing: Shared.DesktopStyle.px(5)
         Repeater {
             model: Weather.hours
             Rectangle {
@@ -73,10 +73,10 @@ ColumnLayout {
                 required property var modelData
                 required property int index
                 Layout.fillWidth: true; Layout.preferredWidth: 1
-                implicitHeight: 116; radius: Shared.DesktopStyle.radiusSmall
+                implicitHeight: Shared.DesktopStyle.px(116); radius: Shared.DesktopStyle.radiusSmall
                 color: index === 0 ? Colors.selection : Colors.lightBackground
                 ColumnLayout {
-                    anchors.centerIn: parent; spacing: 5
+                    anchors.centerIn: parent; spacing: Shared.DesktopStyle.px(5)
                     UiLabel { Layout.alignment: Qt.AlignHCenter; text: hour.modelData.time.slice(11, 16); color: Colors.muted; font.pixelSize: Shared.DesktopStyle.px(11) }
                     Text { Layout.alignment: Qt.AlignHCenter; text: Weather.glyph(hour.modelData.code, hour.modelData.day); font.family: Colors.iconFont; font.pixelSize: Shared.DesktopStyle.px(23); color: Colors.accent }
                     UiLabel { Layout.alignment: Qt.AlignHCenter; text: hour.modelData.temp === null ? "--" : Math.round(hour.modelData.temp) + "°"; font.pixelSize: Shared.DesktopStyle.px(17) }

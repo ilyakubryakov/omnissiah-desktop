@@ -25,7 +25,7 @@ ColumnLayout {
                         required property var modelData
                         readonly property bool active: AppIcons.data.family === modelData.id
                         Layout.fillWidth: true; implicitHeight: Shared.DesktopStyle.px(96); radius: Shared.DesktopStyle.radiusSmall
-                        color: Colors.background; border.width: active ? 2 : 1
+                        color: Colors.background; border.width: active ? Shared.DesktopStyle.px(2) : 1
                         border.color: active ? Colors.accent : Colors.selection
                         opacity: modelData.available ? 1 : 0.45
                         ColumnLayout {
@@ -34,7 +34,7 @@ ColumnLayout {
                                 spacing: Shared.DesktopStyle.px(9)
                                 Repeater {
                                     model: card.modelData.preview
-                                    Image { required property string modelData; source: modelData; width: Shared.DesktopStyle.px(28); height: width; sourceSize: Qt.size(64,64); fillMode: Image.PreserveAspectFit; mipmap: true }
+                                    Image { required property string modelData; source: modelData; width: Shared.DesktopStyle.px(28); height: width; sourceSize: Qt.size(Shared.DesktopStyle.px(64), Shared.DesktopStyle.px(64)); fillMode: Image.PreserveAspectFit; mipmap: true }
                                 }
                             }
                             UiLabel { text: card.modelData.name + (card.active ? " · active" : card.modelData.available ? "" : " · not installed"); font.weight: card.active ? Font.DemiBold : Font.Normal }
@@ -77,7 +77,7 @@ ColumnLayout {
                     Rectangle { visible: app.index > 0; anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: Shared.DesktopStyle.px(42) } height: 1; color: Colors.selection }
                     RowLayout {
                         anchors.fill: parent; anchors.topMargin: Shared.DesktopStyle.px(6); anchors.bottomMargin: Shared.DesktopStyle.px(6); spacing: Shared.DesktopStyle.px(12)
-                        Image { source: AppIcons.icon(app.modelData); Layout.preferredWidth: Shared.DesktopStyle.px(28); Layout.preferredHeight: Shared.DesktopStyle.px(28); sourceSize: Qt.size(64,64); fillMode: Image.PreserveAspectFit; mipmap: true }
+                        Image { source: AppIcons.icon(app.modelData); Layout.preferredWidth: Shared.DesktopStyle.px(28); Layout.preferredHeight: Shared.DesktopStyle.px(28); sourceSize: Qt.size(Shared.DesktopStyle.px(64), Shared.DesktopStyle.px(64)); fillMode: Image.PreserveAspectFit; mipmap: true }
                         UiLabel { Layout.fillWidth: true; text: app.modelData.name; elide: Text.ElideRight; wrapMode: Text.NoWrap }
                         UiButton {
                             text: PinnedApps.contains(app.modelData.id) ? "Unpin" : "Pin"

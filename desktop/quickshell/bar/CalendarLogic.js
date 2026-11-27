@@ -41,3 +41,28 @@ function countdown(event, now) {
     const minutes = Math.ceil((Date.parse(event.s) - now) / 60000)
     return minutes >= 0 && minutes <= 60 ? "In " + minutes + " min" : ""
 }
+
+function today(events, now) {
+    const date = new Date(now)
+    const seen = new Set()
+    const allday = [], timed = []
+    let current = null, next = null
+    for (const event of onDay(events, date)) {
+        const key = JSON.stringify([event.a, event.t, event.s])
+        if (seen.has(key)) continue
+        seen.add(key)
+        if (event.a) {
+            allday.push({title: event.t})
+            continue
+        }
+        const live = ongoing(event, now)
+        const start = Date.parse(event.s)
+        const state = live ? "now" : start <= now ? "past" : next ? "later" : "next"
+        const entry = {start: event.s, end: event.e, title: event.t, join: event.j, state,
+            minutes: Math.ceil((start - now) / 60000)}
+        timed.push(entry)
+        if (live && !current) current = entry
+        if (state === "next") next = entry
+    }
+    return {date, now, allday, events: timed, next: current || next, done: timed.length > 0 && !current && !next}
+}

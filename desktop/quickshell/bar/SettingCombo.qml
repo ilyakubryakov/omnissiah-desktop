@@ -6,10 +6,10 @@ import "../shared" as Shared
 ComboBox {
     id: control
     Layout.fillWidth: true
-    implicitHeight: 36
+    implicitHeight: Shared.DesktopStyle.metrics.control_height
     font.family: Colors.textFont
     font.pixelSize: Shared.DesktopStyle.px(13)
-    leftPadding: 12
+    leftPadding: Shared.DesktopStyle.controlPadding
     background: Rectangle {
         radius: Shared.DesktopStyle.radiusSmall
         color: control.hovered || control.popup.visible ? Colors.selection : Colors.lightBackground

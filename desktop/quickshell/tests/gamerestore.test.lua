@@ -84,7 +84,7 @@ local hl = {
     },
 }
 
-local M = assert(loadfile(here .. "../../nixos/hyprland/hypr/gamerestore.lua", "t", setmetatable({ hl = hl, os = { getenv = function() return "/nonexistent" end, time = os.time, rename = os.rename } }, { __index = _G })))()
+local M = assert(loadfile(here .. "../../hypr/gamerestore.lua", "t", setmetatable({ hl = hl, os = { getenv = function() return "/nonexistent" end, time = os.time, rename = os.rename } }, { __index = _G })))()
 
 local function open(address, class, title, name)
     local w = { address = address, class = class, title = title, mapped = true }

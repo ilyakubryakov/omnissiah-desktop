@@ -53,7 +53,7 @@ ShellRoot {
     }
     Launchpad { id: launchpad }
     WallpaperPicker {}
-    DesktopMenu { screens: shell.workScreens; onOpenPanel: page => shell.openPanel(page) }
+    DesktopMenu { screens: shell.workScreens; cal: agenda; onOpenPanel: page => shell.openPanel(page) }
     Notebook { id: notebook }
     NotificationDrawer { id: notifications }
     ActionNotifications {}

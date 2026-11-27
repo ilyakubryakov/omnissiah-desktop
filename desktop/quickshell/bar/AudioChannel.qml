@@ -9,7 +9,7 @@ ColumnLayout {
     property bool microphone: false
     readonly property var audio: node ? node.audio : null
     readonly property color tint: audio && audio.muted ? Colors.muted : microphone ? Colors.green : Colors.accent
-    spacing: 2
+    spacing: Shared.DesktopStyle.px(2)
     RowLayout {
         Layout.fillWidth: true
         UiLabel { text: root.title; font.pixelSize: Shared.DesktopStyle.px(12); color: root.tint }
@@ -21,7 +21,7 @@ ColumnLayout {
     }
     RowLayout {
         Layout.fillWidth: true
-        spacing: 10
+        spacing: Shared.DesktopStyle.px(10)
         UiButton {
             glyph: root.microphone ? (root.audio?.muted ? "\u{F036D}" : "\u{F036C}") : (root.audio?.muted ? "\u{F0581}" : "\u{F057E}")
             selected: !!root.audio?.muted
@@ -41,7 +41,7 @@ ColumnLayout {
             onMoved: if (root.audio) root.audio.volume = value
         }
         UiLabel {
-            Layout.preferredWidth: 66
+            Layout.preferredWidth: Shared.DesktopStyle.px(66)
             horizontalAlignment: Text.AlignRight
             text: !root.audio ? "--" : Math.round(root.audio.volume * 100) + "%" + (root.audio.muted ? " · off" : "")
             font.pixelSize: Shared.DesktopStyle.px(12); color: root.audio?.muted ? Colors.muted : Colors.foreground

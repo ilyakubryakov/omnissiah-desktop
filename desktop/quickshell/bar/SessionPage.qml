@@ -14,8 +14,8 @@ ColumnLayout {
 
     SettingsGroup {
         visible: !!root.s.autostart
-        title: "Autostart"
-        footer: "Changes apply at the next login. Always started by the session: " + (root.s.sessionApps || []).join(", ") + "."
+        title: "Startup Apps"
+        footer: "Changes apply at the next login. Managed by the Hyprland session: " + (root.s.sessionApps || []).join(", ") + "."
         Repeater {
             model: root.s.autostart || []
             SettingsRow {
@@ -49,7 +49,7 @@ ColumnLayout {
             UiButton {
                 text: "Add"
                 enabled: !DesktopData.busy && addApp.currentIndex >= 0
-                onClicked: DesktopData.act("autostart-add", [root.s.apps[addApp.currentIndex].id])
+                onClicked: DesktopData.act("autostart-add", [addApp.model[addApp.currentIndex].id])
             }
         }
     }

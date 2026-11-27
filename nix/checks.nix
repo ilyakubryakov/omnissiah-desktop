@@ -1,12 +1,13 @@
-{ lib, runCommand, nodejs, python3, lua5_4, nix, bash, qt6, ruff, shellcheck, ffmpeg-headless }:
+{ lib, runCommand, nodejs, python3, lua5_4, nix, bash, qt6, ruff, shellcheck, ffmpeg-headless, quickshell }:
 let
   src = lib.cleanSource ../.;
 in
-runCommand "oninix-checks" { nativeBuildInputs = [ nodejs python3 lua5_4 nix bash qt6.qtdeclarative ruff shellcheck ffmpeg-headless ]; } ''
+runCommand "oninix-checks" { nativeBuildInputs = [ nodejs python3 lua5_4 nix bash qt6.qtdeclarative ruff shellcheck ffmpeg-headless quickshell ]; } ''
   cp -r ${src} repo
   chmod -R u+w repo
   cd repo
   export LANG=C.UTF-8
+  HOME=$TMPDIR PYTHONDONTWRITEBYTECODE=1 ONINIX_REQUIRE_QML_SMOKE=1 python3 -m unittest discover -s desktop/quickshell/tests
   for test in desktop/quickshell/tests/*.cjs; do
     TZ=Europe/Vilnius node "$test"
   done

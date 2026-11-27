@@ -1,7 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
-import Quickshell
 import Quickshell.Bluetooth
 import "../shared" as Shared
 
@@ -57,12 +56,11 @@ ColumnLayout {
         else if (id === "output") openSettings("audio")
         else if (id === "bluetooth" && Bluetooth.defaultAdapter) Bluetooth.defaultAdapter.enabled = !Bluetooth.defaultAdapter.enabled
         else if (id === "microphone" && Shared.AudioState.input) Shared.AudioState.input.muted = !Shared.AudioState.input.muted
-        else if (id === "awake") { Quickshell.execDetached([Quickshell.env("ONINIX_SHARE") + "/hypr/scripts/keep-awake.sh"]); refresh.restart() }
+        else if (id === "awake") StatusState.toggleAwake()
         else if (id.startsWith("vpn:") && vpn(id)) DesktopData.act("vpn", [vpn(id).id])
         else if (id.startsWith("mode:")) DesktopData.act("mode", [checked(id) ? "normal" : id.split(":")[1]])
         else DesktopData.act(id)
     }
-    Timer { id: refresh; interval: 300; onTriggered: DesktopData.refresh() }
     RowLayout {
         Layout.fillWidth: true
         UiLabel { text: root.compact ? "" : "Favorites"; font.weight: Font.DemiBold; Layout.fillWidth: true }
@@ -70,13 +68,15 @@ ColumnLayout {
     }
     UiLabel { visible: root.editing; text: "Drag the handles to reorder. Select actions below to add or remove them."; color: Colors.muted; font.pixelSize: Shared.DesktopStyle.px(12); Layout.fillWidth: true }
     GridLayout {
-        Layout.fillWidth: true; columns: root.compact || root.width >= 440 ? 2 : 1; rowSpacing: 10; columnSpacing: 10
+        readonly property int twoColumnWidth: Shared.DesktopStyle.px(440)
+        Layout.fillWidth: true; columns: root.compact || width >= twoColumnWidth ? 2 : 1
+        rowSpacing: Shared.DesktopStyle.px(10); columnSpacing: Shared.DesktopStyle.px(10)
         Repeater {
             id: favorites
             model: ShellPrefs.favorites
             Item {
                 id: slot; required property string modelData
-                Layout.fillWidth: true; Layout.preferredWidth: 1; implicitHeight: 76
+                Layout.fillWidth: true; Layout.preferredWidth: 1; implicitHeight: Shared.DesktopStyle.px(76)
                 z: root.dragging === modelData ? 10 : 0
                 QuickTile {
                     id: tile
@@ -110,7 +110,7 @@ ColumnLayout {
         }
     }
     Flow {
-        visible: root.editing; Layout.fillWidth: true; spacing: 6
+        visible: root.editing; Layout.fillWidth: true; spacing: Shared.DesktopStyle.px(6)
         Repeater {
             model: root.catalog
             UiButton {

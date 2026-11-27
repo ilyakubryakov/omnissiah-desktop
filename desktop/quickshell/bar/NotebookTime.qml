@@ -10,7 +10,7 @@ ColumnLayout {
     property double now: Date.now() / 1000
     property bool reminders: false
     property bool showDone: false
-    spacing: 12
+    spacing: Shared.DesktopStyle.cardSpacing
     function clock(seconds) {
         const value = Math.max(0, Math.ceil(seconds))
         const h = Math.floor(value / 3600), m = Math.floor(value / 60) % 60, s = value % 60
@@ -25,7 +25,7 @@ ColumnLayout {
     CalendarField { id: label; Layout.fillWidth: true; placeholderText: root.reminders ? "What should I remind you about?" : "Timer name (optional)"; maximumLength: 180 }
     RowLayout {
         visible: !root.reminders; Layout.fillWidth: true
-        CalendarField { id: minutes; Layout.preferredWidth: 72; text: "25"; placeholderText: "min"; validator: IntValidator { bottom: 1; top: 1440 } }
+        CalendarField { id: minutes; Layout.preferredWidth: Shared.DesktopStyle.px(72); text: "25"; placeholderText: "min"; validator: IntValidator { bottom: 1; top: 1440 } }
         UiLabel { text: "min"; color: Colors.dim }
         Item { Layout.fillWidth: true }
         Repeater {
@@ -51,7 +51,7 @@ ColumnLayout {
         UiButton { text: root.showDone ? "Active" : "History"; onClicked: root.showDone = !root.showDone }
     }
     ListView {
-        Layout.fillWidth: true; Layout.fillHeight: true; clip: true; spacing: 10
+        Layout.fillWidth: true; Layout.fillHeight: true; clip: true; spacing: Shared.DesktopStyle.px(10)
         model: NotebookData.jobs.filter(j => root.showDone || j.state !== "done").slice().sort((a,b) => a.due - b.due)
         ScrollBar.vertical: ScrollBar {}
         delegate: Rectangle {
@@ -59,13 +59,13 @@ ColumnLayout {
             required property var modelData
             readonly property real remaining: modelData.state === "paused" ? modelData.remaining : modelData.due - root.now
             readonly property real progress: modelData.kind === "timer" && modelData.duration > 0 ? Math.max(0, Math.min(1, remaining / modelData.duration)) : 0
-            width: ListView.view.width; height: contents.implicitHeight + 24
+            width: ListView.view.width; height: contents.implicitHeight + Shared.DesktopStyle.px(24)
             radius: Shared.DesktopStyle.radiusSmall; color: Colors.lightBackground
             border.width: 1; border.color: modelData.state === "fired" ? Colors.accent : Colors.selection
             ColumnLayout {
                 id: contents
-                anchors { top: parent.top; left: parent.left; right: parent.right; margins: 12 }
-                spacing: 10
+                anchors { top: parent.top; left: parent.left; right: parent.right; margins: Shared.DesktopStyle.px(12) }
+                spacing: Shared.DesktopStyle.px(10)
                 RowLayout {
                     Layout.fillWidth: true
                     UiLabel { text: card.modelData.kind === "timer" ? "\u{F017}" : "\u{F0F3}"; font.family: Colors.iconFont; color: Colors.accent }
@@ -79,8 +79,8 @@ ColumnLayout {
                 }
                 Rectangle {
                     visible: card.modelData.kind === "timer" && ["running", "paused"].includes(card.modelData.state)
-                    Layout.fillWidth: true; height: 4; radius: 2; color: Colors.selection
-                    Rectangle { height: parent.height; radius: 2; width: parent.width * card.progress; color: Colors.accent; Behavior on width { NumberAnimation { duration: Shared.DesktopStyle.normal } } }
+                    Layout.fillWidth: true; height: Shared.DesktopStyle.px(4); radius: Shared.DesktopStyle.px(2); color: Colors.selection
+                    Rectangle { height: parent.height; radius: Shared.DesktopStyle.px(2); width: parent.width * card.progress; color: Colors.accent; Behavior on width { NumberAnimation { duration: Shared.DesktopStyle.normal } } }
                 }
                 RowLayout {
                     visible: card.modelData.state !== "done"
@@ -95,6 +95,6 @@ ColumnLayout {
                 }
             }
         }
-        UiLabel { anchors.centerIn: parent; width: parent.width - 24; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap; visible: !parent.count; text: "A gentle nudge when you need it.\nTimers keep running with the panel closed."; color: Colors.muted }
+        UiLabel { anchors.centerIn: parent; width: parent.width - Shared.DesktopStyle.px(24); horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap; visible: !parent.count; text: "A gentle nudge when you need it.\nTimers keep running with the panel closed."; color: Colors.muted }
     }
 }

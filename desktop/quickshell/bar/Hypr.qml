@@ -1,4 +1,5 @@
 pragma Singleton
+pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Hyprland
@@ -7,33 +8,46 @@ import Quickshell.Io
 Singleton {
     id: root
 
-    property var clients: []
-    property var monitors: []
-    property var active: ({})
+    readonly property var clients: Array.isArray(clientsProc.data) ? clientsProc.data : []
+    readonly property var monitors: Array.isArray(monitorsProc.data) ? monitorsProc.data : []
+    readonly property var active: activeProc.data || ({})
     property string layout: ""
     property string layoutName: ""
+    property var focusedAddress: null
+    property var pending: new Set()
 
     function exec(cmd) {
         Hyprland.dispatch("hl.dsp.exec_cmd(" + JSON.stringify("oninix-app " + cmd) + ")")
     }
 
-    function refresh() {
-        debounce.restart()
+    function enqueue(...processes) {
+        for (const process of processes) pending.add(process)
+        if (!debounce.running) debounce.start()
     }
+
+    function refresh() { enqueue(clientsProc, activeProc, monitorsProc) }
 
     Timer {
         id: debounce
         interval: 60
         onTriggered: {
-            for (const p of [clientsProc, activeProc, monitorsProc]) {
+            for (const p of root.pending) {
                 if (p.running) p.again = true
                 else p.running = true
             }
+            root.pending.clear()
         }
     }
 
     function classesOn(wsId) {
         return clients.filter(c => c.workspace && c.workspace.id === wsId).map(c => c["class"])
+    }
+
+    function addressOf(value) { return value && !value.startsWith("0x") ? "0x" + value : value }
+
+    function title(client) {
+        const window = Hyprland.toplevels.values.find(w => addressOf(w.address) === client.address)
+        return window?.title || client.title || ""
     }
 
     function icon(cls) {
@@ -67,69 +81,102 @@ Singleton {
         if (c.includes("battle.net")) return "\u{EF94}"
         if (c.includes("remmina")) return "\u{F08B9}"
         if (c.includes("thunderbird")) return "\u{F01EE}"
+        if (c.includes("emacs")) return "\u{E632}"
+        if (c.includes("orca-slicer") || c.includes("orcaslicer")) return "\u{F0E5B}"
         return "\u{F05AF}"
     }
 
     Connections {
         target: Hyprland
         function onRawEvent(event) {
-            if (event.name === "activelayout" || event.name === "configreloaded")
-                keyboardDebounce.restart()
-            root.refresh()
+            switch (event.name) {
+            case "activelayout":
+                root.layoutName = event.data.split(",").slice(1).join(",")
+                root.enqueue(devicesProc)
+                break
+            case "activewindowv2": {
+                const address = root.addressOf(event.data)
+                if (address !== root.focusedAddress) {
+                    root.focusedAddress = address
+                    root.enqueue(clientsProc, activeProc)
+                }
+                break
+            }
+            case "activewindow": {
+                const cls = event.data.split(",", 1)[0]
+                if (cls && cls !== (root.active["class"] || ""))
+                    root.enqueue(clientsProc, activeProc)
+                break
+            }
+            case "windowtitlev2": {
+                const address = root.addressOf(event.data.split(",", 1)[0])
+                if (address === (root.focusedAddress ?? root.active.address))
+                    root.enqueue(activeProc)
+                const known = root.clients.find(c => c.address === address)
+                if (!known || !known["class"])
+                    root.enqueue(clientsProc)
+                break
+            }
+            case "openwindow": case "closewindow": case "changefloatingmode":
+            case "minimized": case "pin": case "togglegroup":
+            case "moveintogroup": case "moveoutofgroup":
+                root.enqueue(clientsProc, activeProc)
+                break
+            case "workspacev2": case "focusedmon": case "activespecialv2":
+                root.enqueue(monitorsProc)
+                break
+            case "movewindowv2": case "moveworkspacev2": case "renameworkspace":
+            case "fullscreen": case "monitoraddedv2": case "monitorremoved":
+                root.refresh()
+                break
+            case "configreloaded":
+                root.refresh()
+                root.enqueue(devicesProc)
+                break
+            }
         }
     }
 
     Component.onCompleted: {
         refresh()
-        devicesProc.running = true
+        enqueue(devicesProc)
     }
 
-    Process {
-        id: monitorsProc
+    component Snapshot: Process {
+        id: sample
+        required property string subject
+        required property bool list
+        property var data: list ? [] : ({})
+        property string snapshot: ""
         property bool again: false
-        onExited: if (again) { again = false; running = true }
-        command: ["hyprctl", "monitors", "-j"]
-        stdout: StdioCollector { onStreamFinished: { try { root.monitors = JSON.parse(text) } catch (_) {} } }
-    }
-
-    Process {
-        id: clientsProc
-        property bool again: false
-        onExited: if (again) { again = false; running = true }
-        command: ["hyprctl", "clients", "-j"]
+        onExited: if (again) { again = false; root.enqueue(sample) }
+        command: ["hyprctl", subject, "-j"]
         stdout: StdioCollector {
-            onStreamFinished: { try { root.clients = JSON.parse(text) } catch (e) {} }
+            onStreamFinished: {
+                if (sample.snapshot === text) return
+                try {
+                    const result = JSON.parse(text)
+                    if (!result || typeof result !== "object" || Array.isArray(result) !== sample.list) return
+                    sample.snapshot = text
+                    sample.data = result
+                } catch (_) {}
+            }
         }
     }
 
-    Process {
-        id: activeProc
-        property bool again: false
-        onExited: if (again) { again = false; running = true }
-        command: ["hyprctl", "activewindow", "-j"]
-        stdout: StdioCollector {
-            onStreamFinished: { try { root.active = JSON.parse(text) } catch (e) { root.active = {} } }
-        }
-    }
-
-    Timer {
-        id: keyboardDebounce
-        interval: 60
-        onTriggered: {
-            if (devicesProc.running) devicesProc.again = true
-            else devicesProc.running = true
-        }
-    }
+    Snapshot { id: monitorsProc; subject: "monitors"; list: true }
+    Snapshot { id: clientsProc; subject: "clients"; list: true }
+    Snapshot { id: activeProc; subject: "activewindow"; list: false }
 
     Process {
         id: devicesProc
         property bool again: false
-        onExited: if (again) { again = false; running = true }
+        onExited: if (again) { again = false; root.enqueue(devicesProc) }
         command: ["hyprctl", "devices", "-j"]
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
-                    const keyboards = JSON.parse(text).keyboards
+                    const keyboards = JSON.parse(text).keyboards || []
                     const kb = keyboards.find(k => k.main) || keyboards[0]
                     root.layout = kb?.layout?.split(",")[kb.active_layout_index]?.trim() || ""
                     root.layoutName = kb?.active_keymap || ""

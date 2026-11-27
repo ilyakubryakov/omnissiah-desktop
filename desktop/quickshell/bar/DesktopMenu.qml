@@ -8,10 +8,12 @@ import "../shared" as Shared
 Scope {
     id: root
     required property var screens
+    required property var cal
     signal openPanel(string page)
     property var menuScreen: null
     property point at: Qt.point(0, 0)
     readonly property bool opened: menuScreen !== null
+    function show(screen, position) { at = position; menuScreen = screen }
     function close() { menuScreen = null }
     function run(action) { close(); action() }
     function exec(command) { Quickshell.execDetached(command) }
@@ -26,14 +28,25 @@ Scope {
             screen: modelData
             color: "transparent"
             anchors { top: true; bottom: true; left: true; right: true }
-            exclusionMode: ExclusionMode.Ignore
+            exclusiveZone: 0
             WlrLayershell.layer: WlrLayer.Bottom
             WlrLayershell.namespace: "oninix-desktop"
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+            mask: Region {
+                id: desktopMask
+                readonly property bool cardScreen: surface.modelData === cards.screenTarget
+                intersection: Intersection.Subtract
+                Region { item: desktopMask.cardScreen && cards.editing ? desktopArea : null }
+                Region {
+                    readonly property rect bounds: desktopMask.cardScreen ? cards.todayRect : Qt.rect(0, 0, 0, 0)
+                    x: bounds.x; y: bounds.y; width: bounds.width; height: bounds.height
+                }
+            }
             MouseArea {
+                id: desktopArea
                 anchors.fill: parent
                 acceptedButtons: Qt.RightButton
-                onPressed: m => { root.at = Qt.point(m.x, m.y); root.menuScreen = surface.modelData }
+                onPressed: m => root.show(surface.modelData, Qt.point(m.x, m.y))
             }
             UiButton {
                 visible: !!root.installer
@@ -46,6 +59,13 @@ Scope {
         }
     }
 
+    DesktopCards {
+        id: cards
+        screenTarget: Shared.Screens.main
+        cal: root.cal
+        onMenuRequested: position => root.show(cards.screenTarget, position)
+    }
+
     Shared.ClickCatcher { active: root.opened; onClicked: root.close() }
 
     LazyLoader {
@@ -55,7 +75,7 @@ Scope {
             screen: root.menuScreen
             color: "transparent"
             anchors { top: true; bottom: true; left: true; right: true }
-            exclusionMode: ExclusionMode.Ignore
+            exclusiveZone: 0
             WlrLayershell.layer: WlrLayer.Overlay
             WlrLayershell.namespace: "oninix-desktop-menu"
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
@@ -81,10 +101,10 @@ Scope {
                 ColumnLayout {
                     id: column
                     anchors { left: parent.left; right: parent.right; top: parent.top; margins: Shared.DesktopStyle.px(8) }
-                    spacing: 2
+                    spacing: Shared.DesktopStyle.px(2)
 
                     DropdownRow { header: true; label: "Desktop" }
-                    DropdownRow { glyph: "\u{F02E9}"; label: "Change wallpaper…"; onClicked: root.run(() => DesktopData.showWallpapers("shared")) }
+                    DropdownRow { glyph: "\u{F02E9}"; label: "Change wallpaper…"; onClicked: root.run(() => root.openPanel("wallpaper")) }
                     DropdownRow { glyph: "\u{F03D8}"; label: "Themes & appearance"; onClicked: root.run(() => root.openPanel("appearance")) }
                     DropdownRow {
                         glyph: "\u{F056E}"; label: "Edit panels"

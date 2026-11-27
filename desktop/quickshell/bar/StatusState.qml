@@ -8,18 +8,32 @@ Singleton {
     property bool recording: false
     property bool awake: false
     readonly property string scripts: Quickshell.env("ONINIX_SHARE") + "/hypr/scripts/"
+    function toggleAwake() { if (!keepAwake.running) keepAwake.running = true }
+    Process {
+        id: keepAwake
+        command: [root.scripts + "keep-awake.sh"]
+        onExited: {
+            awakeProbe.running = true
+            DesktopData.refresh()
+        }
+    }
     Timer {
-        interval: 2000; running: true; repeat: true; triggeredOnStart: true
-        onTriggered: { if (!states.running) states.running = true }
+        interval: root.recording ? 2000 : 5000
+        running: true; repeat: true; triggeredOnStart: true
+        onTriggered: {
+            if (!recorder.running) recorder.running = true
+            if (!awakeProbe.running) awakeProbe.running = true
+        }
+    }
+    Connections { target: DesktopData; function onActionDone(name) { if (!awakeProbe.running) awakeProbe.running = true } }
+    Process {
+        id: awakeProbe
+        command: ["systemctl", "--user", "is-active", "--quiet", "oninix-keep-awake.service"]
+        onExited: code => root.awake = code === 0
     }
     Process {
-        id: states
-        command: ["sh", "-c", "systemctl --user is-active --quiet oninix-screenrecord.service && echo rec; systemctl --user is-active --quiet oninix-keep-awake.service && echo awake"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                root.recording = text.indexOf("rec") >= 0
-                root.awake = text.indexOf("awake") >= 0
-            }
-        }
+        id: recorder
+        command: ["systemctl", "--user", "is-active", "--quiet", "oninix-screenrecord.service"]
+        onExited: code => root.recording = code === 0
     }
 }

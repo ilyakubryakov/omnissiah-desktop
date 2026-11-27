@@ -15,7 +15,7 @@ ColumnLayout {
         Layout.fillWidth: true
         property real entrance: 1
         opacity: entrance
-        transform: Translate { x: (1 - sectionLoader.entrance) * 12 }
+        transform: Translate { x: (1 - sectionLoader.entrance) * Shared.DesktopStyle.px(12) }
         onLoaded: { if (initialized) sectionEnter.restart(); initialized = true }
         property bool initialized: false
         NumberAnimation { id: sectionEnter; target: sectionLoader; property: "entrance"; from: 0; to: 1; duration: Shared.DesktopStyle.normal; easing.type: Easing.OutCubic }

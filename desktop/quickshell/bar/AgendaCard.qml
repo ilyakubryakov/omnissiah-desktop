@@ -17,11 +17,11 @@ ColumnLayout {
         : cal.stale ? "Sync is overdue · showing saved events"
         : cal.broken.length ? "Sync failed: " + cal.broken.join(", ") + " · saved events"
         : ""
-    spacing: 10
+    spacing: Shared.DesktopStyle.px(10)
     SystemClock { id: clock; precision: SystemClock.Minutes }
     RowLayout {
         Layout.fillWidth: true
-        UiLabel { text: "UP NEXT"; color: Colors.accent; font.pixelSize: Shared.DesktopStyle.px(11); font.letterSpacing: 2; Layout.fillWidth: true }
+        UiLabel { text: "UP NEXT"; color: Colors.accent; font.pixelSize: Shared.DesktopStyle.px(11); font.letterSpacing: Shared.DesktopStyle.px(2); Layout.fillWidth: true }
         UiButton { text: "Calendar ›"; onClicked: root.calendarRequested() }
     }
     UiLabel {

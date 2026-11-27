@@ -19,8 +19,8 @@ PanelWindow {
     screen: targetScreen || Shared.Screens.main
     visible: (opened || conceal.running) && (targetScreen !== null || Shared.Screens.main !== null)
     anchors { top: true; bottom: true; left: true }
-    margins { top: PanelStyle.barHeight + PanelStyle.outerGap + 8; bottom: PanelStyle.barHeight + PanelStyle.outerGap + 8; left: 8 }
-    implicitWidth: Math.min(420, screen ? screen.width - 24 : 420)
+    margins { top: PanelStyle.barHeight + PanelStyle.outerGap + Shared.DesktopStyle.px(8); bottom: PanelStyle.barHeight + PanelStyle.outerGap + Shared.DesktopStyle.px(8); left: Shared.DesktopStyle.px(8) }
+    implicitWidth: Math.min(Shared.DesktopStyle.px(420), screen ? screen.width - Shared.DesktopStyle.px(24) : Shared.DesktopStyle.px(420))
     color: "transparent"
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: WlrLayer.Overlay
@@ -70,14 +70,14 @@ PanelWindow {
         color: Colors.background
         border.width: 1; border.color: Colors.selection
         opacity: root.opened ? 1 : 0
-        transform: Translate { x: root.opened ? 0 : -root.width - 12; Behavior on x { NumberAnimation { duration: Shared.DesktopStyle.slow; easing.type: Easing.OutCubic } } }
+        transform: Translate { x: root.opened ? 0 : -root.width - Shared.DesktopStyle.px(12); Behavior on x { NumberAnimation { duration: Shared.DesktopStyle.slow; easing.type: Easing.OutCubic } } }
         Behavior on opacity { NumberAnimation { duration: Shared.DesktopStyle.normal; easing.type: Easing.OutCubic } }
         FocusScope {
             id: content
             anchors.fill: parent
             Keys.onEscapePressed: root.opened = false
             ColumnLayout {
-                anchors.fill: parent; anchors.margins: 16; spacing: 12
+                anchors.fill: parent; anchors.margins: Shared.DesktopStyle.cardPadding; spacing: Shared.DesktopStyle.cardSpacing
                 RowLayout {
                     UiLabel { text: "\u{F044}"; font.family: Colors.iconFont; font.pixelSize: Shared.DesktopStyle.px(19); color: Colors.accent }
                     UiLabel { text: "Notebook"; font.pixelSize: Shared.DesktopStyle.px(18); font.bold: true; Layout.fillWidth: true }
@@ -85,7 +85,7 @@ PanelWindow {
                     UiButton { glyph: "\u{F00D}"; onClicked: root.opened = false; Accessible.name: "Close notebook" }
                 }
                 RowLayout {
-                    Layout.fillWidth: true; spacing: 6
+                    Layout.fillWidth: true; spacing: Shared.DesktopStyle.px(6)
                     Repeater {
                         model: [{id:"notes",name:"Notes",icon:"\u{F249}"},{id:"calculate",name:"Calc",icon:"\u{F1EC}"},{id:"time",name:"Time",icon:"\u{F017}"},{id:"meetings",name:"Meet",icon:"\u{F130}"}]
                         UiButton {
@@ -117,7 +117,7 @@ PanelWindow {
     Component {
         id: settingsPage
         ColumnLayout {
-            spacing: 12
+            spacing: Shared.DesktopStyle.cardSpacing
             UiLabel { text: "Obsidian vault"; font.bold: true }
             UiLabel { Layout.fillWidth: true; text: "Notes are saved as Markdown in Quick Notes. Obsidian Sync handles the other devices."; wrapMode: Text.Wrap; color: Colors.dim }
             CalendarField { id: vaultPath; Layout.fillWidth: true; text: NotebookData.vault; placeholderText: "~/Documents/Obsidian" }
@@ -129,7 +129,7 @@ PanelWindow {
     Component {
         id: notesPage
         ColumnLayout {
-            spacing: 10
+            spacing: Shared.DesktopStyle.px(10)
             RowLayout {
                 Layout.fillWidth: true
                 CalendarField { Layout.fillWidth: true; visible: !root.editing; placeholderText: "Search notes…"; text: NotebookData.query; onTextEdited: NotebookData.query = text }
@@ -142,7 +142,7 @@ PanelWindow {
             }
             ColumnLayout {
                 visible: root.editing
-                Layout.fillWidth: true; Layout.fillHeight: true; spacing: 10
+                Layout.fillWidth: true; Layout.fillHeight: true; spacing: Shared.DesktopStyle.px(10)
                 CalendarField {
                     id: titleField
                     Layout.fillWidth: true; placeholderText: "Note title"; maximumLength: 180
@@ -157,7 +157,7 @@ PanelWindow {
                     clip: true; contentWidth: availableWidth
                     ColumnLayout {
                         id: taskColumn
-                        width: parent.width; spacing: 2
+                        width: parent.width; spacing: Shared.DesktopStyle.px(2)
                         Repeater {
                             model: NotebookData.tasks
                             CheckBox {
@@ -185,7 +185,7 @@ PanelWindow {
                     border.width: 1; border.color: editor.activeFocus ? Colors.accent : Colors.selection
                     ScrollView {
                         id: noteScroll
-                        anchors.fill: parent; anchors.margins: 3; clip: true
+                        anchors.fill: parent; anchors.margins: Shared.DesktopStyle.px(3); clip: true
                         contentWidth: availableWidth
                         TextArea {
                             id: editor
@@ -198,7 +198,7 @@ PanelWindow {
                             color: Colors.foreground; placeholderTextColor: Colors.muted
                             selectionColor: Colors.selection; selectedTextColor: Colors.foreground
                             font.family: Colors.textFont; font.pixelSize: Shared.DesktopStyle.px(14)
-                            padding: 12; selectByMouse: true; background: null
+                            padding: Shared.DesktopStyle.controlPadding; selectByMouse: true; background: null
                             onTextChanged: { if (activeFocus && text !== NotebookData.body) NotebookData.edit(titleField.text, text) }
                             Keys.onPressed: event => {
                                 if (event.key === Qt.Key_S && event.modifiers & Qt.ControlModifier) { NotebookData.save(false); event.accepted = true }
@@ -225,19 +225,19 @@ PanelWindow {
             }
             ListView {
                 visible: !root.editing
-                Layout.fillWidth: true; Layout.fillHeight: true; clip: true; spacing: 10
+                Layout.fillWidth: true; Layout.fillHeight: true; clip: true; spacing: Shared.DesktopStyle.px(10)
                 model: NotebookData.notes
                 ScrollBar.vertical: ScrollBar {}
                 delegate: Rectangle {
                     required property var modelData
-                    width: ListView.view.width; height: noteCard.implicitHeight + 24
+                    width: ListView.view.width; height: noteCard.implicitHeight + Shared.DesktopStyle.px(24)
                     radius: Shared.DesktopStyle.radiusSmall
                     color: cardMouse.containsMouse ? Colors.selection : Colors.lightBackground
                     border.width: 1; border.color: cardMouse.containsMouse ? Colors.accent : Colors.selection
                     Behavior on color { ColorAnimation { duration: Shared.DesktopStyle.fast } }
                     ColumnLayout {
-                        id: noteCard; anchors { left: parent.left; right: parent.right; top: parent.top; margins: 12 }
-                        spacing: 6
+                        id: noteCard; anchors { left: parent.left; right: parent.right; top: parent.top; margins: Shared.DesktopStyle.px(12) }
+                        spacing: Shared.DesktopStyle.px(6)
                         UiLabel { Layout.fillWidth: true; text: modelData.title; font.bold: true; elide: Text.ElideRight }
                         UiLabel { Layout.fillWidth: true; text: modelData.preview || "Empty note"; color: Colors.dim; wrapMode: Text.Wrap; maximumLineCount: 3; elide: Text.ElideRight; font.pixelSize: Shared.DesktopStyle.px(12) }
                         RowLayout {
@@ -248,20 +248,20 @@ PanelWindow {
                     }
                     MouseArea { id: cardMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { NotebookData.select(modelData.id); root.editing = true } }
                 }
-                UiLabel { anchors.centerIn: parent; width: parent.width - 24; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap; visible: !NotebookData.notes.length; text: NotebookData.available ? "A small thought, a checklist, a draft.\nCreate your first quick note." : "Choose your Obsidian vault in Settings."; color: Colors.muted }
+                UiLabel { anchors.centerIn: parent; width: parent.width - Shared.DesktopStyle.px(24); horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap; visible: !NotebookData.notes.length; text: NotebookData.available ? "A small thought, a checklist, a draft.\nCreate your first quick note." : "Choose your Obsidian vault in Settings."; color: Colors.muted }
             }
         }
     }
     Component {
         id: calculatorPage
         ColumnLayout {
-            spacing: 14
+            spacing: Shared.DesktopStyle.px(14)
             UiLabel { text: "A little room to think"; color: Colors.dim }
             CalendarField { id: expression; Layout.fillWidth: true; placeholderText: "(125 + 75) * 1.21"; text: NotebookData.expression; onTextEdited: NotebookData.expression = text; onAccepted: NotebookData.calculate() }
             Rectangle {
-                Layout.fillWidth: true; implicitHeight: answer.implicitHeight + 32
+                Layout.fillWidth: true; implicitHeight: answer.implicitHeight + Shared.DesktopStyle.px(32)
                 color: Colors.lightBackground; radius: Shared.DesktopStyle.radiusCard
-                UiLabel { id: answer; anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; margins: 16 } text: NotebookData.result || "="; font.pixelSize: Shared.DesktopStyle.px(28); color: Colors.accent; wrapMode: Text.WrapAnywhere }
+                UiLabel { id: answer; anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; margins: Shared.DesktopStyle.cardPadding } text: NotebookData.result || "="; font.pixelSize: Shared.DesktopStyle.px(28); color: Colors.accent; wrapMode: Text.WrapAnywhere }
             }
             UiLabel { visible: NotebookData.calcError !== ""; text: NotebookData.calcError; Layout.fillWidth: true; wrapMode: Text.Wrap; color: Colors.red; font.pixelSize: Shared.DesktopStyle.px(12) }
             RowLayout {
@@ -270,7 +270,7 @@ PanelWindow {
             }
             UiLabel { text: "+  −  ×  ÷  %  ^  ·  sqrt()  abs()  pi  e"; color: Colors.muted; font.pixelSize: Shared.DesktopStyle.px(12) }
             ListView {
-                Layout.fillWidth: true; Layout.fillHeight: true; clip: true; spacing: 8
+                Layout.fillWidth: true; Layout.fillHeight: true; clip: true; spacing: Shared.DesktopStyle.spaceUnit * 2
                 model: NotebookData.history
                 delegate: UiButton {
                     required property var modelData

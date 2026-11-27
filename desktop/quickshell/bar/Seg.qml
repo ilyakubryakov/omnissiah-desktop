@@ -9,7 +9,7 @@ Item {
     property Component iconComponent: null
     property string toolTip: ""
     property string label: ""
-    property real maximumLabelWidth: 10000
+    property real maximumLabelWidth: Shared.DesktopStyle.px(10000)
     property color tint: Colors.foreground
     property bool preserveTint: false
     property bool sep: false
@@ -28,15 +28,15 @@ Item {
     signal rightClicked()
     signal middleClicked()
 
-    implicitWidth: row.implicitWidth + (framed ? 12 : 0) + (sep ? divider.width + 16 : 0)
+    implicitWidth: row.implicitWidth + (framed ? Shared.DesktopStyle.px(12) : 0) + (sep ? divider.width + Shared.DesktopStyle.px(16) : 0)
     implicitHeight: PanelStyle.barHeight
     Layout.fillHeight: true
 
     Rectangle {
         anchors.fill: parent
-        anchors.leftMargin: 0; anchors.rightMargin: root.sep ? 8 : 0
-        anchors.topMargin: 3; anchors.bottomMargin: 3
-        radius: Math.min(6, height / 3)
+        anchors.leftMargin: 0; anchors.rightMargin: root.sep ? Shared.DesktopStyle.spaceUnit * 2 : 0
+        anchors.topMargin: Shared.DesktopStyle.px(3); anchors.bottomMargin: Shared.DesktopStyle.px(3)
+        radius: Math.min(Shared.DesktopStyle.px(6), height / 3)
         color: Qt.rgba(root.buttonTint.r, root.buttonTint.g, root.buttonTint.b, mouse.pressed ? 0.18 : mouse.containsMouse ? 0.10 : 0)
         Behavior on color { ColorAnimation { duration: Shared.DesktopStyle.fast } }
     }
@@ -44,8 +44,8 @@ Item {
         id: row
         anchors.verticalCenter: parent.verticalCenter
         anchors.left: parent.left
-        anchors.leftMargin: root.framed ? 6 : 0
-        spacing: 5
+        anchors.leftMargin: root.framed ? Shared.DesktopStyle.px(6) : 0
+        spacing: Shared.DesktopStyle.px(5)
 
         Loader {
             visible: root.iconComponent !== null
@@ -57,7 +57,7 @@ Item {
             text: root.glyph
             color: root.buttonTint
             font.family: Colors.iconFont
-            font.pixelSize: Math.max(16, Colors.fontSize + 2)
+            font.pixelSize: Math.max(Shared.DesktopStyle.px(16), Colors.fontSize + Shared.DesktopStyle.px(2))
             Rectangle {
                 visible: root.badge.a > 0
                 width: Shared.DesktopStyle.px(7); height: width; radius: width / 2
@@ -73,7 +73,7 @@ Item {
             text: root.label
             color: root.tint
             font.family: Colors.textFont
-            font.pixelSize: Math.max(13, Colors.fontSize)
+            font.pixelSize: Math.max(Shared.DesktopStyle.px(13), Colors.fontSize)
         }
     }
 
@@ -81,7 +81,7 @@ Item {
         id: divider
         visible: root.sep
         width: 1
-        height: 12
+        height: Shared.DesktopStyle.px(12)
         anchors.verticalCenter: parent.verticalCenter
         anchors.right: parent.right
         anchors.rightMargin: 0

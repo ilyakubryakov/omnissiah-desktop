@@ -28,7 +28,7 @@ Item {
 
     Component {
         id: applications
-        Seg { glyph: "\u{F003B}"; toolTip: "Applications"; tint: Colors.accent; onClicked: root.bar.openPanel("launchpad") }
+        Seg { glyph: "\u{F313}"; toolTip: "Applications"; tint: Colors.accent; onClicked: root.bar.openPanel("launchpad") }
     }
     Component {
         id: notebook
@@ -43,7 +43,7 @@ Item {
     Component {
         id: tray
         RowLayout {
-            spacing: 6
+            spacing: Shared.DesktopStyle.px(6)
             PersistentProperties {
                 id: trayState
                 reloadableId: "compactTrayState"
@@ -61,8 +61,8 @@ Item {
                     id: trayIcon
                     required property var modelData
                     visible: trayState.shown
-                    readonly property int iconSize: Math.round((Colors.fontSize + 2) * 0.8)
-                    implicitWidth: Colors.fontSize + 4
+                    readonly property int iconSize: Math.round((Colors.fontSize + Shared.DesktopStyle.px(2)) * 0.8)
+                    implicitWidth: Colors.fontSize + Shared.DesktopStyle.px(4)
                     implicitHeight: root.bar.implicitHeight
                     readonly property string glyph: {
                         const k = ((trayIcon.modelData.id || "") + " " + (trayIcon.modelData.title || "") + " "
@@ -91,7 +91,7 @@ Item {
                         text: trayIcon.glyph
                         color: trayMenu.open && trayMenu.item === trayIcon.modelData ? Colors.bright : Colors.foreground
                         font.family: Colors.iconFont
-                        font.pixelSize: Colors.fontSize + 2
+                        font.pixelSize: Colors.fontSize + Shared.DesktopStyle.px(2)
                     }
                     Image {
                         visible: trayIcon.glyph === ""
@@ -105,8 +105,8 @@ Item {
                                 return Quickshell.iconPath(ic, "application-x-executable")
                             return ic
                         }
-                        sourceSize.width: 32
-                        sourceSize.height: 32
+                        sourceSize.width: Shared.DesktopStyle.px(32)
+                        sourceSize.height: Shared.DesktopStyle.px(32)
                         fillMode: Image.PreserveAspectFit
                         smooth: true
                         mipmap: true
@@ -136,7 +136,7 @@ Item {
                             } else {
                                 const keys = [item.id, item.title].map(v => ("" + (v || "")).toLowerCase()).filter(v => v.length > 2)
                                 const parked = Minimized.windows.find(c => keys.some(k =>
-                                    ("" + (c["class"] || "")).toLowerCase().includes(k) || ("" + (c.title || "")).toLowerCase() === k))
+                                    ("" + (c["class"] || "")).toLowerCase().includes(k) || Hypr.title(c).toLowerCase() === k))
                                 if (parked) Minimized.show(parked)
                                 item.activate()
                             }
@@ -208,7 +208,7 @@ Item {
             glyph: "\u{F0176}"
             toolTip: "Keep awake"
             tint: Colors.accent
-            onClicked: Hypr.exec(StatusState.scripts + "keep-awake.sh")
+            onClicked: StatusState.toggleAwake()
         }
     }
 

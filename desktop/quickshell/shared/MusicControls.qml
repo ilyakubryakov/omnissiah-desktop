@@ -7,7 +7,7 @@ import "../bar" as Bar
 
 ColumnLayout {
     id: root
-    spacing: 12
+    spacing: DesktopStyle.cardSpacing
     readonly property var scarlett: Pipewire.nodes.values.filter(n => n.audio && !n.isStream && /scarlett|focusrite/i.test(n.description + " " + n.name))
     readonly property var clock: StudioState.data.settings || ({})
     Component.onCompleted: StudioState.users++
@@ -15,7 +15,7 @@ ColumnLayout {
     Bar.UiLabel { Layout.fillWidth: true; text: "Audio buffer"; color: Bar.Colors.accent }
     Bar.UiLabel { Layout.fillWidth: true; visible: !!StudioState.data.music_requested && !StudioState.data.music; text: "Music buffer is no longer active. Select Music mode again to reapply it."; color: Bar.Colors.red }
     Flow {
-        Layout.fillWidth: true; spacing: 8
+        Layout.fillWidth: true; spacing: DesktopStyle.spaceUnit * 2
         Repeater {
             model: [0,128,256,512]
             Bar.UiButton {
@@ -28,7 +28,7 @@ ColumnLayout {
         }
     }
     Bar.UiLabel { Layout.fillWidth: true; text: "Requested: " + (root.clock["clock.force-quantum"] || "Auto") + " · default quantum: " + (root.clock["clock.quantum"] || "unknown") + " · " + (root.clock["clock.rate"] ? root.clock["clock.rate"] / 1000 + " kHz" : "rate unknown") }
-    Bar.UiLabel { Layout.fillWidth: true; color: Bar.Colors.muted; font.pixelSize: 12; text: "Change buffers between takes. 128 frames at 48 kHz = 2.67 ms per quantum, not round-trip latency. Sample rate is left to the DAW." }
+    Bar.UiLabel { Layout.fillWidth: true; color: Bar.Colors.muted; font.pixelSize: DesktopStyle.metrics.caption_text_px; text: "Change buffers between takes. 128 frames at 48 kHz = 2.67 ms per quantum, not round-trip latency. Sample rate is left to the DAW." }
     Bar.UiLabel { visible: StudioState.error !== ""; text: StudioState.error; color: Bar.Colors.red; Layout.fillWidth: true }
     Bar.UiLabel { visible: !root.scarlett.length; text: "Scarlett is not connected"; color: Bar.Colors.muted }
     Repeater {
@@ -51,7 +51,7 @@ ColumnLayout {
             color: modelData.errors > 0 ? Bar.Colors.red : Bar.Colors.muted
         }
     }
-    Bar.UiLabel { Layout.fillWidth: true; font.pixelSize: 12; color: Bar.Colors.muted; text: "ERR is PipeWire's cumulative node error counter; it can reset when a node restarts. No running nodes means no live latency test." }
+    Bar.UiLabel { Layout.fillWidth: true; font.pixelSize: DesktopStyle.metrics.caption_text_px; color: Bar.Colors.muted; text: "ERR is PipeWire's cumulative node error counter; it can reset when a node restarts. No running nodes means no live latency test." }
     Flow {
         Layout.fillWidth: true; spacing: 8
         Bar.UiButton { text: "REAPER"; onClicked: Quickshell.execDetached(["oninix-app", "reaper"]) }

@@ -15,28 +15,28 @@ Item {
     readonly property string name: entry ? entry.name : byClass ? appId.slice(6) : appId
     readonly property bool hovered: mouse.containsMouse
     readonly property color tone: ShellLayout.buttonColor(host.group)
-    implicitWidth: Math.max(30, PanelStyle.barHeight + 2)
+    implicitWidth: Math.max(Shared.DesktopStyle.px(30), PanelStyle.barHeight + Shared.DesktopStyle.px(2))
     implicitHeight: PanelStyle.barHeight
     Component.onDestruction: host.forget(button)
 
     Rectangle {
-        anchors.fill: parent; anchors.margins: 3; radius: 5
+        anchors.fill: parent; anchors.margins: Shared.DesktopStyle.px(3); radius: Shared.DesktopStyle.px(5)
         color: button.tone
         opacity: mouse.pressed ? 0.18 : mouse.containsMouse ? 0.10 : 0
         Behavior on opacity { NumberAnimation { duration: Shared.DesktopStyle.fast } }
     }
     Text {
         anchors.centerIn: parent; text: button.symbol
-        font.family: Colors.iconFont; font.pixelSize: Math.max(16, Colors.fontSize + 2)
+        font.family: Colors.iconFont; font.pixelSize: Math.max(Shared.DesktopStyle.px(16), Colors.fontSize + Shared.DesktopStyle.px(2))
         color: button.tone
     }
     readonly property string badge: Minimized.badge(appId)
     Rectangle {
         visible: button.badge !== ""
         anchors.right: parent.right; anchors.top: parent.top
-        anchors.rightMargin: 2; anchors.topMargin: 2
-        height: button.badge === "dot" ? 7 : 13; radius: height / 2
-        width: button.badge === "dot" ? 7 : Math.max(height, badgeText.implicitWidth + 6)
+        anchors.rightMargin: Shared.DesktopStyle.px(2); anchors.topMargin: Shared.DesktopStyle.px(2)
+        height: button.badge === "dot" ? Shared.DesktopStyle.px(7) : Shared.DesktopStyle.px(13); radius: height / 2
+        width: button.badge === "dot" ? Shared.DesktopStyle.px(7) : Math.max(height, badgeText.implicitWidth + Shared.DesktopStyle.px(6))
         color: Colors.red
         Text {
             id: badgeText
@@ -48,18 +48,18 @@ Item {
     }
     Row {
         anchors.horizontalCenter: parent.horizontalCenter
-        anchors.bottom: parent.bottom; anchors.bottomMargin: 2
-        spacing: 2
+        anchors.bottom: parent.bottom; anchors.bottomMargin: Shared.DesktopStyle.px(2)
+        spacing: Shared.DesktopStyle.px(2)
         visible: button.running > 0 || button.minimized > 0
         Rectangle {
             visible: button.running > 0
-            width: 8; height: 2; radius: 1; anchors.verticalCenter: parent.verticalCenter
+            width: Shared.DesktopStyle.px(8); height: Shared.DesktopStyle.px(2); radius: Shared.DesktopStyle.px(1); anchors.verticalCenter: parent.verticalCenter
             color: button.tone; opacity: 0.75
         }
         Repeater {
             model: Math.min(3, button.minimized)
             Rectangle {
-                width: 3; height: 3; radius: 1.5; anchors.verticalCenter: parent.verticalCenter
+                width: Shared.DesktopStyle.px(3); height: Shared.DesktopStyle.px(3); radius: Shared.DesktopStyle.px(3) / 2; anchors.verticalCenter: parent.verticalCenter
                 color: button.attention ? Colors.yellow : button.tone
             }
         }

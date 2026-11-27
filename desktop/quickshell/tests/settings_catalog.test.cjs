@@ -19,4 +19,7 @@ assert.ok(context.search('bluetooth').some(p => p.id === 'network'), 'item words
 assert.equal(context.matches('radius', 'panels')[0].title, 'UI metrics');
 assert.equal(context.matches('', 'audio').length, 0);
 assert.ok(context.matches('a', 'network').length <= 3);
+assert.ok(context.search('desktop cards').some(p => p.id === 'panels'));
+assert.equal(context.matches('today', 'panels')[0].target, 'Show Today card');
+assert.equal(context.matches('autostart', 'session')[0].target, 'Startup Apps');
 console.log('Settings catalog: item matches, English/Russian search, targets and safe fallback passed');

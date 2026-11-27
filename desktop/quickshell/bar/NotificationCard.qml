@@ -7,12 +7,12 @@ import "../shared" as Shared
 ColumnLayout {
     id: root
     signal detailsRequested()
-    spacing: 10
+    spacing: Shared.DesktopStyle.px(10)
     readonly property var rows: Logic.groups(DesktopData.notifications.current, DesktopData.notifications.history)
         .filter(g => g.notification.tier !== "quiet").slice(0, 4)
     RowLayout {
         Layout.fillWidth: true
-        UiLabel { text: "NOTIFICATIONS"; font.pixelSize: Shared.DesktopStyle.px(11); color: Colors.accent; font.letterSpacing: 1 }
+        UiLabel { text: "NOTIFICATIONS"; font.pixelSize: Shared.DesktopStyle.px(11); color: Colors.accent; font.letterSpacing: Shared.DesktopStyle.px(1) }
         Item { Layout.fillWidth: true }
         UiButton { text: "Clear"; enabled: !DesktopData.busy && root.rows.length > 0; onClicked: DesktopData.act("clear") }
         UiButton { text: "All"; onClicked: root.detailsRequested() }

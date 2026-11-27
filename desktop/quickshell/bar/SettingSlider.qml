@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import "../shared" as Shared
 
 RowLayout {
     id: root
@@ -11,11 +12,11 @@ RowLayout {
     property var format: v => String(v)
     signal committed(real value)
     Layout.fillWidth: true
-    spacing: 12
+    spacing: Shared.DesktopStyle.cardSpacing
 
     UiLabel {
         visible: root.label !== ""
-        Layout.preferredWidth: 150
+        Layout.preferredWidth: Shared.DesktopStyle.px(150)
         text: root.label
     }
     UiSlider {
@@ -30,7 +31,7 @@ RowLayout {
         onMoved: if (!pressed) root.committed(Math.round(value / stepSize) * stepSize)
     }
     UiLabel {
-        Layout.preferredWidth: 64
+        Layout.preferredWidth: Shared.DesktopStyle.px(64)
         horizontalAlignment: Text.AlignRight
         text: root.format(slider.value)
         color: Colors.muted

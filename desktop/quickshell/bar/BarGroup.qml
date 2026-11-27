@@ -13,13 +13,13 @@ Item {
     property real hoverTint: groupHover.hovered ? 0.035 : 0
     Behavior on hoverTint { NumberAnimation { duration: Shared.DesktopStyle.fast } }
     HoverHandler { id: groupHover }
-    implicitWidth: row.implicitWidth + 24
+    implicitWidth: row.implicitWidth + Shared.DesktopStyle.px(24)
     implicitHeight: PanelStyle.barHeight
     height: PanelStyle.barHeight
     RowLayout {
         id: row
         x: (parent.width - implicitWidth) / 2
         height: parent.height
-        spacing: 6
+        spacing: Shared.DesktopStyle.px(6)
     }
 }

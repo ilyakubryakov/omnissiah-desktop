@@ -14,9 +14,9 @@ PanelWindow {
     screen: targetScreen
     visible: targetScreen !== null && stateData.phase !== "idle"
     anchors.bottom: true
-    margins.bottom: PanelStyle.barHeight + PanelStyle.outerGap + 20
-    implicitWidth: 420
-    implicitHeight: contents.implicitHeight + 28
+    margins.bottom: PanelStyle.barHeight + PanelStyle.outerGap + Shared.DesktopStyle.px(20)
+    implicitWidth: Shared.DesktopStyle.px(420)
+    implicitHeight: contents.implicitHeight + Shared.DesktopStyle.px(28)
     color: "transparent"
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: WlrLayer.Overlay
@@ -38,8 +38,8 @@ PanelWindow {
         radius: Shared.DesktopStyle.radiusSmall
         ColumnLayout {
             id: contents
-            anchors { top: parent.top; left: parent.left; right: parent.right; margins: 14 }
-            spacing: 10
+            anchors { top: parent.top; left: parent.left; right: parent.right; margins: Shared.DesktopStyle.px(14) }
+            spacing: Shared.DesktopStyle.px(10)
             RowLayout {
                 Layout.fillWidth: true
                 UiLabel { text: root.stateData.phase === "recording" ? "\u{F130}" : "\u{F11C}"; font.family: Colors.iconFont; color: Colors.accent; font.pixelSize: Shared.DesktopStyle.px(20) }
@@ -48,13 +48,13 @@ PanelWindow {
             }
             Rectangle {
                 visible: root.stateData.phase === "recording"
-                Layout.fillWidth: true; height: 5; radius: 2; color: Colors.selection
-                Rectangle { width: parent.width * (root.stateData.level || 0); height: parent.height; radius: 2; color: Colors.accent; Behavior on width { NumberAnimation { duration: 150 } } }
+                Layout.fillWidth: true; height: Shared.DesktopStyle.px(5); radius: Shared.DesktopStyle.px(2); color: Colors.selection
+                Rectangle { width: parent.width * (root.stateData.level || 0); height: parent.height; radius: Shared.DesktopStyle.px(2); color: Colors.accent; Behavior on width { NumberAnimation { duration: 150 } } }
             }
             UiLabel { text: DictationData.error || root.stateData.message || ""; Layout.fillWidth: true; color: Colors.dim; font.pixelSize: Shared.DesktopStyle.px(12) }
             ScrollView {
                 visible: !!root.stateData.text
-                Layout.fillWidth: true; Layout.preferredHeight: Math.min(160, transcript.implicitHeight + 8)
+                Layout.fillWidth: true; Layout.preferredHeight: Math.min(Shared.DesktopStyle.px(160), transcript.implicitHeight + Shared.DesktopStyle.px(8))
                 contentWidth: availableWidth; clip: true
                 TextArea { id: transcript; text: root.stateData.text || ""; readOnly: true; wrapMode: TextEdit.Wrap; textFormat: TextEdit.PlainText; color: Colors.foreground; font.family: Colors.textFont; font.pixelSize: Shared.DesktopStyle.px(14); background: null }
             }

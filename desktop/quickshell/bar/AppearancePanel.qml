@@ -12,12 +12,20 @@ ColumnLayout {
     property string themeTab: "palette"
     property string panelTab: "layout"
     property string wallpaperVariant: ""
+    readonly property bool liveWallpaperAvailable: !LiveWallpaperData.serviceChecked
+        || LiveWallpaperData.servicePresent || LiveWallpaperData.status.mode === "live"
+    readonly property bool liveWallpaperView: LiveWallpaperData.open || LiveWallpaperData.status.mode === "live"
+    readonly property string liveWallpaperId: LiveWallpaperData.status.mode === "live"
+        ? LiveWallpaperData.status.item?.id || "" : ""
+    readonly property var livePlacement: LiveWallpaperData.status.item?.placement
+    readonly property bool showLivePlacement: !!liveWallpaperId && !!livePlacement
     readonly property var wallpaper: appearance.wallpaper || ({})
     readonly property var desktop: appearance.desktop || ({})
     readonly property string activeVariant: (appearance.palettes.find(p => p.id === appearance.schedule.palette) || {}).mode || "dark"
     readonly property string targetSlot: wallpaper.mode === "variant" ? (wallpaperVariant || activeVariant) : "shared"
     readonly property string selectedWallpaper: wallpaper[targetSlot] || wallpaper.shared || ""
     readonly property int sliderWidth: Shared.DesktopStyle.px(300)
+    readonly property int wideGridWidth: Shared.DesktopStyle.px(560)
     function title(id) {
         return ({"tesla-day":"Tesla Day", "tesla-night":"Tesla Night", "graphite":"Graphite", "omnissiah":"Omnissiah", "kanagawa-lotus":"Lotus · light", "kanagawa-dragon":"Dragon · dark"})[id] || id.split("-").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ")
     }
@@ -30,7 +38,8 @@ ColumnLayout {
         "Panel shape": ["panelTab", "look"], "Group colors": ["panelTab", "look"], "Button accents": ["panelTab", "look"],
         "Windows & motion": ["panelTab", "windows"], "Between tiled windows": ["panelTab", "windows"],
         "UI font": ["panelTab", "text"], "Font size (pt)": ["panelTab", "text"], "UI metrics": ["panelTab", "text"],
-        "Spacing unit": ["panelTab", "text"], "Focus ring width": ["panelTab", "text"]
+        "Spacing unit": ["panelTab", "text"], "Focus ring width": ["panelTab", "text"],
+        "Desktop cards": ["panelTab", "cards"], "Show Today card": ["panelTab", "cards"]
     })
     function reveal(target) {
         const tab = targetTabs[target]
@@ -54,7 +63,7 @@ ColumnLayout {
         SettingsRow {
             stacked: true
             GridLayout {
-                Layout.fillWidth: true; columns: width < 560 ? 2 : 3
+                Layout.fillWidth: true; columns: width < root.wideGridWidth ? 2 : 3
                 columnSpacing: Shared.DesktopStyle.px(12); rowSpacing: Shared.DesktopStyle.px(12)
                 Repeater {
                     model: root.appearance.palettes
@@ -65,7 +74,7 @@ ColumnLayout {
                         Layout.fillWidth: true; implicitHeight: Shared.DesktopStyle.px(84)
                         color: modelData.background
                         radius: Shared.DesktopStyle.radiusSmall
-                        border.width: active ? 2 : 1
+                        border.width: active ? Shared.DesktopStyle.px(2) : 1
                         border.color: active || activeFocus || paletteMouse.containsMouse ? modelData.accent : Colors.selection
                         Behavior on border.color { ColorAnimation { duration: Shared.DesktopStyle.fast } }
                         activeFocusOnTab: true
@@ -79,7 +88,7 @@ ColumnLayout {
                         Keys.onSpacePressed: choose()
                         Column {
                             anchors.fill: parent; anchors.margins: Shared.DesktopStyle.px(14); spacing: Shared.DesktopStyle.px(8)
-                            Rectangle { width: Shared.DesktopStyle.px(32); height: Shared.DesktopStyle.px(4); radius: 2; color: paletteCard.modelData.accent }
+                            Rectangle { width: Shared.DesktopStyle.px(32); height: Shared.DesktopStyle.px(4); radius: Shared.DesktopStyle.px(2); color: paletteCard.modelData.accent }
                             Text { text: root.title(paletteCard.modelData.id); color: paletteCard.modelData.foreground; font.family: Colors.textFont; font.pixelSize: Shared.DesktopStyle.px(15) }
                             Text { text: paletteCard.active ? "Active" : paletteCard.modelData.mode === "light" ? "Light" : "Dark"; color: paletteCard.modelData.accent; font.family: Colors.textFont; font.pixelSize: Shared.DesktopStyle.px(11) }
                         }
@@ -145,10 +154,109 @@ ColumnLayout {
     }
 
     SettingsGroup {
+        id: wallpaperGroup
         visible: root.section === "themes" && root.themeTab === "wallpaper"
         title: "Wallpaper"
-        footer: "Lock screen follows the current wallpaper with blur. The login screen has its own page; boot keeps the dark Mechanicus artwork."
+        footer: root.liveWallpaperView ? "" : "Lock screen follows the current wallpaper with blur. The boot screen keeps the dark Mechanicus artwork."
+        Timer {
+            interval: 15000
+            repeat: true
+            triggeredOnStart: true
+            running: wallpaperGroup.visible && !LiveWallpaperData.open
+            onTriggered: LiveWallpaperData.refresh()
+        }
         SettingsRow {
+            title: "Wallpaper type"
+            Segmented {
+                model: [{id: "static", title: "Static"}].concat(root.liveWallpaperAvailable ? [{id: "live", title: "Live"}] : [])
+                current: root.liveWallpaperView ? "live" : "static"
+                enabled: !LiveWallpaperData.busy && (LiveWallpaperData.serviceChecked || LiveWallpaperData.status.mode === "live")
+                onChosen: id => {
+                    LiveWallpaperData.open = id === "live"
+                    if (id === "static" && LiveWallpaperData.status.mode === "live")
+                        LiveWallpaperData.run(["set", "static"])
+                }
+            }
+        }
+        SettingsRow {
+            visible: root.liveWallpaperView
+            title: LiveWallpaperData.status.item?.title || "No live wallpaper selected"
+            subtitle: LiveWallpaperData.statusText
+            UiButton {
+                visible: LiveWallpaperData.properties.length > 0
+                text: "Customize"
+                enabled: !LiveWallpaperData.busy
+                onClicked: LiveWallpaperData.openCustomize()
+            }
+            UiButton { text: "Live wallpapers"; onClicked: LiveWallpaperData.open = true }
+        }
+        SettingsRow {
+            visible: root.showLivePlacement
+            title: "Placement"
+            Segmented {
+                model: [{id: "fill", title: "Fill"}, {id: "fit", title: "Fit"}]
+                current: root.livePlacement?.fit || "fill"
+                enabled: !LiveWallpaperData.busy
+                onChosen: id => {
+                    if (id !== current) LiveWallpaperData.place(root.liveWallpaperId, ["--fit", id])
+                }
+            }
+            UiButton {
+                text: "Center"
+                enabled: !LiveWallpaperData.busy
+                    && (root.livePlacement?.x !== 0.5 || root.livePlacement?.y !== 0.5)
+                onClicked: LiveWallpaperData.place(root.liveWallpaperId, ["--x", "0.5", "--y", "0.5"])
+            }
+        }
+        Repeater {
+            model: [
+                {axis: "y", title: "Vertical position", start: "Top", end: "Bottom"},
+                {axis: "x", title: "Horizontal position", start: "Left", end: "Right"}
+            ]
+            SettingsRow {
+                id: positionRow
+                required property var modelData
+                readonly property real savedValue: root.livePlacement?.[modelData.axis] ?? 0.5
+                visible: root.showLivePlacement
+                title: modelData.title
+                RowLayout {
+                    Layout.preferredWidth: root.sliderWidth
+                    spacing: Shared.DesktopStyle.cardSpacing
+                    UiLabel { text: positionRow.modelData.start; color: Colors.muted }
+                    UiSlider {
+                        Layout.fillWidth: true
+                        from: 0
+                        to: 1
+                        stepSize: 0.01
+                        value: positionRow.savedValue
+                        enabled: root.livePlacement?.fit === "fill" && !LiveWallpaperData.busy
+                        Accessible.name: positionRow.title
+                        property string itemOnPress: ""
+
+                        function commit(itemId) {
+                            const next = value.toFixed(2)
+                            const changed = value !== positionRow.savedValue && Number(next) !== positionRow.savedValue
+                            value = Qt.binding(() => positionRow.savedValue)
+                            if (enabled && changed)
+                                LiveWallpaperData.place(itemId, ["--" + positionRow.modelData.axis, next])
+                        }
+
+                        onPressedChanged: {
+                            if (pressed) itemOnPress = root.liveWallpaperId
+                            else commit(itemOnPress)
+                        }
+                        onMoved: if (!pressed) commit(root.liveWallpaperId)
+                    }
+                    UiLabel { text: positionRow.modelData.end; color: Colors.muted }
+                }
+            }
+        }
+        SettingsRow {
+            visible: !!LiveWallpaperData.actionError
+            subtitle: LiveWallpaperData.actionError
+        }
+        SettingsRow {
+            visible: !root.liveWallpaperView
             title: "Use wallpaper"
             Segmented {
                 model: [{id: "shared", title: "Same for all themes"}, {id: "variant", title: "Light / dark"}]
@@ -158,7 +266,7 @@ ColumnLayout {
             }
         }
         SettingsRow {
-            visible: root.wallpaper.mode === "variant"
+            visible: !root.liveWallpaperView && root.wallpaper.mode === "variant"
             title: "Choose for"
             Segmented {
                 model: [{id: "light", title: "Light themes"}, {id: "dark", title: "Dark themes"}]
@@ -167,6 +275,7 @@ ColumnLayout {
             }
         }
         SettingsRow {
+            visible: !root.liveWallpaperView
             title: "Image"
             subtitle: root.selectedWallpaper ? root.selectedWallpaper.split("/").pop() : "No image selected"
             UiButton { text: "Open wallpaper gallery"; glyph: "\u{F03E}"; onClicked: DesktopData.showWallpapers(root.targetSlot) }
@@ -178,9 +287,25 @@ ColumnLayout {
     Segmented {
         visible: root.section === "panels"
         Layout.alignment: Qt.AlignHCenter
-        model: [{id: "layout", title: "Layout"}, {id: "look", title: "Panels"}, {id: "windows", title: "Windows"}, {id: "text", title: "Text & metrics"}]
+        model: [{id: "layout", title: "Layout"}, {id: "look", title: "Panels"}, {id: "windows", title: "Windows"}, {id: "text", title: "Text & metrics"}, {id: "cards", title: "Desktop cards"}]
         current: root.panelTab
         onChosen: id => root.panelTab = id
+    }
+
+    SettingsGroup {
+        visible: root.section === "panels" && root.panelTab === "cards"
+        title: "Desktop cards"
+        footer: DesktopCardPrefs.error
+        SettingsRow {
+            title: "Show Today card"
+            subtitle: "Today's calendar on the main display"
+            Segmented {
+                model: [{id: "on", title: "On"}, {id: "off", title: "Off"}]
+                current: DesktopCardPrefs.cards.today?.enabled !== false ? "on" : "off"
+                enabled: DesktopCardPrefs.loaded
+                onChosen: id => DesktopCardPrefs.update("today", {enabled: id === "on"})
+            }
+        }
     }
 
     PanelEditor { visible: root.section === "panels" && root.panelTab === "layout"; Layout.fillWidth: true }
@@ -192,7 +317,7 @@ ColumnLayout {
         SettingsRow {
             stacked: true
             GridLayout {
-                columns: width < 560 ? 2 : 4
+                columns: width < root.wideGridWidth ? 2 : 4
                 Layout.fillWidth: true; columnSpacing: Shared.DesktopStyle.px(12); rowSpacing: Shared.DesktopStyle.px(12)
                 Repeater {
                     model: PanelStyle.presets
@@ -203,7 +328,7 @@ ColumnLayout {
                         Layout.fillWidth: true; implicitHeight: Shared.DesktopStyle.px(124)
                         radius: Shared.DesktopStyle.radiusSmall
                         color: Colors.background
-                        border.width: active ? 2 : 1
+                        border.width: active ? Shared.DesktopStyle.px(2) : 1
                         border.color: active || activeFocus ? Colors.accent : Colors.selection
                         activeFocusOnTab: true
                         enabled: !DesktopData.busy
@@ -222,12 +347,12 @@ ColumnLayout {
                                     required property bool modelData
                                     readonly property bool flat: styleCard.modelData.id === "flat"
                                     readonly property bool floating: styleCard.modelData.id === "floating"
-                                    x: flat ? 0 : 7; width: styleCard.modelData.id === "islands" ? parent.width * 0.35 : parent.width - 2 * x; height: Shared.DesktopStyle.px(9)
-                                    y: modelData ? (floating ? 6 : 0) : parent.height - height - (floating ? 6 : 0)
+                                    x: flat ? 0 : Shared.DesktopStyle.px(7); width: styleCard.modelData.id === "islands" ? parent.width * 0.35 : parent.width - 2 * x; height: Shared.DesktopStyle.px(9)
+                                    y: modelData ? (floating ? Shared.DesktopStyle.px(6) : 0) : parent.height - height - (floating ? Shared.DesktopStyle.px(6) : 0)
                                     color: Colors.accent
-                                    topLeftRadius: flat || (!floating && modelData) ? 0 : 4
+                                    topLeftRadius: flat || (!floating && modelData) ? 0 : Shared.DesktopStyle.px(4)
                                     topRightRadius: topLeftRadius
-                                    bottomLeftRadius: flat || (!floating && !modelData) ? 0 : 4
+                                    bottomLeftRadius: flat || (!floating && !modelData) ? 0 : Shared.DesktopStyle.px(4)
                                     bottomRightRadius: bottomLeftRadius
                                 }
                             }

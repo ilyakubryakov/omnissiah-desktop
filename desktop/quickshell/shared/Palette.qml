@@ -2,29 +2,33 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "PaletteDefaults.js" as Defaults
 
 Singleton {
     id: root
 
     property color magenta: red
     property color cyan: blue
-    property color background: "#121010"
+    property color background: Defaults.values.background
     property color windowBackground: background
-    property color darkBackground: "#0a0909"
-    property color lightBackground: "#1b1715"
-    property color selection: "#3a2418"
-    property color foreground: "#d9c4a3"
-    property color dim: "#6e6052"
-    property color muted: "#a68a6f"
-    property color bright: "#f3cba2"
-    property color accent: "#c1893e"
+    property color darkBackground: Defaults.values.darkBackground
+    property color lightBackground: Defaults.values.lightBackground
+    property color selection: Defaults.values.selection
+    property color foreground: Defaults.values.foreground
+    property color dim: Defaults.values.dim
+    property color muted: Defaults.values.muted
+    property color bright: Defaults.values.bright
+    property color accent: Defaults.values.accent
     property color statusWarning: yellow
     property color statusAvailable: green
     property color statusUrgent: red
-    property color red: "#b8473a"
-    property color green: "#8c9a62"
-    property color yellow: "#c1893e"
-    property color blue: "#7d93a1"
+    property color red: Defaults.values.red
+    property color green: Defaults.values.green
+    property color yellow: Defaults.values.yellow
+    property color blue: Defaults.values.blue
+
+    property color shadow: Defaults.values.shadow
+    property color claudeBrand: Defaults.values.claudeBrand
 
     readonly property string textFont: DesktopStyle.fontFamily
     readonly property string iconFont: "JetBrainsMono Nerd Font"

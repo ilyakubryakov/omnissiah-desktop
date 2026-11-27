@@ -21,7 +21,7 @@ Rectangle {
     readonly property string summary: notification.summary || "Notification"
     readonly property var actions: notification.actions || ({})
     Layout.fillWidth: true
-    implicitHeight: contents.implicitHeight + 24
+    implicitHeight: contents.implicitHeight + Shared.DesktopStyle.px(24)
     radius: Shared.DesktopStyle.radiusCard
     color: mouse.containsMouse || activeFocus ? Colors.selection : Colors.lightBackground
     border.width: notification.urgency === "critical" || activeFocus ? 1 : 0
@@ -29,8 +29,8 @@ Rectangle {
     opacity: tier === "quiet" && !mouse.containsMouse && !activeFocus ? 0.72 : 1
     Rectangle {
         visible: root.tier === "important" || root.tier === "critical"
-        anchors { left: parent.left; top: parent.top; bottom: parent.bottom; margins: 6 }
-        width: 3; radius: 1.5
+        anchors { left: parent.left; top: parent.top; bottom: parent.bottom; margins: Shared.DesktopStyle.px(6) }
+        width: Shared.DesktopStyle.px(3); radius: Shared.DesktopStyle.px(3) / 2
         color: root.tier === "critical" ? Colors.red : Colors.accent
     }
     Behavior on color { ColorAnimation { duration: Shared.DesktopStyle.fast } }
@@ -48,12 +48,12 @@ Rectangle {
     MouseArea { id: mouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.activate() }
     ColumnLayout {
         id: contents
-        anchors { left: parent.left; right: parent.right; top: parent.top; margins: 12 }
-        spacing: 6
+        anchors { left: parent.left; right: parent.right; top: parent.top; margins: Shared.DesktopStyle.px(12) }
+        spacing: Shared.DesktopStyle.px(6)
         RowLayout {
             Layout.fillWidth: true
             ColumnLayout {
-                Layout.fillWidth: true; spacing: 4
+                Layout.fillWidth: true; spacing: Shared.DesktopStyle.spaceUnit
                 UiLabel {
                     text: (root.notification.app_name || "Application") + (root.count > 1 ? "  ×" + root.count : "")
                         + (Logic.tierLabel(root.tier) ? "  · " + Logic.tierLabel(root.tier) : "")
@@ -76,7 +76,7 @@ Rectangle {
             Layout.fillWidth: true; maximumLineCount: root.compact ? 2 : 12; elide: Text.ElideRight
         }
         Flow {
-            Layout.fillWidth: true; spacing: 6
+            Layout.fillWidth: true; spacing: Shared.DesktopStyle.px(6)
             visible: Logic.links(root.notification.body).length > 0 || Logic.verificationCode(root.summary, root.notification.body) !== ""
             Repeater {
                 model: Logic.links(root.notification.body)
@@ -94,7 +94,7 @@ Rectangle {
         }
         Flow {
             visible: root.editing && !root.compact
-            Layout.fillWidth: true; spacing: 6
+            Layout.fillWidth: true; spacing: Shared.DesktopStyle.px(6)
             UiButton {
                 text: root.wholeApp ? "All from " + root.app : "This title"
                 onClicked: root.wholeApp = !root.wholeApp
@@ -115,7 +115,7 @@ Rectangle {
         }
         Flow {
             visible: root.live && Object.keys(root.actions).length > 0
-            Layout.fillWidth: true; spacing: 6
+            Layout.fillWidth: true; spacing: Shared.DesktopStyle.px(6)
             Repeater {
                 model: root.live ? Object.keys(root.actions) : []
                 UiButton {

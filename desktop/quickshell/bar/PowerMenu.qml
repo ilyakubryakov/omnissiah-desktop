@@ -9,7 +9,7 @@ ColumnLayout {
     id: root
     property bool active: false
     signal done()
-    spacing: 14
+    spacing: Shared.DesktopStyle.px(14)
     property string armed: ""
     property real uptime: -1
     readonly property var actions: [
@@ -41,18 +41,18 @@ ColumnLayout {
     }
 
     RowLayout {
-        Layout.fillWidth: true; spacing: 12
+        Layout.fillWidth: true; spacing: Shared.DesktopStyle.cardSpacing
         Image {
-            Layout.preferredWidth: 40; Layout.preferredHeight: 40
+            Layout.preferredWidth: Shared.DesktopStyle.px(40); Layout.preferredHeight: Shared.DesktopStyle.px(40)
             source: "file://" + Quickshell.env("ONINIX_SHARE") + "/quickshell/assets/mechanicus.png"
-            sourceSize: Qt.size(96, 96)
+            sourceSize: Qt.size(Shared.DesktopStyle.px(96), Shared.DesktopStyle.px(96))
             fillMode: Image.PreserveAspectFit
             smooth: true; mipmap: true
             Accessible.ignored: true
         }
         ColumnLayout {
-            Layout.fillWidth: true; spacing: 2
-            UiLabel { text: "SESSION"; color: Colors.accent; font.pixelSize: Shared.DesktopStyle.px(11); font.letterSpacing: 3 }
+            Layout.fillWidth: true; spacing: Shared.DesktopStyle.px(2)
+            UiLabel { text: "SESSION"; color: Colors.accent; font.pixelSize: Shared.DesktopStyle.px(11); font.letterSpacing: Shared.DesktopStyle.px(3) }
             UiLabel {
                 text: [Quickshell.env("USER") + (root.host ? "@" + root.host : ""), root.uptimeText(root.uptime)].filter(s => s).join("  ·  ")
                 color: Colors.muted; font.pixelSize: Shared.DesktopStyle.px(12)
@@ -62,7 +62,7 @@ ColumnLayout {
 
     RowLayout {
         Layout.fillWidth: true
-        Layout.topMargin: 4
+        Layout.topMargin: Shared.DesktopStyle.spaceUnit
         spacing: 0
         Repeater {
             id: tiles
@@ -75,7 +75,7 @@ ColumnLayout {
                 readonly property bool lit: hit.containsMouse || activeFocus || armed
                 readonly property color tone: modelData.tone
                 Layout.fillWidth: true
-                implicitHeight: 96
+                implicitHeight: Shared.DesktopStyle.px(96)
                 activeFocusOnTab: true
                 Accessible.role: Accessible.Button
                 Accessible.name: modelData.title
@@ -87,11 +87,11 @@ ColumnLayout {
                 Rectangle {
                     id: disc
                     anchors.horizontalCenter: parent.horizontalCenter
-                    y: 4
-                    width: 58; height: 58; radius: 29
+                    y: Shared.DesktopStyle.px(4)
+                    width: Shared.DesktopStyle.px(58); height: Shared.DesktopStyle.px(58); radius: Shared.DesktopStyle.px(29)
                     color: tile.armed ? tile.tone
                         : tile.lit ? Qt.rgba(tile.tone.r, tile.tone.g, tile.tone.b, 0.16) : Colors.lightBackground
-                    border.width: tile.activeFocus && !tile.armed ? 2 : 1
+                    border.width: tile.activeFocus && !tile.armed ? Shared.DesktopStyle.px(2) : 1
                     border.color: tile.lit ? Qt.rgba(tile.tone.r, tile.tone.g, tile.tone.b, 0.55) : Colors.selection
                     scale: hit.pressed ? 0.94 : tile.lit ? 1.04 : 1
                     Behavior on color { ColorAnimation { duration: Shared.DesktopStyle.fast } }
@@ -107,14 +107,14 @@ ColumnLayout {
                     Canvas {
                         id: ring
                         anchors.fill: parent
-                        anchors.margins: -5
+                        anchors.margins: -Shared.DesktopStyle.px(5)
                         visible: tile.armed
                         property real progress: 1
                         onProgressChanged: requestPaint()
                         onPaint: {
                             const ctx = getContext("2d")
                             ctx.reset()
-                            ctx.lineWidth = 2.5
+                            ctx.lineWidth = Shared.DesktopStyle.px(5) / 2
                             ctx.lineCap = "round"
                             ctx.strokeStyle = tile.tone
                             ctx.beginPath()
@@ -125,7 +125,7 @@ ColumnLayout {
                     }
                 }
                 UiLabel {
-                    anchors { horizontalCenter: parent.horizontalCenter; top: disc.bottom; topMargin: 10 }
+                    anchors { horizontalCenter: parent.horizontalCenter; top: disc.bottom; topMargin: Shared.DesktopStyle.px(10) }
                     text: tile.armed ? "Confirm" : tile.modelData.title
                     color: tile.armed ? tile.tone : tile.lit ? Colors.foreground : Colors.muted
                     font.pixelSize: Shared.DesktopStyle.px(12); font.weight: tile.lit ? Font.DemiBold : Font.Normal
