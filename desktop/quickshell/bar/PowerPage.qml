@@ -28,7 +28,7 @@ ColumnLayout {
             UiButton {
                 text: DesktopData.controls.awake ? "On" : "Off"
                 selected: !!DesktopData.controls.awake
-                onClicked: root.launch([Quickshell.env("ONINIX_SHARE") + "/hypr/scripts/keep-awake.sh"])
+                onClicked: StatusState.toggleAwake()
             }
         }
         SettingsRow {

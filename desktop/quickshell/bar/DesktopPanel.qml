@@ -24,9 +24,9 @@ FloatingWindow {
     property string focusText: ""
     property real highlightY: -1
     visible: presented
-    implicitWidth: Math.min(1080, screen ? screen.width - 40 : 1080)
-    implicitHeight: Math.min(900, screen ? screen.height - 80 : 900)
-    minimumSize: Qt.size(Math.min(760, implicitWidth), Math.min(560, implicitHeight))
+    implicitWidth: Math.min(Shared.DesktopStyle.px(1080), screen ? screen.width - Shared.DesktopStyle.px(40) : Shared.DesktopStyle.px(1080))
+    implicitHeight: Math.min(Shared.DesktopStyle.px(900), screen ? screen.height - Shared.DesktopStyle.px(80) : Shared.DesktopStyle.px(900))
+    minimumSize: Qt.size(Math.min(Shared.DesktopStyle.px(760), implicitWidth), Math.min(Shared.DesktopStyle.px(560), implicitHeight))
     color: "transparent"
     onClosed: { close(); hideDelay.stop(); presented = false }
     function remember() {
@@ -55,7 +55,7 @@ FloatingWindow {
         let key = which === "controls" ? (DesktopData.controlTab || ShellPrefs.ui.last || "network") : which === "appearance" ? "themes" : which
         choose(key); opened = true; DesktopData.open = true; DesktopData.refresh(); DesktopData.error = ""
         Hypr.refresh(); body.forceActiveFocus()
-        const client = Hypr.clients.find(c => c.class === "org.quickshell" && c.title === root.title)
+        const client = Hypr.clients.find(c => c.class === "org.quickshell" && Hypr.title(c) === root.title)
         if (client) Minimized.show(client)
     }
     function close() {
@@ -82,7 +82,7 @@ FloatingWindow {
                 if (item && item.reveal && item.reveal(root.focusText)) { restart(); return }
                 const label = root.findLabel(item, root.focusText)
                 if (label) {
-                    root.highlightY = Math.max(0, label.mapToItem(pageContent, 0, 0).y - 8)
+                    root.highlightY = Math.max(0, label.mapToItem(pageContent, 0, 0).y - Shared.DesktopStyle.px(8))
                     scroll.ScrollBar.vertical.position = Math.max(0, Math.min(1 - scroll.ScrollBar.vertical.size, root.highlightY / Math.max(1, pageContent.height)))
                     highlightDelay.restart()
                 }
@@ -130,11 +130,11 @@ FloatingWindow {
                     Image {
                         width: Shared.DesktopStyle.px(44); height: Shared.DesktopStyle.px(44)
                         source: "file://" + Quickshell.env("ONINIX_SHARE") + "/quickshell/assets/mechanicus.png"
-                        readonly property int rasterSize: Math.ceil(44 * (root.screen ? root.screen.devicePixelRatio : 1))
+                        readonly property int rasterSize: Math.ceil(width * (root.screen ? root.screen.devicePixelRatio : 1))
                         sourceSize: Qt.size(rasterSize, rasterSize); fillMode: Image.PreserveAspectFit; smooth: true; mipmap: true
                         Accessible.ignored: true
                     }
-                    UiLabel { x: 54; anchors.verticalCenter: parent.verticalCenter; text: "CONTROL\nSTATION"; color: Colors.accent; font.pixelSize: Shared.DesktopStyle.px(11); font.letterSpacing: Shared.DesktopStyle.px(2) }
+                    UiLabel { x: Shared.DesktopStyle.px(54); anchors.verticalCenter: parent.verticalCenter; text: "CONTROL\nSTATION"; color: Colors.accent; font.pixelSize: Shared.DesktopStyle.px(11); font.letterSpacing: Shared.DesktopStyle.px(2) }
                     MouseArea { anchors.fill: parent; cursorShape: Qt.SizeAllCursor; onPressed: root.startSystemMove() }
                 }
                 TextField {
@@ -166,7 +166,7 @@ FloatingWindow {
                                 required property int index
                                 readonly property bool groupStart: index > 0 && navRepeater.model[index - 1].group !== modelData.group
                                 readonly property var hits: Catalog.matches(search.text, modelData.id)
-                                Layout.fillWidth: true; spacing: 1
+                                Layout.fillWidth: true; spacing: Shared.DesktopStyle.px(1)
                                 Rectangle {
                                     visible: entry.groupStart
                                     Layout.fillWidth: true; Layout.topMargin: Shared.DesktopStyle.px(6); Layout.bottomMargin: Shared.DesktopStyle.px(6)
@@ -225,7 +225,7 @@ FloatingWindow {
                         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
                         Item {
                             id: pageContent
-                            width: scroll.availableWidth - 12
+                            width: scroll.availableWidth - Shared.DesktopStyle.px(12)
                             height: currentLoader.implicitHeight
                             readonly property Item currentLoader: root.section === "apps" ? appsPage : pageLoader
                             Loader {
@@ -245,7 +245,7 @@ FloatingWindow {
                             }
                             Rectangle {
                                 visible: root.highlightY >= 0; y: Math.max(0, root.highlightY); width: parent.width; height: Shared.DesktopStyle.px(40)
-                                radius: Shared.DesktopStyle.px(8); color: "transparent"; border.width: 2; border.color: Colors.accent
+                                radius: Shared.DesktopStyle.px(8); color: "transparent"; border.width: Shared.DesktopStyle.px(2); border.color: Colors.accent
                             }
                         }
                     }
@@ -262,10 +262,10 @@ FloatingWindow {
             readonly property bool horizontal: !!(modelData & (Qt.LeftEdge | Qt.RightEdge))
             readonly property bool vertical: !!(modelData & (Qt.TopEdge | Qt.BottomEdge))
             readonly property bool corner: horizontal && vertical
-            width: corner ? 14 : horizontal ? 7 : root.width - 28
-            height: corner ? 14 : vertical ? 7 : root.height - 28
-            x: modelData & Qt.RightEdge ? root.width - width : horizontal ? 0 : 14
-            y: modelData & Qt.BottomEdge ? root.height - height : vertical ? 0 : 14
+            width: corner ? Shared.DesktopStyle.px(14) : horizontal ? Shared.DesktopStyle.px(7) : root.width - Shared.DesktopStyle.px(28)
+            height: corner ? Shared.DesktopStyle.px(14) : vertical ? Shared.DesktopStyle.px(7) : root.height - Shared.DesktopStyle.px(28)
+            x: modelData & Qt.RightEdge ? root.width - width : horizontal ? 0 : Shared.DesktopStyle.px(14)
+            y: modelData & Qt.BottomEdge ? root.height - height : vertical ? 0 : Shared.DesktopStyle.px(14)
             cursorShape: corner ? ((modelData === (Qt.TopEdge | Qt.LeftEdge) || modelData === (Qt.BottomEdge | Qt.RightEdge)) ? Qt.SizeFDiagCursor : Qt.SizeBDiagCursor) : horizontal ? Qt.SizeHorCursor : Qt.SizeVerCursor
             onPressed: root.startSystemResize(modelData)
         }

@@ -14,19 +14,19 @@ ColumnLayout {
 
     SettingsGroup {
         visible: !!root.s.autostart
-        title: "Autostart"
-        footer: "Changes apply at the next login. Always started by the session: " + (root.s.sessionApps || []).join(", ") + "."
+        title: "Startup Apps"
+        footer: "Changes apply at the next login. Managed by the Hyprland session: " + (root.s.sessionApps || []).join(", ") + "."
         Repeater {
             model: root.s.autostart || []
             SettingsRow {
                 id: auto
                 required property var modelData
                 title: modelData.name
-                subtitle: modelData.applies ? "" : "Not for Hyprland"
+                subtitle: modelData.managed ? "Managed by the Hyprland session" : modelData.applies ? "" : "Not for Hyprland"
                 Segmented {
                     model: [{id: "on", title: "On"}, {id: "off", title: "Off"}]
                     current: auto.modelData.enabled ? "on" : "off"
-                    enabled: !DesktopData.busy
+                    enabled: !DesktopData.busy && (!auto.modelData.managed || auto.modelData.enabled)
                     onChosen: id => DesktopData.act("autostart-set", [auto.modelData.id, id])
                 }
                 UiButton {
@@ -43,13 +43,13 @@ ColumnLayout {
             SettingCombo {
                 id: addApp
                 Layout.preferredWidth: Shared.DesktopStyle.px(240)
-                model: root.s.apps || []
+                model: root.s.autostartApps || root.s.apps || []
                 textRole: "name"
             }
             UiButton {
                 text: "Add"
                 enabled: !DesktopData.busy && addApp.currentIndex >= 0
-                onClicked: DesktopData.act("autostart-add", [root.s.apps[addApp.currentIndex].id])
+                onClicked: DesktopData.act("autostart-add", [addApp.model[addApp.currentIndex].id])
             }
         }
     }

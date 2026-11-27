@@ -18,7 +18,8 @@ PanelWindow {
     property var releasedTokens: []
     screen: Shared.Screens.main
     visible: opened && Shared.Screens.main !== null
-    readonly property var grid: Logic.layout(windows.length, screen ? screen.width : 1280, screen ? screen.height : 800)
+    readonly property var grid: Logic.layout(windows.length, screen ? screen.width : 1280,
+        screen ? screen.height : 800, n => Shared.DesktopStyle.px(n))
     implicitWidth: grid.width
     implicitHeight: grid.height
     color: "transparent"
@@ -26,8 +27,15 @@ PanelWindow {
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "oninix-switcher"
     WlrLayershell.keyboardFocus: opened ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+    function newer(token, than) { return Logic.newer(token, than); }
+    property string lastToken: ""
     function cycle(direction, token) {
-        requestToken = token || requestToken;
+        if (token && !opened && lastToken && !newer(token, lastToken))
+            return;
+        if (token && newer(token, lastToken))
+            lastToken = token;
+        if (token && (!opened || newer(token, requestToken)))
+            requestToken = token;
         if (!opened) {
             windows = Hypr.clients.filter(c => c.mapped !== false && /^0x[0-9a-f]+$/i.test(c.address)).slice().sort((a, b) => a.focusHistoryID - b.focusHistoryID);
             if (!windows.length)
@@ -38,8 +46,10 @@ PanelWindow {
         } else
             selected = (selected + direction + windows.length) % windows.length;
         Qt.callLater(() => cards.positionViewAtIndex(root.selected, GridView.Contain));
-        if (releasedTokens.includes(requestToken))
-            Qt.callLater(() => root.accept(root.requestToken));
+        if (releasedTokens.includes(requestToken)) {
+            const token = requestToken;
+            Qt.callLater(() => root.accept(token));
+        }
     }
     function accept(token) {
         token = token || requestToken;
@@ -68,6 +78,7 @@ PanelWindow {
     Rectangle {
         id: body
         anchors.fill: parent
+        clip: true
         radius: Shared.DesktopStyle.px(16)
         color: Colors.background
         border.color: Colors.accent
@@ -87,9 +98,12 @@ PanelWindow {
         }
         ColumnLayout {
             anchors.fill: parent
-            anchors.margins: Shared.DesktopStyle.px(20)
+            anchors.margins: root.grid.padding
             spacing: Shared.DesktopStyle.px(12)
             UiLabel {
+                Layout.fillWidth: true
+                wrapMode: Text.NoWrap
+                elide: Text.ElideRight
                 text: "APPLICATIONS · ALL WORKSPACES"
                 color: Colors.muted
                 font.letterSpacing: Shared.DesktopStyle.px(2)
@@ -100,7 +114,7 @@ PanelWindow {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 cellWidth: root.grid.cellWidth
-                cellHeight: Shared.DesktopStyle.px(170)
+                cellHeight: root.grid.cellHeight
                 currentIndex: root.selected
                 boundsBehavior: Flickable.StopAtBounds
                 ScrollBar.vertical: ScrollBar { }
@@ -110,8 +124,9 @@ PanelWindow {
                     id: card
                     required property var modelData
                     required property int index
-                    width: cards.cellWidth - 10
-                    height: cards.cellHeight - 10
+                    width: Math.max(1, cards.cellWidth - Shared.DesktopStyle.px(10))
+                    height: Math.max(1, cards.cellHeight - Shared.DesktopStyle.px(10))
+                    clip: true
                     radius: Shared.DesktopStyle.px(10)
                     color: index === root.selected ? Colors.selection : Colors.lightBackground
                     border.width: 1
@@ -127,7 +142,7 @@ PanelWindow {
                         }
                         UiLabel {
                             Layout.fillWidth: true
-                            text: card.modelData.title || card.modelData.class
+                            text: Hypr.title(card.modelData) || card.modelData.class
                             maximumLineCount: 2
                             Layout.preferredHeight: Shared.DesktopStyle.px(36)
                             wrapMode: Text.WordWrap
@@ -161,6 +176,9 @@ PanelWindow {
                 }
             }
             UiLabel {
+                Layout.fillWidth: true
+                wrapMode: Text.NoWrap
+                elide: Text.ElideRight
                 text: "Alt+Tab · next    Arrows · navigate    Release Alt · switch    Esc · cancel"
                 color: Colors.muted
                 font.pixelSize: Shared.DesktopStyle.px(11)

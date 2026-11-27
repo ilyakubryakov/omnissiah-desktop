@@ -7,10 +7,10 @@ import "../shared" as Shared
 
 ColumnLayout {
     id: root
-    spacing: 14
+    spacing: Shared.DesktopStyle.px(14)
     property string query: ""
     signal chosen()
-    function found(c) { return ((c.title || "") + " " + (c.class || "")).toLowerCase().includes(query.toLowerCase()) }
+    function found(c) { return (Hypr.title(c) + " " + (c.class || "")).toLowerCase().includes(query.toLowerCase()) }
     readonly property var clients: Hypr.clients.filter(c => c.workspace && c.workspace.id > 0 && found(c))
     readonly property var minimized: Minimized.windows.filter(c => found(c))
     readonly property var workspaces: [...new Set(Hyprland.workspaces.values.filter(w => w.id > 0).map(w => w.id).concat(clients.map(c => c.workspace.id), [1,2,3,4,5,6,7,8,9,10], Shared.Screens.tv ? [11] : []))].sort((a,b) => a-b)
@@ -33,7 +33,7 @@ ColumnLayout {
     }
     TextField {
         id: search
-        Layout.fillWidth: true; padding: 12
+        Layout.fillWidth: true; padding: Shared.DesktopStyle.controlPadding
         placeholderText: "Find an application or window…"
         color: Colors.foreground; placeholderTextColor: Colors.muted
         font.family: Colors.textFont; font.pixelSize: Shared.DesktopStyle.px(16)
@@ -45,7 +45,7 @@ ColumnLayout {
     UiLabel { Layout.fillWidth: true; text: "Click to focus, drag onto another workspace, right-click to select for Move, middle-click to close."; wrapMode: Text.Wrap; color: Colors.muted; font.pixelSize: Shared.DesktopStyle.px(13) }
     GridLayout {
         Layout.fillWidth: true
-        columns: 2; columnSpacing: 14; rowSpacing: 14
+        columns: 2; columnSpacing: Shared.DesktopStyle.px(14); rowSpacing: Shared.DesktopStyle.px(14)
         Repeater {
             id: workspaceRepeater
             model: root.workspaces
@@ -69,7 +69,7 @@ ColumnLayout {
                 }
                 Rectangle {
                     id: map
-                    Layout.fillWidth: true; Layout.preferredHeight: Math.max(100, (width - 16) * workspace.spanY / workspace.spanX + 16)
+                    Layout.fillWidth: true; Layout.preferredHeight: Math.max(Shared.DesktopStyle.px(100), (width - Shared.DesktopStyle.px(16)) * workspace.spanY / workspace.spanX + Shared.DesktopStyle.px(16))
                     color: Colors.darkBackground; border.width: 1
                     clip: false
                     border.color: drop.containsDrag ? Colors.accent : Colors.selection
@@ -84,16 +84,16 @@ ColumnLayout {
                         Rectangle {
                             id: window
                             required property var modelData
-                            x: 8 + (modelData.at[0] - workspace.minX) / workspace.spanX * (map.width - 16)
-                            y: 8 + (modelData.at[1] - workspace.minY) / workspace.spanY * (map.height - 16)
-                            width: Math.max(24, modelData.size[0] / workspace.spanX * (map.width - 16))
-                            height: Math.max(24, modelData.size[1] / workspace.spanY * (map.height - 16))
+                            x: Shared.DesktopStyle.px(8) + (modelData.at[0] - workspace.minX) / workspace.spanX * (map.width - Shared.DesktopStyle.px(16))
+                            y: Shared.DesktopStyle.px(8) + (modelData.at[1] - workspace.minY) / workspace.spanY * (map.height - Shared.DesktopStyle.px(16))
+                            width: Math.max(Shared.DesktopStyle.px(24), modelData.size[0] / workspace.spanX * (map.width - Shared.DesktopStyle.px(16)))
+                            height: Math.max(Shared.DesktopStyle.px(24), modelData.size[1] / workspace.spanY * (map.height - Shared.DesktopStyle.px(16)))
                             color: hover.containsMouse || activeFocus ? Colors.selection : Colors.lightBackground
                             readonly property bool picked: !!root.draggedClient && root.draggedClient.address === modelData.address
-                            border.width: picked ? 2 : 1; border.color: picked || Hypr.active.address === modelData.address ? Colors.accent : Colors.muted
+                            border.width: picked ? Shared.DesktopStyle.px(2) : 1; border.color: picked || Hypr.active.address === modelData.address ? Colors.accent : Colors.muted
                             activeFocusOnTab: true
                             Keys.onReturnPressed: root.focusWindow(modelData)
-                            Accessible.role: Accessible.Button; Accessible.name: modelData.title || modelData.class
+                            Accessible.role: Accessible.Button; Accessible.name: Hypr.title(modelData) || modelData.class
                             Accessible.onPressAction: root.focusWindow(modelData)
                             readonly property bool roomy: height >= Shared.DesktopStyle.px(64) && width >= Shared.DesktopStyle.px(64)
                             ApplicationIcon {
@@ -105,7 +105,7 @@ ColumnLayout {
                             }
                             UiLabel {
                                 anchors { fill: parent; margins: Shared.DesktopStyle.px(6); topMargin: window.roomy ? Shared.DesktopStyle.px(14) + Math.min(Shared.DesktopStyle.px(34), window.height / 3) : Shared.DesktopStyle.px(6) }
-                                text: window.modelData.title || window.modelData.class; font.pixelSize: Shared.DesktopStyle.px(11)
+                                text: Hypr.title(window.modelData) || window.modelData.class; font.pixelSize: Shared.DesktopStyle.px(11)
                                 elide: Text.ElideRight; maximumLineCount: 3; clip: true; wrapMode: Text.Wrap
                                 horizontalAlignment: window.roomy ? Text.AlignHCenter : Text.AlignLeft
                             }
@@ -135,8 +135,8 @@ ColumnLayout {
                                             }
                                         }
                                     }
-                                    window.x = Qt.binding(() => 8 + (window.modelData.at[0] - workspace.minX) / workspace.spanX * (map.width - 16))
-                                    window.y = Qt.binding(() => 8 + (window.modelData.at[1] - workspace.minY) / workspace.spanY * (map.height - 16))
+                                    window.x = Qt.binding(() => Shared.DesktopStyle.px(8) + (window.modelData.at[0] - workspace.minX) / workspace.spanX * (map.width - Shared.DesktopStyle.px(16)))
+                                    window.y = Qt.binding(() => Shared.DesktopStyle.px(8) + (window.modelData.at[1] - workspace.minY) / workspace.spanY * (map.height - Shared.DesktopStyle.px(16)))
                                 }
                                 onClicked: mouse => {
                                     if (mouse.button === Qt.MiddleButton) root.closeWindow(window.modelData)
@@ -153,7 +153,7 @@ ColumnLayout {
     RowLayout {
         Layout.fillWidth: true
         visible: !!root.draggedClient
-        UiLabel { text: root.draggedClient ? "Move " + (root.draggedClient.title || root.draggedClient.class) : ""; Layout.fillWidth: true; elide: Text.ElideRight }
+        UiLabel { text: root.draggedClient ? "Move " + (Hypr.title(root.draggedClient) || root.draggedClient.class) : ""; Layout.fillWidth: true; elide: Text.ElideRight }
         ComboBox { id: destination; model: root.workspaces }
         UiButton { text: "Move"; enabled: !!root.draggedClient; onClicked: root.moveWindow(root.draggedClient, Number(destination.currentText)) }
         UiButton { glyph: "\uf00d"; Accessible.name: "Clear selection"; subtle: true; onClicked: root.draggedClient = null }
@@ -171,12 +171,12 @@ ColumnLayout {
                 radius: Shared.DesktopStyle.radiusControl
                 color: tileMouse.containsMouse ? Colors.selection : Colors.lightBackground
                 border.width: 1; border.color: Colors.selection
-                Accessible.role: Accessible.Button; Accessible.name: "Restore " + (modelData.title || modelData.class)
+                Accessible.role: Accessible.Button; Accessible.name: "Restore " + (Hypr.title(modelData) || modelData.class)
                 RowLayout {
                     anchors { fill: parent; leftMargin: Shared.DesktopStyle.px(10); rightMargin: Shared.DesktopStyle.px(10) }
                     spacing: Shared.DesktopStyle.px(8)
                     ApplicationIcon { appClass: tile.modelData.class; iconSize: Shared.DesktopStyle.px(20); glyphColor: Colors.accent }
-                    UiLabel { Layout.fillWidth: true; text: tile.modelData.title || tile.modelData.class; elide: Text.ElideRight; font.pixelSize: Shared.DesktopStyle.px(12) }
+                    UiLabel { Layout.fillWidth: true; text: Hypr.title(tile.modelData) || tile.modelData.class; elide: Text.ElideRight; font.pixelSize: Shared.DesktopStyle.px(12) }
                 }
                 MouseArea {
                     id: tileMouse

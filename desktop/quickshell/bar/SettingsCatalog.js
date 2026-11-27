@@ -33,7 +33,7 @@ var items = {
              ["Rounded corners", "corner radius скругление углы"], ["Panel shape", "islands floating flat острова"],
              ["Windows & motion", "animation анимация окна"], ["Between tiled windows", "gaps гапы отступы"]],
     apps: [["Icon theme", "icons значки иконки"], ["Pinned applications", "pin launchers закрепить"]],
-    session: [["Capture shortcuts", "screenshot record скриншот запись"], ["Autostart", "startup автозапуск"],
+    session: [["Capture shortcuts", "screenshot record скриншот запись"], ["Startup Apps", "startup автозапуск"],
               ["Apps on workspaces", "workspace rules рабочие столы"], ["Default apps", "browser mail default по умолчанию браузер"]],
     system: [["Doctor", "diagnostics health failed services backups проверка диагностика"], ["NixOS", "generation rebuild update поколение обновление"], ["Local AI", "ollama нейросети"], ["Voice and machine spirit", "voice whisper dictation spirit agent claude codex голос диктовка дух"],
              ["Time zone", "timezone clock часовой пояс время"], ["Night light", "warm blue light ночной"]],

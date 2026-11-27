@@ -6,7 +6,7 @@ import "../shared" as Shared
 ColumnLayout {
     id: root
     signal detailsRequested()
-    spacing: 10
+    spacing: Shared.DesktopStyle.px(10)
     readonly property var network: DesktopData.network
     readonly property var links: network.links || []
     readonly property var primary: links.length ? links[0] : ({})
@@ -22,19 +22,23 @@ ColumnLayout {
         return (value / 1073741824).toFixed(2) + " GiB"
     }
     function rate(before, after, seconds) {
-        return Number.isFinite(before) && Number.isFinite(after) ? Math.max(0, (after - before) / seconds) : -1
+        return Number.isFinite(before) && Number.isFinite(after) && after >= before ? (after - before) / seconds : -1
     }
     onNetworkChanged: {
         const now = network.timestamp || 0
         const sample = previous || ({})
+        if (now && now === sample.timestamp) return
         const delta = now - (sample.timestamp || 0)
         const old = sample.link || ({})
-        const link = (network.links || [])[0] || ({})
-        const sameDevice = delta > 0 && link.device && old.device === link.device
+        const link = primary
+        const sameDevice = delta > 0 && link.device && old.device === link.device && old.uuid === link.uuid
         receiving = sameDevice ? rate(old.received, link.received, delta) : -1
         sending = sameDevice ? rate(old.sent, link.sent, delta) : -1
         previous = {timestamp: now, link: link}
     }
+    property bool ready: false
+    Component.onCompleted: { ready = true; sample(network) }
+    onNetworkChanged: if (ready) sample(network)
     RowLayout {
         Layout.fillWidth: true
         ColumnLayout {
@@ -42,7 +46,7 @@ ColumnLayout {
             UiLabel { text: root.primary.name || "Network"; font.pixelSize: Shared.DesktopStyle.px(16); font.weight: Font.DemiBold; Layout.fillWidth: true; elide: Text.ElideRight }
             UiLabel {
                 text: ({full: "Connected", portal: "Sign-in required", limited: "Limited connectivity", none: "Disconnected"})[root.connectivity] || "Connectivity unavailable"
-                color: root.connectivity === "full" ? Colors.green : Colors.yellow; font.pixelSize: Shared.DesktopStyle.px(12)
+                color: root.connectivity === "full" ? Colors.statusAvailable : Colors.statusWarning; font.pixelSize: Shared.DesktopStyle.px(12)
             }
         }
     }
@@ -64,13 +68,13 @@ ColumnLayout {
         RowLayout {
             required property var modelData
             Layout.fillWidth: true
-            UiLabel { text: parent.modelData[0]; color: Colors.muted; font.pixelSize: Shared.DesktopStyle.px(12); Layout.preferredWidth: 95 }
+            UiLabel { text: parent.modelData[0]; color: Colors.muted; font.pixelSize: Shared.DesktopStyle.px(12); Layout.preferredWidth: Shared.DesktopStyle.px(95) }
             UiLabel { text: parent.modelData[1]; Layout.fillWidth: true; font.pixelSize: Shared.DesktopStyle.px(12); maximumLineCount: 2; elide: Text.ElideRight }
         }
     }
     UiLabel {
         visible: !!root.primary.uuid
-        text: "DNS PROVIDER"; color: Colors.accent; font.pixelSize: Shared.DesktopStyle.px(11); font.letterSpacing: 1
+        text: "DNS PROVIDER"; color: Colors.accent; font.pixelSize: Shared.DesktopStyle.px(11); font.letterSpacing: Shared.DesktopStyle.px(1)
     }
     RowLayout {
         visible: !!root.primary.uuid

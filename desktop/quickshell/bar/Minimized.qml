@@ -29,7 +29,7 @@ Singleton {
     }
     function isUrgent(id) { return minimizedOf(id).some(c => urgent[c.address]) }
     function badge(id) { return Logic.badge(id, unread) }
-    function title(c) { return c.title || c["class"] || "Window" }
+    function title(c) { return Hypr.title(c) || c["class"] || "Window" }
 
     function lua(call, address) {
         if (!/^0x[0-9a-f]+$/i.test(address)) return
