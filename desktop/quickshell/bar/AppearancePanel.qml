@@ -31,7 +31,8 @@ ColumnLayout {
         "Panel shape": ["panelTab", "look"], "Group colors": ["panelTab", "look"], "Button accents": ["panelTab", "look"],
         "Windows & motion": ["panelTab", "windows"], "Between tiled windows": ["panelTab", "windows"],
         "UI font": ["panelTab", "text"], "Font size (pt)": ["panelTab", "text"], "UI metrics": ["panelTab", "text"],
-        "Spacing unit": ["panelTab", "text"], "Focus ring width": ["panelTab", "text"]
+        "Spacing unit": ["panelTab", "text"], "Focus ring width": ["panelTab", "text"],
+        "Desktop cards": ["panelTab", "cards"], "Show Today card": ["panelTab", "cards"]
     })
     function reveal(target) {
         const tab = targetTabs[target]
@@ -179,9 +180,25 @@ ColumnLayout {
     Segmented {
         visible: root.section === "panels"
         Layout.alignment: Qt.AlignHCenter
-        model: [{id: "layout", title: "Layout"}, {id: "look", title: "Panels"}, {id: "windows", title: "Windows"}, {id: "text", title: "Text & metrics"}]
+        model: [{id: "layout", title: "Layout"}, {id: "look", title: "Panels"}, {id: "windows", title: "Windows"}, {id: "text", title: "Text & metrics"}, {id: "cards", title: "Desktop cards"}]
         current: root.panelTab
         onChosen: id => root.panelTab = id
+    }
+
+    SettingsGroup {
+        visible: root.section === "panels" && root.panelTab === "cards"
+        title: "Desktop cards"
+        footer: DesktopCardPrefs.error
+        SettingsRow {
+            title: "Show Today card"
+            subtitle: "Today's calendar on the main display"
+            Segmented {
+                model: [{id: "on", title: "On"}, {id: "off", title: "Off"}]
+                current: DesktopCardPrefs.cards.today?.enabled !== false ? "on" : "off"
+                enabled: DesktopCardPrefs.loaded
+                onChosen: id => DesktopCardPrefs.update("today", {enabled: id === "on"})
+            }
+        }
     }
 
     PanelEditor { visible: root.section === "panels" && root.panelTab === "layout"; Layout.fillWidth: true }
