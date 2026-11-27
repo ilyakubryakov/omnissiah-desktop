@@ -66,9 +66,14 @@ lib.mkIf cfg.enable {
     ONINIX_XKB_LAYOUT = keyboardLayout;
     ONINIX_LAPTOP = if cfg.hardware.laptop then "1" else "0";
   };
-  environment.localBinInPath = lib.mkDefault true;
+  environment.extraInit = lib.mkAfter ''
+    case ":$PATH:" in
+      *":$HOME/.local/bin:"*) ;;
+      *) export PATH="$PATH:$HOME/.local/bin" ;;
+    esac
+  '';
   environment.etc."environment.d/95-oninix-path.conf".text = ''
-    PATH=$HOME/.local/bin:$PATH
+    PATH=$PATH:$HOME/.local/bin
   '';
   programs.hyprlock.enable = true;
   programs.dconf.enable = lib.mkDefault true;

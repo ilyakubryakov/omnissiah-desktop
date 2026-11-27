@@ -11,7 +11,6 @@ if ! command -v nix >/dev/null 2>&1; then
     export PATH="$PATH:/nix/var/nix/profiles/default/bin"
 fi
 export XDG_DATA_DIRS="$ONINIX_LAYER_PROFILE/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
-export XDG_CONFIG_DIRS="${XDG_CONFIG_DIRS:-/etc/xdg}:$ONINIX_LAYER_PROFILE/share/oninix-layer/xdg"
 export FONTCONFIG_FILE="$ONINIX_LAYER_PROFILE/share/oninix-layer/fonts.conf"
 export NIX_CONFIG="${NIX_CONFIG:+$NIX_CONFIG
 }extra-experimental-features = nix-command flakes"

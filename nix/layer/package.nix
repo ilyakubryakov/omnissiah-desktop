@@ -141,9 +141,8 @@ let
     [Service]
     ExecCondition=/usr/bin/flock -n %t/oninix-layer-session.lock /usr/bin/true
   '';
-  kittyDefaults = writeText "oninix-layer-kitty.conf" "shell_integration enabled\n";
   integration = runCommand "oninix-layer-integration" { } ''
-    mkdir -p "$out/bin" "$out/share/oninix-layer/systemd/user" "$out/share/oninix-layer/xdg/kitty"
+    mkdir -p "$out/bin" "$out/share/oninix-layer/systemd/user"
     cp ${./oninix-layer-session} "$out/bin/oninix-layer-session"
     cp ${./oninix-layer-compositor} "$out/bin/oninix-layer-compositor"
     cp ${./oninix-layer-ready} "$out/bin/oninix-layer-ready"
@@ -152,7 +151,6 @@ let
     cp ${./environment} "$out/share/oninix-layer/environment"
     ln -s ${idleOverride} "$out/share/oninix-layer/hypridle.conf"
     ln -s ${fontConfig} "$out/share/oninix-layer/fonts.conf"
-    ln -s ${kittyDefaults} "$out/share/oninix-layer/xdg/kitty/kitty.conf"
     chmod +x "$out/bin/"*
     ${lib.concatStringsSep "\n" (lib.mapAttrsToList (file: content:
       "cp ${writeText file content} \"$out/share/oninix-layer/systemd/user/${file}\""
