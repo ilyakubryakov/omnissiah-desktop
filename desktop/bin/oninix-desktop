@@ -201,7 +201,8 @@ def game_started():
             game_offer('game', session=current)
         return
     auto = {'from': name, 'at': time.time()}
-    if not profile('game', expect=lambda old: mode_session(old) == current, auto=auto):
+    if not profile('game', expect=lambda old: mode_session(old) == current
+                   and games_running() is True, auto=auto):
         return
     try:
         run(['notify-send', '--app-name=Game mode', '--icon=input-gaming', 'Game mode on',

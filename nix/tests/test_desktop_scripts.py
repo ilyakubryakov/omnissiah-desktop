@@ -42,13 +42,30 @@ class GameModeTests(unittest.TestCase):
         self.path.write_text('{"name":"work"}')
         with patch.multiple(desktop, audio_defaults=lambda: (dict(sink=None, source=None), {}),
                             modes=lambda: [], nightlight=lambda: False, set_dnd=Mock(),
-                            run=Mock(), game_closed=Mock()), patch.object(desktop.gaming, 'enter', return_value={}):
+                            run=Mock(), game_closed=Mock(), games_running=lambda: True), \
+                patch.object(desktop.gaming, 'enter', return_value={}):
             desktop.action('game-started', [])
             state = desktop.read_json(self.path, {})
             self.assertEqual(state['name'], 'game')
             self.assertEqual(state['auto']['from'], 'work')
             desktop.action('mode', ['game'])
             self.assertIsNone(desktop.auto_of(desktop.read_json(self.path, {})))
+
+    def test_automatic_entry_requires_a_running_game(self):
+        state = {'name': 'work', 'since': 10}
+        for running in (False, None):
+            with self.subTest(running=running):
+                self.path.write_text(json.dumps(state))
+                with patch.multiple(desktop, audio_defaults=lambda: (dict(sink=None, source=None), {}),
+                                    modes=lambda: [], nightlight=lambda: False, set_dnd=Mock(),
+                                    run=Mock(), game_closed=Mock()), \
+                        patch.object(desktop, 'games_running', return_value=running), \
+                        patch.object(desktop.gaming, 'enter', return_value={}) as enter:
+                    desktop.action('game-started', [])
+                    enter.assert_not_called()
+                    desktop.run.assert_not_called()
+                    desktop.game_closed.assert_not_called()
+                self.assertEqual(desktop.read_json(self.path, {}), state)
 
     def test_call_offer_rechecks_session_and_game(self):
         self.path.write_text('{"name":"call","since":10}')
