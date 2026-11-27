@@ -1,5 +1,6 @@
 import json
 import os
+import shlex
 import subprocess
 from pathlib import Path
 from socket import gethostname
@@ -7,6 +8,8 @@ from time import time
 
 CACHE = Path(os.environ.get('XDG_CACHE_HOME', Path.home() / '.cache')) / 'oninix'
 COREDUMP = 'fc2e22bc6ee647b6b90729ab34a250b1'
+BROWSERS = {'chrome', 'chromium', '.chromium-wrapped', 'google-chrome', 'msedge'}
+KNOWN_CRASHERS = {'.bambu-studio-wrapped': 'Bambu Studio', 'orca-slicer': 'OrcaSlicer'}
 JOB_FINISHED = '39f53479d3a045ac8e11786248231fbf'
 MAINTENANCE = {
     'oninix-backup.service': 'Backup',
@@ -27,21 +30,52 @@ def command(*args, timeout=15):
 
 
 def journal(*matches, fields, since='24 hours ago', limit=100):
+    count = [] if limit is None else ['-n', str(limit)]
     result = command('journalctl', '--since', since, '--no-pager', '--quiet', '--output=json',
-                     '--output-fields=' + ','.join(fields), '-n', str(limit), *matches)
+                     '--output-fields=' + ','.join(fields), *count, *matches)
     entries = []
     if result.returncode == 0:
         for line in result.stdout.splitlines():
             try:
-                entries.append(json.loads(line))
+                entry = json.loads(line)
+                if isinstance(entry, dict):
+                    entries.append(entry)
             except ValueError:
                 continue
     return result.returncode == 0, entries
 
 
 def coredumps(since='24 hours ago'):
-    return journal('MESSAGE_ID=' + COREDUMP, fields=['COREDUMP_COMM', 'COREDUMP_UID'],
-                   since=since)
+    available, entries = journal('MESSAGE_ID=' + COREDUMP,
+                                 fields=['COREDUMP_COMM', 'COREDUMP_UID', 'COREDUMP_EXE',
+                                         'COREDUMP_SIGNAL', 'COREDUMP_CMDLINE'],
+                                 since=since, limit=None)
+    return available, [entry for entry in entries if event_time_us(entry) > 0]
+
+
+def crash_name(entry):
+    return Path(str(entry.get('COREDUMP_EXE') or '')).name or str(entry.get('COREDUMP_COMM') or 'Process')
+
+
+def tooling_crash(entry):
+    exe = str(entry.get('COREDUMP_EXE') or '')
+    if exe.startswith((str(Path.home() / 'Projects') + '/', '/tmp/')):
+        return 'in dev builds'
+    line = entry.get('COREDUMP_CMDLINE')
+    if crash_name(entry) in BROWSERS and isinstance(line, str):
+        try:
+            args = shlex.split(line)[1:]
+        except ValueError:
+            return None
+        if any(arg == '--headless' or arg.startswith('--headless=') for arg in args):
+            return 'headless browser'
+    return None
+
+
+def known_crash(entry):
+    if str(entry.get('COREDUMP_SIGNAL')) == '11':
+        return KNOWN_CRASHERS.get(Path(str(entry.get('COREDUMP_EXE') or '')).name)
+    return None
 
 
 def failed_units(*scope):
@@ -53,7 +87,14 @@ def failed_units(*scope):
 
 
 def event_time(entry):
-    return int(entry['__REALTIME_TIMESTAMP']) // 1000000
+    return event_time_us(entry) // 1000000
+
+
+def event_time_us(entry):
+    try:
+        return int(entry['__REALTIME_TIMESTAMP'])
+    except (KeyError, ValueError, TypeError):
+        return 0
 
 
 def timeline(crashes):
@@ -67,9 +108,15 @@ def timeline(crashes):
             outcome = '' if result == 'done' else f' ({result})'
             events.append({'at': event_time(job), 'level': 'ok' if result == 'done' else 'fail',
                            'text': label + outcome})
-    events.extend({'at': event_time(entry), 'level': 'warn',
-                   'text': str(entry.get('COREDUMP_COMM', 'Process')) + ' crashed'}
-                  for entry in crashes)
+    for entry in crashes:
+        if tooling_crash(entry):
+            continue
+        known = known_crash(entry)
+        events.append({'at': event_time(entry), 'level': 'info' if known else 'warn',
+                       'text': f'{known} crashed (known, ignored)' if known else crash_name(entry) + ' crashed'})
+    _, modes = journal('SYSLOG_IDENTIFIER=oninix-mode', fields=['MESSAGE'])
+    events.extend({'at': event_time(entry), 'level': 'info', 'text': entry['MESSAGE']}
+                  for entry in modes if isinstance(entry.get('MESSAGE'), str))
     boot = Path('/proc/stat').read_text()
     for line in boot.splitlines():
         if line.startswith('btime '):
