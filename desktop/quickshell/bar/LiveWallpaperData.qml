@@ -23,6 +23,7 @@ Singleton {
     signal libraryChanged()
 
     onOpenChanged: if (!open) customizeId = ""
+    onServicePresentChanged: if (!servicePresent) open = false
     onStatusChanged: {
         if (customizeId && (status.mode !== "live" || status.item?.id !== customizeId
             || !status.item?.properties?.length))
@@ -71,7 +72,7 @@ Singleton {
             onStreamFinished: {
                 const states = text.trim().split("\n")
                 root.serviceRunning = states.includes("ActiveState=active")
-                root.servicePresent = !states.includes("LoadState=not-found")
+                root.servicePresent = states.includes("LoadState=loaded")
                 root.serviceChecked = states.some(state => state.startsWith("LoadState="))
             }
         }

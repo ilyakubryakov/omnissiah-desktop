@@ -12,10 +12,10 @@ ColumnLayout {
     property string themeTab: "palette"
     property string panelTab: "layout"
     property string wallpaperVariant: ""
-    readonly property bool liveWallpaperAvailable: !LiveWallpaperData.serviceChecked
-        || LiveWallpaperData.servicePresent || LiveWallpaperData.status.mode === "live"
-    readonly property bool liveWallpaperView: LiveWallpaperData.open || LiveWallpaperData.status.mode === "live"
-    readonly property string liveWallpaperId: LiveWallpaperData.status.mode === "live"
+    readonly property bool liveWallpaperAvailable: LiveWallpaperData.servicePresent
+    readonly property bool liveWallpaperView: liveWallpaperAvailable
+        && (LiveWallpaperData.open || LiveWallpaperData.status.mode === "live")
+    readonly property string liveWallpaperId: liveWallpaperView && LiveWallpaperData.status.mode === "live"
         ? LiveWallpaperData.status.item?.id || "" : ""
     readonly property var livePlacement: LiveWallpaperData.status.item?.placement
     readonly property bool showLivePlacement: !!liveWallpaperId && !!livePlacement
@@ -170,7 +170,7 @@ ColumnLayout {
             Segmented {
                 model: [{id: "static", title: "Static"}].concat(root.liveWallpaperAvailable ? [{id: "live", title: "Live"}] : [])
                 current: root.liveWallpaperView ? "live" : "static"
-                enabled: !LiveWallpaperData.busy && (LiveWallpaperData.serviceChecked || LiveWallpaperData.status.mode === "live")
+                enabled: root.liveWallpaperAvailable && !LiveWallpaperData.busy
                 onChosen: id => {
                     LiveWallpaperData.open = id === "live"
                     if (id === "static" && LiveWallpaperData.status.mode === "live")
