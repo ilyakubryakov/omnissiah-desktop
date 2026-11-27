@@ -22,11 +22,11 @@ ColumnLayout {
                 id: auto
                 required property var modelData
                 title: modelData.name
-                subtitle: modelData.managed ? "Managed by the Hyprland session" : modelData.applies ? "" : "Not for Hyprland"
+                subtitle: modelData.applies ? "" : "Not for Hyprland"
                 Segmented {
                     model: [{id: "on", title: "On"}, {id: "off", title: "Off"}]
                     current: auto.modelData.enabled ? "on" : "off"
-                    enabled: !DesktopData.busy && (!auto.modelData.managed || auto.modelData.enabled)
+                    enabled: !DesktopData.busy
                     onChosen: id => DesktopData.act("autostart-set", [auto.modelData.id, id])
                 }
                 UiButton {
@@ -43,7 +43,7 @@ ColumnLayout {
             SettingCombo {
                 id: addApp
                 Layout.preferredWidth: Shared.DesktopStyle.px(240)
-                model: root.s.autostartApps || root.s.apps || []
+                model: root.s.apps || []
                 textRole: "name"
             }
             UiButton {
